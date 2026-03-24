@@ -1,0 +1,253 @@
+---
+title: Installation
+description: Detailed installation instructions for Greentic
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## System Requirements
+
+### Minimum Requirements
+
+| Component | Requirement |
+|-----------|-------------|
+| OS | Linux, macOS, Windows |
+| Rust | 1.90+ |
+| Memory | 4 GB RAM |
+| Disk | 2 GB free space |
+
+### Recommended
+
+| Component | Requirement |
+|-----------|-------------|
+| Rust | 1.91 (latest) |
+| Memory | 8 GB RAM |
+| CPU | Multi-core processor |
+
+## Installing Rust
+
+If you don't have Rust installed:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Set the correct toolchain version:
+
+```bash
+rustup default 1.90
+```
+
+Add the WASM target for building components:
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+## Installing GTC CLI
+
+<Tabs>
+<TabItem label="Cargo (Recommended)">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="From Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+
+# Add to PATH
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+<TabItem label="Pre-built Binaries">
+
+Download from [GitHub Releases](https://github.com/greenticai/greentic/releases):
+
+```bash
+# macOS (Apple Silicon)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-arm64.tar.gz
+tar -xzf gtc-darwin-arm64.tar.gz
+sudo mv gtc /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-x64.tar.gz
+
+# Linux (x86_64)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-linux-x64.tar.gz
+
+# Windows
+# Download gtc-windows-x64.zip from releases
+```
+
+</TabItem>
+</Tabs>
+
+## Verify Installation
+
+```bash
+gtc --version
+```
+
+Expected output:
+```
+gtc 0.4.x
+```
+
+## Optional Dependencies
+
+### NATS (Message Bus)
+
+For production deployments:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name nats -p 4222:4222 nats:latest
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install nats-server
+nats-server
+```
+
+</TabItem>
+<TabItem label="Direct Download">
+
+Download from [nats.io](https://nats.io/download/)
+
+</TabItem>
+</Tabs>
+
+### Redis (Session Storage)
+
+For production session persistence:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name redis -p 6379:6379 redis:alpine
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install redis
+redis-server
+```
+
+</TabItem>
+</Tabs>
+
+### Ngrok/Cloudflared (Public URLs)
+
+For webhook-based providers (Telegram, Slack, etc.):
+
+<Tabs>
+<TabItem label="Ngrok">
+
+```bash
+# Install
+brew install ngrok/ngrok/ngrok  # macOS
+# or download from https://ngrok.com/download
+
+# Configure
+ngrok config add-authtoken YOUR_TOKEN
+
+# Run
+ngrok http 8080
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+# Install
+brew install cloudflared  # macOS
+# or download from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Run
+cloudflared tunnel --url http://localhost:8080
+```
+
+</TabItem>
+</Tabs>
+
+## Development Tools
+
+### Pack Builder
+
+Build `.gtpack` archives:
+
+```bash
+cargo install greentic-pack
+```
+
+### Flow Validator
+
+Validate flow definitions:
+
+```bash
+cargo install greentic-flow
+```
+
+### Component Authoring
+
+Create WASM components:
+
+```bash
+cargo install greentic-component
+```
+
+## Verifying Your Setup
+
+Run the following to verify everything is working:
+
+```bash
+# Check GTC CLI
+gtc --help
+
+# Check Rust WASM target
+rustup target list --installed | grep wasm32-wasip2
+
+# Create and run a test bundle
+gtc wizard --dry-run
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Error: "wasm32-wasip2 target not found"**
+```bash
+rustup target add wasm32-wasip2
+```
+
+**Error: "Cannot connect to NATS"**
+```bash
+# Start embedded NATS with gtc start
+gtc start ./my-bundle --nats on
+```
+
+**Error: "Permission denied"**
+```bash
+# On Linux/macOS, ensure binary is executable
+chmod +x /usr/local/bin/gtc
+```
+
+## Next Steps
+
+- [Quick Start](/getting-started/quick-start/) - Create your first digital worker
+- [Architecture Overview](/concepts/architecture/) - Understand the platform

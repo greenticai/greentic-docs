@@ -1,0 +1,307 @@
+---
+title: gtc start
+description: Start the Greentic runtime server
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The `gtc start` command launches the Greentic runtime server. It starts all necessary services including the HTTP server, NATS bus, and flow executor.
+
+## Usage
+
+```bash
+gtc start [OPTIONS] <BUNDLE_PATH>
+```
+
+## Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--host <HOST>` | Bind address | `0.0.0.0` |
+| `--port <PORT>` | HTTP port | `8080` |
+| `--cloudflared <on/off>` | Enable Cloudflare tunnel | `on` |
+| `--ngrok <on/off>` | Enable ngrok tunnel | `off` |
+| `--nats <on/off>` | Enable embedded NATS | `on` |
+| `--skip-setup` | Skip provider setup flows | `false` |
+| `--force-setup` | Force re-run setup flows | `false` |
+| `-v, --verbose` | Enable verbose/debug logging | `false` |
+| `-q, --quiet` | Minimal output | `false` |
+
+## Basic Usage
+
+### Start with Defaults
+
+```bash
+gtc start ./my-bundle
+```
+
+This starts:
+- HTTP server on `0.0.0.0:8080`
+- Embedded NATS server
+- Cloudflared tunnel (if available)
+
+### Start for Development
+
+```bash
+# Use ngrok instead of cloudflared
+gtc start ./my-bundle --cloudflared off --ngrok on
+
+# With verbose logging
+gtc start ./my-bundle --verbose
+
+# Skip setup (if already configured)
+gtc start ./my-bundle --skip-setup
+```
+
+### Start for Production
+
+```bash
+# No tunnels, external NATS
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Custom port
+gtc start ./my-bundle --port 3000 --cloudflared off
+```
+
+## Tunnel Configuration
+
+### Cloudflared (Default)
+
+Cloudflared creates a secure tunnel to Cloudflare's network:
+
+```bash
+gtc start ./my-bundle --cloudflared on
+
+# Output:
+# Cloudflare tunnel started: https://random-words.trycloudflare.com
+# Webhook URLs will use: https://random-words.trycloudflare.com
+```
+
+<Aside type="note">
+Cloudflared URLs change on each restart unless you configure a persistent tunnel.
+</Aside>
+
+### ngrok
+
+Use ngrok for a stable URL during development:
+
+```bash
+gtc start ./my-bundle --ngrok on
+
+# Output:
+# ngrok tunnel started: https://abc123.ngrok-free.app
+# Webhook URLs will use: https://abc123.ngrok-free.app
+```
+
+### No Tunnel
+
+For production with a public domain:
+
+```bash
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Make sure your server is publicly accessible
+# and update provider webhooks with your domain
+```
+
+## NATS Configuration
+
+### Embedded NATS (Default)
+
+```bash
+gtc start ./my-bundle --nats on
+
+# Starts embedded NATS on localhost:4222
+```
+
+### External NATS
+
+```bash
+# Disable embedded, use external
+gtc start ./my-bundle --nats off
+
+# Set NATS URL via environment
+GREENTIC_NATS_URL=nats://nats.example.com:4222 gtc start ./my-bundle --nats off
+```
+
+## Setup Flow Behavior
+
+### Normal Behavior
+
+By default, `gtc start` runs setup flows if providers are not yet configured:
+
+```bash
+gtc start ./my-bundle
+# Runs setup flows for unconfigured providers
+```
+
+### Skip Setup
+
+Skip setup flows entirely (use existing configuration):
+
+```bash
+gtc start ./my-bundle --skip-setup
+```
+
+### Force Setup
+
+Force re-run all setup flows (useful after URL changes):
+
+```bash
+gtc start ./my-bundle --force-setup
+```
+
+## Runtime Endpoints
+
+When running, the server exposes:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Health check |
+| `GET /ready` | Readiness probe |
+| `POST /webhook/{provider}/{tenant}/{team}` | Provider webhooks |
+| `GET /api/v1/sessions` | Session management |
+| `POST /api/v1/messages` | Send messages |
+
+### Example Health Check
+
+```bash
+curl http://localhost:8080/health
+# {"status": "healthy"}
+```
+
+## Logging
+
+### Log Levels
+
+```bash
+# Debug (most verbose)
+GREENTIC_LOG_LEVEL=debug gtc start ./my-bundle
+
+# Info (default)
+GREENTIC_LOG_LEVEL=info gtc start ./my-bundle
+
+# Warning
+GREENTIC_LOG_LEVEL=warn gtc start ./my-bundle
+```
+
+### Verbose Mode
+
+```bash
+gtc start ./my-bundle --verbose
+
+# Equivalent to GREENTIC_LOG_LEVEL=debug
+```
+
+### Log Format
+
+```bash
+# JSON format (for production)
+GREENTIC_LOG_FORMAT=json gtc start ./my-bundle
+
+# Pretty format (for development, default)
+GREENTIC_LOG_FORMAT=pretty gtc start ./my-bundle
+```
+
+## Signals
+
+| Signal | Behavior |
+|--------|----------|
+| `SIGTERM` | Graceful shutdown |
+| `SIGINT` (Ctrl+C) | Graceful shutdown |
+| `SIGHUP` | Reload configuration |
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GREENTIC_HOST` | Bind address |
+| `GREENTIC_PORT` | HTTP port |
+| `GREENTIC_LOG_LEVEL` | Log verbosity |
+| `GREENTIC_LOG_FORMAT` | Log format (json/pretty) |
+| `GREENTIC_NATS_URL` | External NATS URL |
+| `GREENTIC_REDIS_URL` | Redis URL for sessions |
+
+## Troubleshooting
+
+### Port Already in Use
+
+```
+Error: Address already in use (os error 48)
+```
+
+Another process is using port 8080. Either stop it or use a different port:
+
+```bash
+gtc start ./my-bundle --port 3000
+```
+
+### NATS Connection Failed
+
+```
+Error: Failed to connect to NATS
+```
+
+If using external NATS, ensure it's running and accessible. Otherwise, enable embedded:
+
+```bash
+gtc start ./my-bundle --nats on
+```
+
+### Tunnel Failed to Start
+
+```
+Error: Failed to start cloudflared tunnel
+```
+
+Install cloudflared or use ngrok instead:
+
+```bash
+# Install cloudflared
+brew install cloudflared
+
+# Or use ngrok
+gtc start ./my-bundle --cloudflared off --ngrok on
+```
+
+### Provider Setup Failed
+
+```
+Error: Setup flow failed for messaging-telegram
+```
+
+Check your credentials in the answers file and ensure the public URL is accessible:
+
+```bash
+# Re-run setup
+gtc start ./my-bundle --force-setup --verbose
+```
+
+## Docker Deployment
+
+```dockerfile title="Dockerfile"
+FROM rust:1.90 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/gtc /usr/local/bin/
+COPY my-bundle /app/bundle
+WORKDIR /app
+EXPOSE 8080
+CMD ["gtc", "start", "/app/bundle", "--cloudflared", "off"]
+```
+
+```bash
+docker build -t my-worker .
+docker run -p 8080:8080 my-worker
+```
+
+## Next Steps
+
+- [Building Packs](/cli/building-packs/) - Create and manage packs
+- [Configuration Reference](/reference/configuration/) - Full config options
+- [Troubleshooting Guide](/reference/troubleshooting/) - Common issues

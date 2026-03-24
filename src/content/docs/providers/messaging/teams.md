@@ -1,0 +1,355 @@
+---
+title: Microsoft Teams
+description: Connect your digital worker to Microsoft Teams
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+The Microsoft Teams provider integrates your digital worker with Teams channels and chats. It supports:
+
+- Channel messages
+- Personal chats
+- Group chats
+- Adaptive Cards
+- Interactive components
+- File attachments
+
+## Prerequisites
+
+- Microsoft 365 tenant
+- Admin access to Azure AD
+
+## Setup
+
+<Steps>
+
+1. **Create Azure Bot Registration**
+
+   Go to [Azure Portal](https://portal.azure.com):
+   - Search for "Bot Services"
+   - Click "Create"
+   - Fill in details:
+     - Bot handle: your-bot-name
+     - Subscription: your subscription
+     - Resource group: create or select
+     - Pricing: F0 (free) or S1
+   - Click "Create"
+
+2. **Configure Bot Endpoint**
+
+   In your Bot Service:
+   - Go to **Configuration**
+   - Set **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
+
+3. **Get App Credentials**
+
+   In **Configuration**:
+   - Copy **Microsoft App ID**
+   - Click "Manage" next to Microsoft App ID
+   - Create a new **Client Secret**
+   - Copy the secret value (shown only once!)
+
+4. **Enable Teams Channel**
+
+   In your Bot Service:
+   - Go to **Channels**
+   - Click **Microsoft Teams**
+   - Accept terms and enable
+
+5. **Create Teams App Package**
+
+   Create a manifest for your Teams app:
+
+   ```json title="manifest.json"
+   {
+     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+     "manifestVersion": "1.16",
+     "version": "1.0.0",
+     "id": "{{BOT_ID}}",
+     "packageName": "com.yourcompany.supportbot",
+     "developer": {
+       "name": "Your Company",
+       "websiteUrl": "https://yourcompany.com",
+       "privacyUrl": "https://yourcompany.com/privacy",
+       "termsOfUseUrl": "https://yourcompany.com/terms"
+     },
+     "name": {
+       "short": "Support Bot",
+       "full": "Support Bot for Customer Service"
+     },
+     "description": {
+       "short": "Customer support assistant",
+       "full": "AI-powered customer support assistant"
+     },
+     "icons": {
+       "outline": "outline.png",
+       "color": "color.png"
+     },
+     "accentColor": "#0078D4",
+     "bots": [
+       {
+         "botId": "{{BOT_ID}}",
+         "scopes": ["personal", "team", "groupchat"],
+         "supportsFiles": true,
+         "isNotificationOnly": false
+       }
+     ],
+     "permissions": ["identity", "messageTeamMembers"],
+     "validDomains": ["your-domain.com"]
+   }
+   ```
+
+6. **Configure Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-teams": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "app_id": "your-microsoft-app-id",
+       "app_password": "your-client-secret",
+       "tenant_id": "your-azure-tenant-id"
+     }
+   }
+   ```
+
+7. **Run Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+8. **Install App in Teams**
+
+   - Zip manifest.json with icons
+   - Go to Teams Admin Center or upload directly
+   - Install to your team or users
+
+</Steps>
+
+## Configuration Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | Enable/disable provider |
+| `public_base_url` | Yes | Public URL for webhook |
+| `app_id` | Yes | Microsoft App ID |
+| `app_password` | Yes | Client Secret |
+| `tenant_id` | No | Azure AD Tenant ID (for single-tenant apps) |
+
+## Features
+
+### Text Messages
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown Formatting
+
+Teams supports a subset of Markdown:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - Bullet 1
+      - Bullet 2
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+Teams has excellent Adaptive Card support:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "How can I assist you today?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Create Ticket"
+              data:
+                action: "ticket"
+```
+
+### Hero Cards
+
+```yaml
+- id: hero_card
+  type: reply
+  config:
+    hero_card:
+      title: "Support Bot"
+      subtitle: "Your AI Assistant"
+      text: "I can help with technical issues, billing questions, and more."
+      images:
+        - url: "https://example.com/bot-image.png"
+      buttons:
+        - type: messageBack
+          title: "Get Started"
+          text: "get started"
+          displayText: "Getting started..."
+```
+
+### Suggestions (Quick Replies)
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - title: "Check Status"
+        value: "status"
+      - title: "Create Ticket"
+        value: "ticket"
+      - title: "Contact Human"
+        value: "human"
+```
+
+### File Attachments
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - contentType: "application/pdf"
+        contentUrl: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Handling Card Actions
+
+```yaml title="flows/on_card_action.ygtc"
+name: handle_card_action
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "data.action == 'help'"
+          next: show_help
+        - expression: "data.action == 'ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: invoke
+    name: "adaptiveCard/action"
+    target: route_action
+```
+
+## Channel Configuration
+
+### Team Channel
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          teams:
+            provider: messaging-teams
+            config:
+              team_id: "19:xxx@thread.tacv2"
+              channel_id: "19:yyy@thread.tacv2"
+```
+
+### Personal Chat
+
+For personal 1:1 chats, no channel configuration needed. The bot responds to whoever messages it.
+
+## Proactive Messaging
+
+Send messages without user initiation:
+
+```yaml
+- id: proactive
+  type: reply
+  config:
+    message: "Reminder: Your ticket #123 needs attention"
+    conversation_reference:
+      conversation_id: "{{stored_conversation_id}}"
+      service_url: "{{stored_service_url}}"
+```
+
+<Aside type="note">
+Store the conversation reference when users first interact with your bot to enable proactive messaging later.
+</Aside>
+
+## Troubleshooting
+
+### Bot Not Responding
+
+1. **Check endpoint configuration** in Azure Bot Service
+2. **Verify SSL certificate** is valid
+3. **Check app credentials** are correct
+4. **Review activity logs** in Azure
+
+### "Unauthorized" Error
+
+- Verify App ID and Password
+- Check tenant ID for single-tenant apps
+- Ensure bot is enabled in Teams channel
+
+### Card Not Rendering
+
+- Validate card JSON with [Adaptive Cards Designer](https://adaptivecards.io/designer/)
+- Check Teams supports the card version
+- Verify all required fields are present
+
+### Messages Delayed
+
+- Teams can batch messages; this is normal
+- Check your server performance
+- Verify no rate limiting
+
+## Security
+
+<Aside type="caution">
+Always validate the JWT token in incoming requests to verify they're from Microsoft.
+</Aside>
+
+Greentic automatically validates:
+- JWT signature
+- Issuer and audience claims
+- Token expiration
+
+## Next Steps
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Design cards visually
+- [Slack Provider](/providers/messaging/slack/) - Add Slack integration
+- [WebChat Provider](/providers/messaging/webchat/) - Embed in websites

@@ -1,0 +1,48 @@
+---
+title: Greentic Platform
+description: WASM-component-based, multi-tenant platform for building AI-driven digital workers
+template: splash
+hero:
+  tagline: Build and run autonomous agentic automation pipelines with WebAssembly
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/greenticai
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Key Features
+
+<CardGrid stagger>
+	<Card title="WASM Components" icon="puzzle">
+		Portable, sandboxed execution using WebAssembly (WASI Preview 2). Build once, run anywhere.
+	</Card>
+	<Card title="Multi-Tenant" icon="setting">
+		Built-in tenant isolation with `TenantCtx` for secure, scalable deployments.
+	</Card>
+	<Card title="Flow-Based Orchestration" icon="random">
+		Define automation pipelines with YAML-based flow graphs (`.ygtc` files).
+	</Card>
+	<Card title="Provider Ecosystem" icon="external">
+		Connect to Slack, Teams, Telegram, WhatsApp, and more through WASM provider packs.
+	</Card>
+</CardGrid>
+
+## Architecture Highlights
+
+- **Flows** - YAML-defined orchestration graphs of WASM component nodes
+- **Packs** - Signed `.gtpack` archives containing flows, components, and assets
+- **Components** - Portable WASM building blocks implementing the Greentic WIT interface
+- **Providers** - WASM components bridging external services (messaging, events, secrets)
+
+## Quick Links
+
+- [Quick Start Guide](/getting-started/quick-start/) - Get up and running in minutes
+- [Core Concepts](/concepts/architecture/) - Understand the platform architecture
+- [GTC CLI Reference](/cli/overview/) - Master the command-line tools
+- [Messaging Providers](/providers/messaging/overview/) - Connect your messaging channels
