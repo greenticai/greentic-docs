@@ -308,23 +308,23 @@ Providers communicate via NATS:
 
 ### Messaging
 
-- [Slack](/providers/messaging/slack/)
-- [Microsoft Teams](/providers/messaging/teams/)
-- [Telegram](/providers/messaging/telegram/)
-- [WhatsApp](/providers/messaging/whatsapp/)
-- [WebChat](/providers/messaging/webchat/)
-- [Webex](/providers/messaging/webex/)
-- [Email](/providers/messaging/email/)
+- [Slack](/greentic-docs/providers/messaging/slack/)
+- [Microsoft Teams](/greentic-docs/providers/messaging/teams/)
+- [Telegram](/greentic-docs/providers/messaging/telegram/)
+- [WhatsApp](/greentic-docs/providers/messaging/whatsapp/)
+- [WebChat](/greentic-docs/providers/messaging/webchat/)
+- [Webex](/greentic-docs/providers/messaging/webex/)
+- [Email](/greentic-docs/providers/messaging/email/)
 
 ### Events
 
-- [Webhook](/providers/events/webhook/)
-- [Timer](/providers/events/timer/)
-- [Email (SendGrid)](/providers/events/email-sendgrid/)
-- [SMS (Twilio)](/providers/events/sms-twilio/)
+- [Webhook](/greentic-docs/providers/events/webhook/)
+- [Timer](/greentic-docs/providers/events/timer/)
+- [Email (SendGrid)](/greentic-docs/providers/events/email-sendgrid/)
+- [SMS (Twilio)](/greentic-docs/providers/events/sms-twilio/)
 
 ## Next Steps
 
-- [Messaging Providers Overview](/providers/messaging/overview/)
-- [Events Providers Overview](/providers/events/overview/)
-- [Multi-Tenancy](/concepts/multi-tenancy/)
+- [Messaging Providers Overview](/greentic-docs/providers/messaging/overview/)
+- [Events Providers Overview](/greentic-docs/providers/events/overview/)
+- [Multi-Tenancy](/greentic-docs/concepts/multi-tenancy/)

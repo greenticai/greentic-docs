@@ -19,22 +19,22 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 <CardGrid>
   <LinkCard
     title="Webhook"
-    href="/providers/events/webhook/"
+    href="/greentic-docs/providers/events/webhook/"
     description="Receive HTTP webhooks from external services"
   />
   <LinkCard
     title="Timer"
-    href="/providers/events/timer/"
+    href="/greentic-docs/providers/events/timer/"
     description="Schedule tasks with cron expressions"
   />
   <LinkCard
     title="Email (SendGrid)"
-    href="/providers/events/email-sendgrid/"
+    href="/greentic-docs/providers/events/email-sendgrid/"
     description="Send transactional emails via SendGrid"
   />
   <LinkCard
     title="SMS (Twilio)"
-    href="/providers/events/sms-twilio/"
+    href="/greentic-docs/providers/events/sms-twilio/"
     description="Send SMS messages via Twilio"
   />
 </CardGrid>
@@ -157,6 +157,6 @@ triggers:
 
 ## Next Steps
 
-- [Webhook Provider](/providers/events/webhook/)
-- [Timer Provider](/providers/events/timer/)
-- [Flows Guide](/concepts/flows/)
+- [Webhook Provider](/greentic-docs/providers/events/webhook/)
+- [Timer Provider](/greentic-docs/providers/events/timer/)
+- [Flows Guide](/greentic-docs/concepts/flows/)

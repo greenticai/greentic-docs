@@ -141,5 +141,5 @@ triggers:
 
 ## Next Steps
 
-- [SendGrid Events Provider](/providers/events/email-sendgrid/)
-- [Flows Guide](/concepts/flows/)
+- [SendGrid Events Provider](/greentic-docs/providers/events/email-sendgrid/)
+- [Flows Guide](/greentic-docs/concepts/flows/)

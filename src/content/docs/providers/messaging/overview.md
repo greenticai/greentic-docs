@@ -18,37 +18,37 @@ Greentic supports multiple messaging platforms through **Messaging Providers**. 
 <CardGrid>
   <LinkCard
     title="Slack"
-    href="/providers/messaging/slack/"
+    href="/greentic-docs/providers/messaging/slack/"
     description="Connect to Slack workspaces with full app support"
   />
   <LinkCard
     title="Microsoft Teams"
-    href="/providers/messaging/teams/"
+    href="/greentic-docs/providers/messaging/teams/"
     description="Integrate with Microsoft Teams channels and chats"
   />
   <LinkCard
     title="Telegram"
-    href="/providers/messaging/telegram/"
+    href="/greentic-docs/providers/messaging/telegram/"
     description="Build Telegram bots with buttons and inline keyboards"
   />
   <LinkCard
     title="WhatsApp"
-    href="/providers/messaging/whatsapp/"
+    href="/greentic-docs/providers/messaging/whatsapp/"
     description="Connect to WhatsApp Business API"
   />
   <LinkCard
     title="WebChat"
-    href="/providers/messaging/webchat/"
+    href="/greentic-docs/providers/messaging/webchat/"
     description="Embed chat widget in your website"
   />
   <LinkCard
     title="Webex"
-    href="/providers/messaging/webex/"
+    href="/greentic-docs/providers/messaging/webex/"
     description="Integrate with Cisco Webex Teams"
   />
   <LinkCard
     title="Email"
-    href="/providers/messaging/email/"
+    href="/greentic-docs/providers/messaging/email/"
     description="Send and receive emails as messages"
   />
 </CardGrid>
@@ -258,6 +258,6 @@ triggers:
 
 Choose a provider to get started:
 
-- [Telegram](/providers/messaging/telegram/) - Easiest setup, great for testing
-- [Slack](/providers/messaging/slack/) - Full-featured workspace integration
-- [WebChat](/providers/messaging/webchat/) - Embed in your website
+- [Telegram](/greentic-docs/providers/messaging/telegram/) - Easiest setup, great for testing
+- [Slack](/greentic-docs/providers/messaging/slack/) - Full-featured workspace integration
+- [WebChat](/greentic-docs/providers/messaging/webchat/) - Embed in your website

@@ -93,5 +93,5 @@ The SendGrid events provider enables sending transactional emails through the Se
 
 ## Next Steps
 
-- [SMS (Twilio)](/providers/events/sms-twilio/)
-- [Webhook Provider](/providers/events/webhook/)
+- [SMS (Twilio)](/greentic-docs/providers/events/sms-twilio/)
+- [Webhook Provider](/greentic-docs/providers/events/webhook/)

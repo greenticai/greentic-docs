@@ -132,5 +132,5 @@ Any language is supported. Common configurations:
 
 ## Next Steps
 
-- [I18nId Specification](/i18n/i18nid-spec/)
-- [Cards Translation](/i18n/cards-translation/)
+- [I18nId Specification](/greentic-docs/i18n/i18nid-spec/)
+- [Cards Translation](/greentic-docs/i18n/cards-translation/)

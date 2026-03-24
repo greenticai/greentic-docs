@@ -303,6 +303,6 @@ reject_unsigned = true
 
 ## Next Steps
 
-- [Components](/concepts/components/) - Build WASM components for packs
-- [Building Packs](/cli/building-packs/) - CLI commands for pack management
-- [Pack Format Reference](/reference/pack-format/) - Complete specification
+- [Components](/greentic-docs/concepts/components/) - Build WASM components for packs
+- [Building Packs](/greentic-docs/cli/building-packs/) - CLI commands for pack management
+- [Pack Format Reference](/greentic-docs/reference/pack-format/) - Complete specification

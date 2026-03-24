@@ -337,6 +337,6 @@ impl Guest for DebugProcessor {
 
 ## Next Steps
 
-- [Providers](/concepts/providers/) - Build provider components
-- [MCP Tools](/mcp/creating-tools/) - Create MCP tool components
-- [WIT Interfaces Reference](/reference/wit-interfaces/) - Complete WIT specification
+- [Providers](/greentic-docs/concepts/providers/) - Build provider components
+- [MCP Tools](/greentic-docs/mcp/creating-tools/) - Create MCP tool components
+- [WIT Interfaces Reference](/greentic-docs/reference/wit-interfaces/) - Complete WIT specification

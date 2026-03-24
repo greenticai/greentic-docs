@@ -165,5 +165,5 @@ triggers:
 
 ## Next Steps
 
-- [Webhook Provider](/providers/events/webhook/)
-- [Flows Guide](/concepts/flows/)
+- [Webhook Provider](/greentic-docs/providers/events/webhook/)
+- [Flows Guide](/greentic-docs/concepts/flows/)

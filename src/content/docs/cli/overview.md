@@ -175,7 +175,7 @@ gtc start --help
 
 ## Next Steps
 
-- [gtc wizard](/cli/wizard/) - Bundle creation
-- [gtc setup](/cli/setup/) - Provider setup
-- [gtc start](/cli/start/) - Runtime server
-- [Building Packs](/cli/building-packs/) - Pack management
+- [gtc wizard](/greentic-docs/cli/wizard/) - Bundle creation
+- [gtc setup](/greentic-docs/cli/setup/) - Provider setup
+- [gtc start](/greentic-docs/cli/start/) - Runtime server
+- [Building Packs](/greentic-docs/cli/building-packs/) - Pack management

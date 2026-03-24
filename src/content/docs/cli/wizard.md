@@ -255,6 +255,6 @@ Use `gtc wizard --list-templates` to see available templates.
 
 ## Next Steps
 
-- [gtc setup](/cli/setup/) - Configure providers
-- [gtc start](/cli/start/) - Run the runtime
-- [Quick Start](/getting-started/quick-start/) - Complete workflow
+- [gtc setup](/greentic-docs/cli/setup/) - Configure providers
+- [gtc start](/greentic-docs/cli/start/) - Run the runtime
+- [Quick Start](/greentic-docs/getting-started/quick-start/) - Complete workflow

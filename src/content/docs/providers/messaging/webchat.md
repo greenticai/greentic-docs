@@ -439,6 +439,6 @@ Always configure `allowed_origins` in production to prevent unauthorized embeddi
 
 ## Next Steps
 
-- [Adaptive Cards](/components/cards2pack/) - Create rich cards
-- [Theming Guide](/reference/webchat-theming/) - Advanced customization
-- [Flows Guide](/concepts/flows/) - Build conversation flows
+- [Adaptive Cards](/greentic-docs/components/cards2pack/) - Create rich cards
+- [Theming Guide](/greentic-docs/reference/webchat-theming/) - Advanced customization
+- [Flows Guide](/greentic-docs/concepts/flows/) - Build conversation flows

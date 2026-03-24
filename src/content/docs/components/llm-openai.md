@@ -156,5 +156,5 @@ The **LLM OpenAI** component provides integration with OpenAI and OpenAI-compati
 
 ## Next Steps
 
-- [Templates Component](/components/templates/)
-- [fast2flow](/components/fast2flow/)
+- [Templates Component](/greentic-docs/components/templates/)
+- [fast2flow](/greentic-docs/components/fast2flow/)

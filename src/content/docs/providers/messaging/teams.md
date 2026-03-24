@@ -351,5 +351,5 @@ Greentic automatically validates:
 ## Next Steps
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Design cards visually
-- [Slack Provider](/providers/messaging/slack/) - Add Slack integration
-- [WebChat Provider](/providers/messaging/webchat/) - Embed in websites
+- [Slack Provider](/greentic-docs/providers/messaging/slack/) - Add Slack integration
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) - Embed in websites

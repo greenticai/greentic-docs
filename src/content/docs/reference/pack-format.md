@@ -243,5 +243,5 @@ greentic-pack extract my-feature.gtpack --output ./extracted/
 
 ## Next Steps
 
-- [WIT Interfaces](/reference/wit-interfaces/)
-- [Building Packs](/cli/building-packs/)
+- [WIT Interfaces](/greentic-docs/reference/wit-interfaces/)
+- [Building Packs](/greentic-docs/cli/building-packs/)
