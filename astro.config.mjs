@@ -4,6 +4,8 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://greenticai.github.io',
+	base: '/greentic-docs',
 	integrations: [
 		starlight({
 			title: 'Greentic Docs',
