@@ -94,7 +94,7 @@ greentic-cards2pack generate [OPTIONS]
 | `--prompt` | Enable prompt-based routing (adds `prompt2flow` node) |
 | `--prompt-json <FILE>` | Answers JSON for prompt routing (requires `--prompt`) |
 | `--auto-translate` | Auto-translate cards (requires `greentic-i18n-translator`) |
-| `--langs <CODES>` | Comma-separated language codes (default: `fr,de,es,ja,zh`) |
+| `--langs <CODES>` | Comma-separated language codes (default: all 65+ supported locales) |
 | `--glossary <FILE>` | Glossary JSON for consistent translations |
 | `--verbose` | Print detailed output |
 
