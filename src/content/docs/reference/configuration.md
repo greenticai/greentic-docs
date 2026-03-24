@@ -289,5 +289,5 @@ All configuration can be overridden via environment variables:
 
 ## Next Steps
 
-- [gtc start](/cli/start/)
-- [gtc setup](/cli/setup/)
+- [gtc start](/greentic-docs/cli/start/)
+- [gtc setup](/greentic-docs/cli/setup/)

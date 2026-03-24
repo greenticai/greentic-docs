@@ -268,5 +268,5 @@ echo '{"query": "test"}' | greentic-mcp test ./my-tool.wasm
 
 ## Next Steps
 
-- [MCP Overview](/mcp/overview/)
-- [Components Guide](/concepts/components/)
+- [MCP Overview](/greentic-docs/mcp/overview/)
+- [Components Guide](/greentic-docs/concepts/components/)

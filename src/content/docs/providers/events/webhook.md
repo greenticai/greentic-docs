@@ -234,5 +234,5 @@ ngrok http 8080
 
 ## Next Steps
 
-- [Timer Provider](/providers/events/timer/)
-- [Flows Guide](/concepts/flows/)
+- [Timer Provider](/greentic-docs/providers/events/timer/)
+- [Flows Guide](/greentic-docs/concepts/flows/)

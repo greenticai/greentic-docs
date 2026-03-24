@@ -345,6 +345,6 @@ Always validate user input:
 
 ## Next Steps
 
-- [Slack Provider](/providers/messaging/slack/) - Add Slack integration
-- [Flows Guide](/concepts/flows/) - Build complex workflows
-- [Buttons and Cards](/components/adaptive-cards/) - Rich UI elements
+- [Slack Provider](/greentic-docs/providers/messaging/slack/) - Add Slack integration
+- [Flows Guide](/greentic-docs/concepts/flows/) - Build complex workflows
+- [Buttons and Cards](/greentic-docs/components/adaptive-cards/) - Rich UI elements

@@ -314,5 +314,5 @@ wit-bindgen rust ./wit/ --out-dir ./src/bindings/
 
 ## Next Steps
 
-- [Components Guide](/concepts/components/)
-- [Creating MCP Tools](/mcp/creating-tools/)
+- [Components Guide](/greentic-docs/concepts/components/)
+- [Creating MCP Tools](/greentic-docs/mcp/creating-tools/)

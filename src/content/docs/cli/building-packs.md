@@ -358,6 +358,6 @@ jobs:
 
 ## Next Steps
 
-- [Pack Format Reference](/reference/pack-format/) - Complete specification
-- [Flow Schema Reference](/reference/flow-schema/) - YAML schema
-- [Components Guide](/concepts/components/) - Building WASM components
+- [Pack Format Reference](/greentic-docs/reference/pack-format/) - Complete specification
+- [Flow Schema Reference](/greentic-docs/reference/flow-schema/) - YAML schema
+- [Components Guide](/greentic-docs/concepts/components/) - Building WASM components

@@ -417,5 +417,5 @@ Greentic automatically validates:
 ## Next Steps
 
 - [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - Design rich messages
-- [Teams Provider](/providers/messaging/teams/) - Add Teams integration
-- [Flows Guide](/concepts/flows/) - Build complex workflows
+- [Teams Provider](/greentic-docs/providers/messaging/teams/) - Add Teams integration
+- [Flows Guide](/greentic-docs/concepts/flows/) - Build complex workflows

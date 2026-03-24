@@ -260,7 +260,7 @@ See the [translate-demo example](https://github.com/greentic-ai/greentic-cards2p
 
 ## Next Steps
 
-- [Cards Translation Guide](/i18n/cards-translation/)
-- [i18n Overview](/i18n/overview/)
-- [Flows Guide](/concepts/flows/)
+- [Cards Translation Guide](/greentic-docs/i18n/cards-translation/)
+- [i18n Overview](/greentic-docs/i18n/overview/)
+- [Flows Guide](/greentic-docs/concepts/flows/)
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/)

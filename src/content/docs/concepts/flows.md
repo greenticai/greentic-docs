@@ -333,6 +333,6 @@ triggers:
 
 ## Next Steps
 
-- [Packs](/concepts/packs/) - Package your flows for deployment
-- [Components](/concepts/components/) - Create custom node types
-- [Flow Schema Reference](/reference/flow-schema/) - Complete YAML schema
+- [Packs](/greentic-docs/concepts/packs/) - Package your flows for deployment
+- [Components](/greentic-docs/concepts/components/) - Create custom node types
+- [Flow Schema Reference](/greentic-docs/reference/flow-schema/) - Complete YAML schema
