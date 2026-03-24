@@ -56,17 +56,26 @@ I18nId: "i18n:v1:abc123def456"
 
 ### 1. Extract Strings
 
+For Adaptive Cards:
+
 ```bash
-greentic-i18n extract ./src --output strings.json
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
 ```
 
 ### 2. Translate
 
-```json title="translations/id.json"
-{
-  "i18n:v1:abc123": "Halo!",
-  "i18n:v1:def456": "Selamat datang"
-}
+Using `greentic-i18n-translator` (powered by Codex CLI):
+
+```bash
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+Or auto-translate during pack generation:
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de,ja
 ```
 
 ### 3. Load in Runtime

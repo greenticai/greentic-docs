@@ -7,12 +7,12 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Overview
 
-**cards2pack** is a CLI tool that converts Adaptive Cards JSON files into Greentic packs. It enables:
+**cards2pack** is a CLI tool that converts Adaptive Card JSON files into Greentic packs. It:
 
-- Card-based UI generation
-- Automatic flow creation from cards
-- i18n string extraction
-- Card validation
+- Scans cards, builds a dependency graph, generates `.ygtc` flows
+- Extracts translatable strings for i18n
+- Auto-translates cards via `greentic-i18n-translator`
+- Packages everything into a deployable `.gtpack`
 
 ## Installation
 
@@ -20,169 +20,212 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 cargo install greentic-cards2pack
 ```
 
-Or from source:
+Required tools:
 
 ```bash
-cd greentic-cards2pack
-cargo build --release
+cargo install greentic-flow greentic-pack
+cargo install greentic-i18n-translator  # optional, for --auto-translate
 ```
 
-## Basic Usage
+## Quick Start
 
 <Steps>
 
-1. **Create Adaptive Card**
+1. **Create Adaptive Cards**
 
    ```json title="cards/welcome.json"
    {
      "type": "AdaptiveCard",
      "version": "1.4",
      "body": [
-       {
-         "type": "TextBlock",
-         "text": "Welcome!",
-         "size": "Large",
-         "weight": "Bolder"
-       },
-       {
-         "type": "TextBlock",
-         "text": "How can I help you today?"
-       }
+       { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+       { "type": "TextBlock", "text": "How can I help you today?" }
      ],
      "actions": [
        {
          "type": "Action.Submit",
-         "title": "Get Help",
-         "data": { "action": "help" }
-       },
-       {
-         "type": "Action.Submit",
-         "title": "Contact Support",
-         "data": { "action": "support" }
+         "title": "Get Started",
+         "data": { "flow": "demo", "step": "next-card" }
        }
      ]
    }
    ```
 
-2. **Convert to Pack**
+2. **Generate pack**
 
    ```bash
-   cards2pack build ./cards --output my-cards.gtpack
+   greentic-cards2pack generate \
+     --cards ./cards \
+     --out ./my-pack \
+     --name my-pack
    ```
 
-3. **Use in Flow**
+3. **Output**
 
-   ```yaml
-   - id: show_welcome
-     type: adaptive-card
-     config:
-       card: "cards/welcome"
+   ```
+   my-pack/
+     pack.yaml
+     flows/main.ygtc
+     assets/cards/welcome.json
+     dist/my-pack.gtpack
+     .cards2pack/manifest.json
    ```
 
 </Steps>
 
-## CLI Commands
+## CLI Reference
 
-### Build
+### `generate`
 
-```bash
-cards2pack build <INPUT_DIR> [OPTIONS]
-
-Options:
-  --output, -o <FILE>    Output pack file
-  --validate             Validate cards before building
-  --extract-i18n         Extract strings for translation
-  --i18n-output <FILE>   i18n output file
-```
-
-### Validate
+Main command — scan cards, generate flows, build pack.
 
 ```bash
-cards2pack validate <INPUT_DIR> [OPTIONS]
-
-Options:
-  --strict               Strict validation mode
-  --version <VERSION>    Target Adaptive Card version
+greentic-cards2pack generate [OPTIONS]
 ```
 
-### Extract i18n
+| Flag | Description |
+|------|-------------|
+| `--cards <DIR>` | Directory of Adaptive Card JSON files (required) |
+| `--out <DIR>` | Output workspace directory (required) |
+| `--name <NAME>` | Pack name (required) |
+| `--strict` | Errors on missing targets, duplicates, invalid JSON |
+| `--group-by <MODE>` | Flow grouping: `folder` or `flow-field` |
+| `--default-flow <NAME>` | Default flow name for ungrouped cards |
+| `--prompt` | Enable prompt-based routing (adds `prompt2flow` node) |
+| `--prompt-json <FILE>` | Answers JSON for prompt routing (requires `--prompt`) |
+| `--auto-translate` | Auto-translate cards (requires `greentic-i18n-translator`) |
+| `--langs <CODES>` | Comma-separated language codes (default: `fr,de,es,ja,zh`) |
+| `--glossary <FILE>` | Glossary JSON for consistent translations |
+| `--verbose` | Print detailed output |
+
+### `extract-i18n`
+
+Extract translatable strings from cards into a JSON bundle.
 
 ```bash
-cards2pack extract-i18n <INPUT_DIR> --output strings.json
+greentic-cards2pack extract-i18n [OPTIONS]
 ```
 
-## Card Features
+| Flag | Description |
+|------|-------------|
+| `--input <DIR>` | Directory of card JSON files (required) |
+| `--output <FILE>` | Output JSON path (default: `i18n/en.json`) |
+| `--prefix <PREFIX>` | Key prefix (default: `card`) |
+| `--include-existing` | Include strings that already contain `$t()` patterns |
+| `--verbose` | Print extraction report |
 
-### Text Blocks
+## Card Identification
 
-```json
+Cards are identified by (in order of priority):
+1. `greentic.cardId` field in the card JSON
+2. Filename stem (e.g., `welcome.json` → `welcome`)
+
+Cards are grouped into flows by:
+- `flow` field in action data
+- `--group-by folder` (directory structure)
+- `--default-flow` fallback
+
+## i18n & Auto-Translation
+
+### Extract strings
+
+```bash
+greentic-cards2pack extract-i18n \
+  --input ./cards \
+  --output i18n/en.json \
+  --verbose
+```
+
+Output:
+
+```json title="i18n/en.json"
 {
-  "type": "TextBlock",
-  "text": "Hello, {{name}}!",
-  "size": "Large",
-  "weight": "Bolder",
-  "color": "Accent"
+  "card.welcome.body_0.text": "Welcome!",
+  "card.welcome.body_1.text": "How can I help you today?",
+  "card.welcome.actions_0.title": "Get Started"
 }
 ```
 
-### Images
+<Aside type="note">
+Keys follow the pattern `{prefix}.{cardId}.{json_path}.{field}`. The card ID comes from `greentic.cardId` or the filename.
+</Aside>
 
-```json
+### Extracted field types
+
+| Field | Source |
+|-------|--------|
+| `text` | TextBlock content |
+| `title` | Action titles, card titles, toggle titles |
+| `label` | Input labels |
+| `placeholder` | Input placeholders |
+| `errorMessage` | Validation errors |
+| `altText` | Image alt text |
+| `fallbackText` | Fallback content |
+| FactSet `title`/`value` | Fact entries |
+| ChoiceSet `title` | Choice options |
+
+### Auto-translate (one command)
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./my-pack \
+  --name my-pack \
+  --auto-translate \
+  --langs fr,de
+```
+
+This extracts strings, translates via `greentic-i18n-translator`, and bundles everything:
+
+```
+my-pack/assets/i18n/
+  en.json   # English (source)
+  fr.json   # French
+  de.json   # German
+```
+
+<Aside type="caution">
+Translation failures are non-fatal — the pack still builds, with warnings in `.cards2pack/manifest.json`.
+</Aside>
+
+### Glossary
+
+Use a glossary to keep brand names and technical terms consistent:
+
+```json title="glossary.json"
 {
-  "type": "Image",
-  "url": "https://example.com/logo.png",
-  "size": "Medium",
-  "altText": "Company Logo"
+  "Greentic": "Greentic",
+  "Dashboard": "Dashboard"
 }
 ```
 
-### Input Fields
-
-```json
-{
-  "type": "Input.Text",
-  "id": "email",
-  "label": "Email Address",
-  "placeholder": "you@example.com",
-  "isRequired": true
-}
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de \
+  --glossary glossary.json
 ```
 
-### Choice Sets
+## Flow Generation
 
-```json
-{
-  "type": "Input.ChoiceSet",
-  "id": "category",
-  "label": "Select Category",
-  "choices": [
-    { "title": "Technical", "value": "technical" },
-    { "title": "Billing", "value": "billing" },
-    { "title": "General", "value": "general" }
-  ]
-}
+Generated flow sections are wrapped in markers:
+
+```yaml
+# BEGIN GENERATED (cards2pack)
+# ... generated nodes ...
+# END GENERATED (cards2pack)
+
+# Developer space below (preserved on regen)
 ```
 
-### Actions
+Content outside the markers is preserved when you regenerate.
 
-```json
-{
-  "type": "ActionSet",
-  "actions": [
-    {
-      "type": "Action.Submit",
-      "title": "Submit",
-      "style": "positive",
-      "data": { "action": "submit" }
-    },
-    {
-      "type": "Action.OpenUrl",
-      "title": "Learn More",
-      "url": "https://example.com"
-    }
-  ]
-}
-```
+### Strict mode
+
+With `--strict`:
+- Missing route targets cause errors (instead of stub nodes)
+- Duplicate `cardId` values cause errors
+- Invalid JSON causes errors
 
 ## Template Variables
 
@@ -190,196 +233,34 @@ Use Handlebars syntax for dynamic content:
 
 ```json
 {
-  "type": "AdaptiveCard",
-  "body": [
-    {
-      "type": "TextBlock",
-      "text": "Order #{{order_id}}"
-    },
-    {
-      "type": "TextBlock",
-      "text": "Status: {{status}}"
-    },
-    {
-      "type": "FactSet",
-      "facts": [
-        { "title": "Customer", "value": "{{customer_name}}" },
-        { "title": "Total", "value": "${{total}}" }
-      ]
-    }
-  ]
+  "type": "TextBlock",
+  "text": "Hello, {{name}}!"
 }
 ```
-
-In your flow:
-
-```yaml
-- id: show_order
-  type: adaptive-card
-  config:
-    card: "cards/order_status"
-    data:
-      order_id: "{{order.id}}"
-      status: "{{order.status}}"
-      customer_name: "{{customer.name}}"
-      total: "{{order.total}}"
-```
-
-## i18n Integration
 
 <Aside type="note">
-cards2pack integrates with greentic-i18n for internationalization.
+Pure template expressions like `{{variable}}` are skipped during i18n extraction. Mixed text like `Hello, {{name}}!` is extracted.
 </Aside>
 
-### Extract Strings
+## Example: Multi-Step Form with Translation
 
 ```bash
-cards2pack extract-i18n ./cards --output i18n/strings.json
+# Create cards in cards/ directory, then:
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./checkout-pack \
+  --name checkout \
+  --auto-translate \
+  --langs fr,ja,es \
+  --glossary glossary.json \
+  --strict
 ```
 
-Output:
-
-```json
-{
-  "i18n:v1:abc123": "Welcome!",
-  "i18n:v1:def456": "How can I help you today?",
-  "i18n:v1:ghi789": "Get Help",
-  "i18n:v1:jkl012": "Contact Support"
-}
-```
-
-### Translate
-
-Create translations:
-
-```json title="i18n/id.json"
-{
-  "i18n:v1:abc123": "Selamat Datang!",
-  "i18n:v1:def456": "Bagaimana saya bisa membantu Anda hari ini?",
-  "i18n:v1:ghi789": "Dapatkan Bantuan",
-  "i18n:v1:jkl012": "Hubungi Dukungan"
-}
-```
-
-### Build with Translations
-
-```bash
-cards2pack build ./cards \
-  --i18n-dir ./i18n \
-  --output my-cards.gtpack
-```
-
-## Validation
-
-### Validate Cards
-
-```bash
-cards2pack validate ./cards --strict
-```
-
-Checks for:
-- Valid JSON structure
-- Required fields present
-- Version compatibility
-- Action data integrity
-
-### Supported Versions
-
-| Version | Support |
-|---------|---------|
-| 1.0 | Full |
-| 1.1 | Full |
-| 1.2 | Full |
-| 1.3 | Full |
-| 1.4 | Full |
-| 1.5 | Partial |
-
-## Best Practices
-
-1. **Keep cards focused** - One purpose per card
-2. **Use templates** - Leverage Handlebars for dynamic content
-3. **Validate early** - Run validation before deployment
-4. **Extract i18n** - Support multiple languages from the start
-5. **Test across platforms** - Cards render differently on each platform
-6. **Use semantic actions** - Clear action data for flow handling
-
-## Example: Multi-Step Form
-
-```json title="cards/checkout_step1.json"
-{
-  "type": "AdaptiveCard",
-  "version": "1.4",
-  "body": [
-    {
-      "type": "TextBlock",
-      "text": "Checkout - Step 1 of 3",
-      "size": "Medium",
-      "weight": "Bolder"
-    },
-    {
-      "type": "TextBlock",
-      "text": "Shipping Information",
-      "size": "Small",
-      "isSubtle": true
-    },
-    {
-      "type": "Input.Text",
-      "id": "name",
-      "label": "Full Name",
-      "isRequired": true
-    },
-    {
-      "type": "Input.Text",
-      "id": "address",
-      "label": "Address",
-      "isMultiline": true,
-      "isRequired": true
-    },
-    {
-      "type": "ColumnSet",
-      "columns": [
-        {
-          "type": "Column",
-          "width": "stretch",
-          "items": [
-            {
-              "type": "Input.Text",
-              "id": "city",
-              "label": "City",
-              "isRequired": true
-            }
-          ]
-        },
-        {
-          "type": "Column",
-          "width": "auto",
-          "items": [
-            {
-              "type": "Input.Text",
-              "id": "zip",
-              "label": "ZIP Code",
-              "isRequired": true
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "actions": [
-    {
-      "type": "Action.Submit",
-      "title": "Continue to Payment",
-      "style": "positive",
-      "data": {
-        "action": "checkout_step2"
-      }
-    }
-  ]
-}
-```
+See the [translate-demo example](https://github.com/greentic-ai/greentic-cards2pack/tree/master/examples/translate-demo) for a complete walkthrough.
 
 ## Next Steps
 
+- [Cards Translation Guide](/i18n/cards-translation/)
 - [i18n Overview](/i18n/overview/)
-- [Adaptive Cards Designer](https://adaptivecards.io/designer/)
 - [Flows Guide](/concepts/flows/)
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/)
