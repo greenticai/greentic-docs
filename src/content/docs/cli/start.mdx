@@ -164,6 +164,8 @@ When running, the server exposes:
 | `POST /webhook/{provider}/{tenant}/{team}` | Provider webhooks |
 | `GET /api/v1/sessions` | Session management |
 | `POST /api/v1/messages` | Send messages |
+| `GET /auth/config` | OAuth configuration endpoint |
+| `POST /oauth/token-exchange` | Server-side OIDC token exchange proxy |
 
 ### Example Health Check
 
@@ -171,6 +173,46 @@ When running, the server exposes:
 curl http://localhost:8080/health
 # {"status": "healthy"}
 ```
+
+### OAuth Support
+
+The runtime exposes two endpoints for OAuth/OIDC integration with messaging providers that require user authentication (such as WebChat or Teams).
+
+#### `GET /auth/config`
+
+Reads the OAuth configuration from the secrets store and returns it to the client. Clients use this endpoint to discover the identity provider settings needed to initiate an authorization flow.
+
+```bash
+curl http://localhost:8080/auth/config
+# {
+#   "authority": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+#   "client_id": "your-client-id",
+#   "redirect_uri": "https://your-public-url/auth/callback",
+#   "scope": "openid profile"
+# }
+```
+
+#### `POST /oauth/token-exchange`
+
+A server-side token exchange proxy for OIDC authorization code exchange. This endpoint allows clients to exchange an authorization code for tokens without running into browser CORS restrictions that occur when calling identity provider token endpoints directly from the frontend.
+
+```bash
+curl -X POST http://localhost:8080/oauth/token-exchange \
+  -H "Content-Type: application/json" \
+  -d '{"code": "authorization_code_here", "redirect_uri": "https://your-public-url/auth/callback"}'
+```
+
+<Aside type="tip">
+The token exchange proxy eliminates the need for the browser to contact the identity provider's token endpoint directly, which would otherwise fail due to CORS policies enforced by most identity providers.
+</Aside>
+
+### Static Routes
+
+Static routes (such as health checks and OAuth endpoints) can be configured without requiring an explicit public base URL. This means these endpoints are available immediately when the server starts, even before a tunnel or public URL is established.
+
+<Aside type="note">
+Provider webhook endpoints still require a public base URL so that external services can reach the server. Static routes are local-only and do not depend on tunnel availability.
+</Aside>
 
 ## Logging
 
