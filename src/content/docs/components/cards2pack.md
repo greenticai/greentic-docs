@@ -93,8 +93,8 @@ greentic-cards2pack generate [OPTIONS]
 | `--default-flow <NAME>` | Default flow name for ungrouped cards |
 | `--prompt` | Enable prompt-based routing (adds `prompt2flow` node) |
 | `--prompt-json <FILE>` | Answers JSON for prompt routing (requires `--prompt`) |
-| `--auto-translate` | Auto-translate cards (requires `greentic-i18n-translator`) |
-| `--langs <CODES>` | Comma-separated language codes (default: all 65+ supported locales) |
+| `--auto-translate` | Auto-translate cards with up to 8 parallel threads (requires `greentic-i18n-translator`) |
+| `--langs <CODES>` | Comma-separated language codes; omit to translate to all 65+ supported locales |
 | `--glossary <FILE>` | Glossary JSON for consistent translations |
 | `--verbose` | Print detailed output |
 
@@ -150,6 +150,10 @@ Output:
 Keys follow the pattern `{prefix}.{cardId}.{json_path}.{field}`. The card ID comes from `greentic.cardId` or the filename.
 </Aside>
 
+<Aside type="tip">
+Extraction always reads the original card files on disk, not any rewritten or intermediate copies. This ensures the extracted strings match what authors wrote, avoiding drift from internal transformations.
+</Aside>
+
 ### Extracted field types
 
 | Field | Source |
@@ -175,7 +179,7 @@ greentic-cards2pack generate \
   --langs fr,de
 ```
 
-This extracts strings, translates via `greentic-i18n-translator`, and bundles everything:
+This extracts strings from the original card files, translates via `greentic-i18n-translator` using up to 8 concurrent threads, and bundles everything:
 
 ```
 my-pack/assets/i18n/
@@ -185,7 +189,7 @@ my-pack/assets/i18n/
 ```
 
 <Aside type="caution">
-Translation failures are non-fatal — the pack still builds, with warnings in `.cards2pack/manifest.json`.
+Translation failures are non-fatal — the pack still builds, with warnings in `.cards2pack/manifest.json`. In non-strict mode, `greentic-pack build` errors are also non-fatal, so a pack is produced even if some validation checks fail.
 </Aside>
 
 ### Glossary

@@ -222,6 +222,27 @@ Runtime pack loading process:
 7. **Instantiate components** - Load WASM modules
 8. **Register** - Add to runtime registry
 
+### Component Operation Splitting
+
+When flows reference a WASM component with an operation (e.g., `component-templates.render`), the pack compiler stores the full `"component-id.operation"` string as a single component ID in the manifest. At runtime, the loader splits this value on the **last dot** to extract the component ID and the operation name separately.
+
+For example, a flow node referencing `component-templates.render`:
+
+- **Stored in manifest**: `"component-templates.render"` (single key)
+- **Runtime resolution**: splits into component `component-templates` and operation `render`
+
+This splitting strategy uses the last dot as the delimiter, which allows component IDs themselves to contain dots without ambiguity. The runtime then looks up the component by its extracted ID and invokes the specified operation on the loaded WASM module.
+
+```
+Manifest key                          Component ID              Operation
+─────────────────────────────────     ───────────────────────   ──────────
+component-templates.render        →   component-templates       render
+component-llm-openai.chat         →   component-llm-openai      chat
+org.custom.my-tool.execute        →   org.custom.my-tool        execute
+```
+
+This behavior is transparent to flow authors -- flows simply reference `component-id.operation` in node configuration, and the pack compiler and runtime handle the rest.
+
 ## CLI Reference
 
 ```bash
