@@ -14,6 +14,8 @@ The WebChat provider lets you embed a chat widget directly in your website. It s
 - File uploads
 - Custom theming
 - Mobile responsive
+- OAuth/OIDC authentication (Google, Microsoft Entra ID, GitHub, custom OIDC)
+- Built-in locale picker for language selection
 
 ## Architecture
 
@@ -99,6 +101,11 @@ User's Browser
 | `allowed_origins` | No | CORS allowed origins |
 | `session_timeout` | No | Session timeout in seconds (default: 1800) |
 | `token_expiry` | No | Token expiry in seconds (default: 3600) |
+| `oauth_enabled` | No | Enable OAuth/OIDC login for WebChat (default: false) |
+| `oauth_provider` | No | OAuth provider: `google`, `microsoft`, `github`, or `oidc` |
+| `oauth_client_id` | No | OAuth client ID (required when `oauth_enabled` is true) |
+| `oauth_authority` | No | OIDC authority/issuer URL (required for `microsoft` and `oidc` providers) |
+| `oauth_scopes` | No | OAuth scopes to request (defaults vary by provider) |
 
 ## Widget Configuration
 
@@ -366,6 +373,8 @@ GreenticWebChat.init({
 
 ### Custom Header
 
+The header area can display a title, subtitle, and close button. When the locale picker is enabled, it appears in the header. When OAuth is enabled, a logout button is also rendered in the header next to the locale picker.
+
 ```javascript
 GreenticWebChat.init({
   // ... other config
@@ -379,10 +388,14 @@ GreenticWebChat.init({
 
 ## Multi-Language Support
 
+The WebChat GUI includes a built-in locale picker that lets users switch languages at runtime. The locale picker appears in the chat header, allowing users to select their preferred language without reloading the page.
+
 ```javascript
 GreenticWebChat.init({
   // ... other config
   locale: 'es-ES',
+  showLocalePicker: true,
+  availableLocales: ['en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP'],
   strings: {
     'placeholder': 'Escribe un mensaje...',
     'send': 'Enviar',
@@ -391,6 +404,207 @@ GreenticWebChat.init({
   }
 });
 ```
+
+When `showLocalePicker` is enabled, a language selector appears in the header next to the close button (and logout button, if OAuth is enabled). Changing the locale updates all UI strings and notifies the flow so responses can adapt to the selected language.
+
+## OAuth/OIDC Authentication
+
+WebChat supports optional OAuth/OIDC authentication to require users to log in before accessing the chat. When enabled, a login overlay is displayed before the chat interface becomes available. The implementation uses a client-side PKCE (Proof Key for Code Exchange) flow for security.
+
+<Aside type="tip">
+OAuth authentication is entirely optional. If not configured, WebChat operates without any login requirement, as in previous versions.
+</Aside>
+
+### Supported Providers
+
+| Provider | `oauth_provider` value | Notes |
+|----------|----------------------|-------|
+| Google | `google` | Google OAuth 2.0 with Google Identity Services |
+| Microsoft (Entra ID) | `microsoft` | Azure AD / Entra ID, requires `oauth_authority` |
+| GitHub | `github` | GitHub OAuth Apps |
+| Custom OIDC | `oidc` | Any OpenID Connect-compliant provider, requires `oauth_authority` |
+
+### How It Works
+
+1. User opens the WebChat widget
+2. A login overlay is shown with a sign-in button for the configured provider
+3. The user authenticates through the provider's login flow (client-side PKCE)
+4. On successful authentication, the overlay is dismissed and the chat becomes accessible
+5. The authenticated user's identity is passed to the flow as user context
+6. A logout button appears in the header (next to the locale picker) for signing out
+
+### Provider Setup
+
+Each provider is configured through the `answers.json` file or interactively via the QA-based setup wizard. The setup wizard uses conditional logic to guide you through only the fields required for your chosen provider.
+
+#### Google
+
+<Steps>
+
+1. **Create OAuth credentials** in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+
+   - Create a new OAuth 2.0 Client ID
+   - Set application type to "Web application"
+   - Add your WebChat domain to "Authorized JavaScript origins"
+   - Add `https://your-domain.com/webchat/auth/callback` to "Authorized redirect URIs"
+
+2. **Configure the provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "google",
+       "oauth_client_id": "123456789.apps.googleusercontent.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+3. **Run setup and start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Microsoft (Entra ID)
+
+<Steps>
+
+1. **Register an application** in the [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps)
+
+   - Register a new application under "App registrations"
+   - Set the redirect URI to `https://your-domain.com/webchat/auth/callback` (type: SPA)
+   - Under "Authentication", enable "Access tokens" and "ID tokens" for implicit grant
+   - Note your Application (client) ID and Directory (tenant) ID
+
+2. **Configure the provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "microsoft",
+       "oauth_client_id": "your-application-client-id",
+       "oauth_authority": "https://login.microsoftonline.com/your-tenant-id/v2.0",
+       "oauth_scopes": "openid profile email User.Read"
+     }
+   }
+   ```
+
+3. **Run setup and start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### GitHub
+
+<Steps>
+
+1. **Create an OAuth App** in [GitHub Developer Settings](https://github.com/settings/developers)
+
+   - Go to "OAuth Apps" and create a new application
+   - Set the "Authorization callback URL" to `https://your-domain.com/webchat/auth/callback`
+   - Note the Client ID
+
+2. **Configure the provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "github",
+       "oauth_client_id": "your-github-client-id",
+       "oauth_scopes": "read:user user:email"
+     }
+   }
+   ```
+
+3. **Run setup and start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Custom OIDC Provider
+
+<Steps>
+
+1. **Register a client** with your OIDC provider
+
+   - Set the redirect URI to `https://your-domain.com/webchat/auth/callback`
+   - Ensure your provider supports PKCE
+   - Note the client ID and the issuer/authority URL
+
+2. **Configure the provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "oidc",
+       "oauth_client_id": "your-client-id",
+       "oauth_authority": "https://your-oidc-provider.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+   The `oauth_authority` must point to the issuer URL where `/.well-known/openid-configuration` is available.
+
+3. **Run setup and start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+### Widget Configuration with OAuth
+
+When OAuth is enabled on the server side, the widget automatically shows the login overlay. No additional client-side configuration is needed. The authenticated user's identity is available in flows via the user context:
+
+```javascript
+GreenticWebChat.init({
+  directLine: {
+    domain: 'https://your-domain.com/webchat'
+  },
+  tenant: 'demo',
+  team: 'default'
+  // OAuth login overlay is shown automatically when oauth_enabled is true
+});
+```
+
+After authentication, the header displays a logout button next to the locale picker. Clicking it clears the session and returns the user to the login overlay.
+
+### Interactive Setup via QA Wizard
+
+Instead of manually writing `answers.json`, you can use the interactive setup wizard which guides you through provider-specific configuration with conditional logic:
+
+```bash
+gtc setup ./my-bundle
+```
+
+The wizard detects when `oauth_enabled` is set to `true` and presents follow-up questions only for the selected `oauth_provider`, so you only see fields relevant to your chosen identity provider.
 
 ## Security
 
@@ -403,6 +617,15 @@ Always configure `allowed_origins` in production to prevent unauthorized embeddi
 - Tokens are short-lived (1 hour default)
 - Tokens are scoped to conversation
 - Refresh tokens are not exposed to client
+
+### OAuth/OIDC Security
+
+When OAuth is enabled:
+
+- Authentication uses the PKCE flow, which does not require a client secret on the frontend
+- Tokens are validated server-side before granting chat access
+- The login overlay blocks all chat interaction until authentication succeeds
+- Session logout clears tokens from the client and invalidates the server-side session
 
 ### CORS Configuration
 

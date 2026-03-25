@@ -335,6 +335,30 @@ Available in all string fields:
 | `{{tenant_id}}` | Tenant identifier |
 | `{{state.*}}` | Session state values |
 | `{{flow.*}}` | Flow variables |
+| `{{entry.*}}` | Entry (incoming) context fields |
+| `{{in.*}}` | Alias for `{{entry.*}}` |
+
+### Template Context Alias: `in` and `entry`
+
+The template context exposes the incoming message data under the `entry` key. As of the current version, `in` is supported as an alias for `entry`, providing a shorter and more intuitive way to reference incoming data in templates.
+
+Both forms are equivalent:
+
+```yaml
+# Using 'entry' (original)
+- id: echo
+  type: reply
+  config:
+    message: "You said: {{entry.text}}"
+
+# Using 'in' (alias)
+- id: echo
+  type: reply
+  config:
+    message: "You said: {{in.text}}"
+```
+
+The `entry` key remains fully supported for backwards compatibility. Existing flows that use `{{entry.*}}` will continue to work without changes. New flows may use either form; `in` is recommended for brevity.
 
 ## Complete Example
 

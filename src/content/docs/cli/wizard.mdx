@@ -19,7 +19,7 @@ gtc wizard [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `--answers <FILE>` | Path to wizard answers file (JSON or YAML) |
+| `--answers <FILE \| URL>` | Path or URL to wizard answers file (JSON or YAML). Supports local paths and remote `http://` / `https://` URLs. |
 | `--dry-run` | Preview generated files without writing |
 | `--output <DIR>` | Output directory (default: current directory) |
 | `--template <NAME>` | Use a specific template |
@@ -137,6 +137,24 @@ gtc wizard --answers wizard-answers.yaml
 # See what would be generated
 gtc wizard --answers wizard-answers.yaml --dry-run
 ```
+
+### Remote Answers File
+
+The `--answers` flag accepts `http://` and `https://` URLs, making it straightforward to
+store shared answer documents in a central location and reference them from CI/CD pipelines.
+
+```bash
+# Fetch answers from a remote URL
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
+
+# Combine with dry-run to preview before generating
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
+```
+
+<Aside type="tip">
+Remote URL support is useful in CI/CD pipelines where wizard answers are stored in a shared
+repository or artifact server and pulled at build time.
+</Aside>
 
 ### Custom Output Directory
 
