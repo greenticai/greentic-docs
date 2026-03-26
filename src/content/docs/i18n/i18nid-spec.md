@@ -152,5 +152,5 @@ greentic-i18n migrate ./old-translations.json --output ./new-translations.json
 
 ## Next Steps
 
-- [Cards Translation](/greentic-docs/i18n/cards-translation/)
-- [i18n Overview](/greentic-docs/i18n/overview/)
+- [Cards Translation](/i18n/cards-translation/)
+- [i18n Overview](/i18n/overview/)

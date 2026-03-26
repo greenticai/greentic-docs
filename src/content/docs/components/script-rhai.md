@@ -240,5 +240,5 @@ try {
 
 ## Next Steps
 
-- [Templates Component](/greentic-docs/components/templates/)
-- [LLM OpenAI](/greentic-docs/components/llm-openai/)
+- [Templates Component](/components/templates/)
+- [LLM OpenAI](/components/llm-openai/)
