@@ -453,5 +453,5 @@ triggers:
 
 ## Next Steps
 
-- [Pack Format](/greentic-docs/reference/pack-format/)
-- [Flows Guide](/greentic-docs/concepts/flows/)
+- [Pack Format](/reference/pack-format/)
+- [Flows Guide](/concepts/flows/)

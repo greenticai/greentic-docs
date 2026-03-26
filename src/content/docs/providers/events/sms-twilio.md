@@ -77,5 +77,5 @@ triggers:
 
 ## Next Steps
 
-- [Email (SendGrid)](/greentic-docs/providers/events/email-sendgrid/)
-- [Events Overview](/greentic-docs/providers/events/overview/)
+- [Email (SendGrid)](/providers/events/email-sendgrid/)
+- [Events Overview](/providers/events/overview/)

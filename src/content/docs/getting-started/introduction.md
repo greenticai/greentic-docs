@@ -72,6 +72,6 @@ Greentic excels at building:
 
 ## Next Steps
 
-- [Quick Start Guide](/greentic-docs/getting-started/quick-start/) - Get your first digital worker running
-- [Installation](/greentic-docs/getting-started/installation/) - Detailed installation instructions
-- [Architecture Overview](/greentic-docs/concepts/architecture/) - Deep dive into the platform architecture
+- [Quick Start Guide](/getting-started/quick-start/) - Get your first digital worker running
+- [Installation](/getting-started/installation/) - Detailed installation instructions
+- [Architecture Overview](/concepts/architecture/) - Deep dive into the platform architecture

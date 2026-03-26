@@ -180,5 +180,5 @@ Main content here
 
 ## Next Steps
 
-- [Script (Rhai)](/greentic-docs/components/script-rhai/)
-- [cards2pack](/greentic-docs/components/cards2pack/)
+- [Script (Rhai)](/components/script-rhai/)
+- [cards2pack](/components/cards2pack/)
