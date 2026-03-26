@@ -117,5 +117,5 @@ triggers:
 
 ## Next Steps
 
-- [fast2flow](/greentic-docs/components/fast2flow/)
-- [Flows Guide](/greentic-docs/concepts/flows/)
+- [fast2flow](/components/fast2flow/)
+- [Flows Guide](/concepts/flows/)
