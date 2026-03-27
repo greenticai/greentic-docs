@@ -1,0 +1,362 @@
+---
+title: Packs
+description: Greentic pack を理解する - flow、component、asset を配布するための署名付きポータブル archive
+---
+
+import { Aside, Card, CardGrid, FileTree, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+**Pack** (`.gtpack`) は、Greentic platform に capability を deploy するために必要なすべてをまとめた、署名付きの自己完結型 archive です。flow、WASM component、asset、metadata を bundle し、Greentic における主要な配布および deployment 単位になります。
+
+## なぜ Packs なのか?
+
+Greentic は **dynamic extension model** を中心に設計されています。つまり、platform のコア以外のものはすべて pack として提供されます。これにより、コア runtime を再コンパイルしたり再デプロイしたりせずに platform を拡張できます。
+
+<CardGrid>
+  <Card title="Portable" icon="rocket">
+    完全な機能を単一の `.gtpack` file として配布できます。deploy 時に dependency resolution は不要で、すべてが bundle されています。
+  </Card>
+  <Card title="Secure" icon="approve-check">
+    すべての pack は content-hash (BLAKE3) と署名 (Ed25519) が付与されます。runtime はロード前に integrity と authenticity を検証します。
+  </Card>
+  <Card title="Versioned" icon="list-format">
+    semantic versioning により互換性を追跡します。dependency constraint は manifest で宣言され、build 時に解決されます。
+  </Card>
+  <Card title="Sandboxed" icon="setting">
+    pack 内の WASM component は、明示的な capability grant を持つ sandboxed な WASI Preview 2 environment で実行されます。
+  </Card>
+</CardGrid>
+
+## Pack Structure
+
+`.gtpack` file は、次のレイアウトを持つ構造化 archive です:
+
+<FileTree>
+- my-feature.gtpack
+  - manifest.cbor Pack metadata (name, version, capabilities, signatures)
+  - flows/
+    - main.ygtc Primary orchestration flow
+    - helpers.ygtc Reusable sub-flow
+    - setup.ygtc Provisioning / setup flow
+  - components/
+    - processor.wasm WASM component (wasm32-wasip2)
+  - assets/
+    - templates/
+      - welcome.hbs Handlebars template
+    - cards/
+      - greeting.json Adaptive Card definition
+    - i18n/
+      - en.json Localization strings
+      - id.json
+  - sbom.json Software Bill of Materials
+  - signature.sig Ed25519 signature over the content hash
+</FileTree>
+
+| Entry | Format | 用途 |
+|-------|--------|------|
+| `manifest.cbor` | CBOR | Pack identity、capabilities、dependency graph、flow/component/asset index |
+| `flows/*.ygtc` | YAML | 実行ロジックを定義する orchestration graph |
+| `components/*.wasm` | WASM (wasm32-wasip2) | ポータブルで sandboxed な code module |
+| `assets/` | Any | template、card、i18n bundle、image、その他の static resource |
+| `sbom.json` | SPDX/CycloneDX | supply-chain audit のための Software Bill of Materials |
+| `signature.sig` | Ed25519 | BLAKE3 content hash に対する cryptographic signature |
+
+## Pack Types
+
+Greentic は、pack を分類するために **capability-based** type system を使用します。manifest 内の capability ID によって、runtime がその pack をどう扱うかが決まります。
+
+### Provider Packs
+
+provider pack は、外部サービス (messaging platform、event source、secret store) を Greentic runtime に bridge します。通常、各 provider pack には ingress、egress、operator の WASM components と、setup/verification flow が含まれます。
+
+```toml title="pack.toml — Telegram messaging provider"
+[pack]
+name = "messaging-telegram"
+version = "0.4.6"
+description = "Telegram messaging provider for Greentic"
+authors = ["Greentic <team@greentic.ai>"]
+
+[capabilities]
+id = "greentic.cap.messaging.provider.v1"
+provides = ["telegram"]
+
+[flows]
+setup_default = "flows/setup.ygtc"
+verify_webhooks = "flows/verify.ygtc"
+
+[components]
+ingress = "components/messaging-ingress-telegram.wasm"
+egress = "components/messaging-provider-telegram.wasm"
+operator = "components/telegram.wasm"
+
+[secrets]
+required = ["telegram_bot_token"]
+optional = ["public_base_url"]
+```
+
+<Aside>
+provider pack は命名規則に従います: messaging provider は `messaging-{platform}`、event provider は `events-{source}` です。
+</Aside>
+
+### Application Packs
+
+application pack には business logic、つまりメッセージを処理し、event を扱い、action を orchestrate する実際の "digital worker" が含まれます。
+
+```toml title="pack.toml — Customer service application"
+[pack]
+name = "customer-service"
+version = "1.0.0"
+description = "AI-powered customer service digital worker"
+authors = ["Your Team <team@example.com>"]
+
+[capabilities]
+id = "greentic.cap.app.v1"
+provides = ["customer-service"]
+
+[dependencies]
+greentic-templates = "^0.4"
+greentic-llm-openai = "^0.4"
+
+[flows]
+on_message = "flows/on_message.ygtc"
+on_escalation = "flows/escalation.ygtc"
+
+[components]
+classifier = "components/intent-classifier.wasm"
+
+[assets]
+cards = "assets/cards/"
+templates = "assets/templates/"
+i18n = "assets/i18n/"
+```
+
+### Component Packs
+
+component pack は、他の pack が依存できる再利用可能な WASM building block を提供します。flow は含まず、component とその configuration のみを含みます。
+
+```toml title="pack.toml — OpenAI LLM component"
+[pack]
+name = "llm-openai"
+version = "0.4.6"
+description = "OpenAI-compatible LLM component for Greentic"
+
+[capabilities]
+id = "greentic.cap.component.v1"
+provides = ["llm"]
+
+[components]
+llm = "components/llm-openai.wasm"
+
+[config]
+default_model = "gpt-4"
+max_tokens = 4096
+```
+
+## Pack の作成
+
+<Steps>
+1. **ディレクトリ構成を準備する**
+
+   ```bash
+   mkdir -p my-pack/{flows,components,assets}
+   ```
+
+2. **manifest を書く**
+
+   pack directory の root に `pack.toml` (または `pack.yaml`) を作成します:
+
+   ```toml title="my-pack/pack.toml"
+   [pack]
+   name = "my-feature"
+   version = "1.0.0"
+   description = "A feature pack for handling customer inquiries"
+   authors = ["Your Name <you@example.com>"]
+
+   [capabilities]
+   id = "greentic.cap.app.v1"
+   provides = ["customer-service"]
+
+   [dependencies]
+   greentic-templates = "^0.4"
+
+   [flows]
+   main = "flows/main.ygtc"
+   setup = "flows/setup.ygtc"
+
+   [components]
+   processor = "components/processor.wasm"
+
+   [assets]
+   templates = "assets/templates/"
+   cards = "assets/cards/"
+   ```
+
+3. **flow を追加する**
+
+   `flows/` 配下に `.ygtc` (YAML) 形式で orchestration flow を記述します。完全な schema は [Flows ガイド](/ja/concepts/flows/) を参照してください。
+
+4. **WASM components を追加する**
+
+   component を `wasm32-wasip2` target 向けに build し、`.wasm` file を `components/` に配置します:
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   cp target/wasm32-wasip2/release/processor.wasm my-pack/components/
+   ```
+
+5. **pack を build する**
+
+   ```bash
+   # Using the pack builder CLI
+   greentic-pack build ./my-pack
+
+   # Or with the GTC CLI
+   gtc pack build ./my-pack
+
+   # Output: my-feature-1.0.0.gtpack
+   ```
+
+6. **pack に署名する**
+
+   ```bash
+   # Generate a signing key pair (one-time)
+   greentic-pack keygen --output my-key.pem
+
+   # Sign the pack
+   greentic-pack sign my-feature-1.0.0.gtpack --key my-key.pem
+
+   # Verify the signature
+   greentic-pack verify my-feature-1.0.0.gtpack --pubkey my-key.pub
+   ```
+</Steps>
+
+## Packs の利用
+
+### Bundle 内で使う
+
+bundle configuration で pack を参照して deploy します:
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+apps:
+  customer-service:
+    pack: "apps/customer-service.gtpack"
+    default_flow: "on_message"
+```
+
+### OCI Registry からインストールする
+
+pack は、container registry (例: GHCR) を通じて OCI artifact として配布されます:
+
+```bash
+# Pull a pack from the registry
+gtc pack pull ghcr.io/greentic/messaging-telegram:0.4.6
+
+# Or reference directly in your bundle config
+providers:
+  messaging-telegram:
+    pack: "oci://ghcr.io/greentic/messaging-telegram:0.4.6"
+```
+
+## Pack Validation
+
+<Aside type="caution">
+deployment 前には必ず pack を検証してください。無効な flow や欠落した component は runtime failure を引き起こします。
+</Aside>
+
+```bash
+# Validate pack structure and manifest
+greentic-pack validate ./my-pack.gtpack
+
+# Validate all flows within the pack
+greentic-flow doctor --pack ./my-pack.gtpack
+
+# Full verification (signature + content integrity + flow validation)
+greentic-pack verify --full ./my-pack.gtpack
+```
+
+## Pack Metadata (CBOR)
+
+`manifest.cbor` file は、[CBOR](https://cbor.io/) でエンコードされた machine-readable な pack descriptor であり、コンパクトな binary serialization を実現します。flow、component、asset の完全な index に加え、capability declaration と dependency constraint を含みます。
+
+```rust title="Manifest structure (Rust representation)"
+struct PackManifest {
+    name: String,
+    version: String,
+    description: String,
+    authors: Vec<String>,
+    capabilities: Capabilities,
+    flows: HashMap<String, FlowEntry>,
+    components: HashMap<String, ComponentEntry>,
+    assets: HashMap<String, AssetEntry>,
+    dependencies: HashMap<String, VersionReq>,
+    config: HashMap<String, ConfigValue>,
+    signatures: Vec<Signature>,
+}
+```
+
+## Security Model
+
+Greentic pack は、多層の security model を適用します。content integrity、authenticity、capability sandboxing です。
+
+### Content Hashing
+
+pack 内のすべての file は、個別に [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) で hash 化されます。pack 全体の hash は Merkle-style digest です:
+
+```text
+pack-hash = blake3(
+    manifest_hash ||
+    flows_hash ||
+    components_hash ||
+    assets_hash
+)
+```
+
+これにより、1 byte の変更であっても load 時に検出されます。
+
+### Signature Verification
+
+pack は [Ed25519](https://ed25519.cr.yp.to/) key で署名されます。runtime は、pack を load する前に自動で signature を検証します:
+
+```bash
+# Manual verification
+greentic-pack verify my-pack.gtpack --pubkey trusted-keys/publisher.pub
+```
+
+### Trusted Publishers
+
+runtime が受け入れる signing key を設定します:
+
+```toml title="greentic.toml"
+[security]
+trusted_publishers = [
+    "greentic-official.pub",
+    "my-org.pub",
+]
+reject_unsigned = true
+```
+
+<Aside type="danger">
+production で `reject_unsigned = false` を設定することは強く非推奨です。署名されていない pack は authenticity check をすべて迂回します。
+</Aside>
+
+## ベストプラクティス
+
+1. **Version semantically** — 利用者が互換性のある version range を宣言できるように [semver](https://semver.org/) を使う
+2. **One pack, one purpose** — pack は単一の feature または provider に集中させる
+3. **Declare all dependencies** — pack が必要とする capability をすべて列挙する
+4. **Include an SBOM** — downstream の security audit と license compliance を可能にする
+5. **Sign every release** — production では署名なしの pack を deploy しない
+6. **Validate before publishing** — CI pipeline で `greentic-pack verify --full` を実行する
+7. **Use capability IDs consistently** — `greentic.cap.{category}.v{N}` 命名規則に従う
+
+## 次のステップ
+
+- [Components](/ja/concepts/components/) — pack 用の WASM component を構築する方法を学ぶ
+- [Building Packs](/ja/cli/building-packs/) — pack 管理のための CLI command
+- [Pack Format Reference](/ja/reference/pack-format/) — 完全な `.gtpack` specification
+- [Flows](/ja/concepts/flows/) — pack 用の orchestration flow を記述する

@@ -1,0 +1,355 @@
+---
+title: Microsoft Teams
+description: Verbinden Sie Ihren digitalen Worker mit Microsoft Teams
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der Microsoft Teams-Provider integriert Ihren digitalen Worker in Teams-Kanäle und Chats. Er unterstützt:
+
+- Kanalnachrichten
+- Persönliche Chats
+- Gruppenchats
+- Adaptive Cards
+- Interaktive Komponenten
+- Datei-Anhänge
+
+## Voraussetzungen
+
+- Microsoft 365-Tenant
+- Admin-Zugriff auf Azure AD
+
+## Einrichtung
+
+<Steps>
+
+1. **Azure Bot Registration erstellen**
+
+   Gehen Sie zum [Azure Portal](https://portal.azure.com):
+   - Suchen Sie nach "Bot Services"
+   - Klicken Sie auf "Create"
+   - Füllen Sie die Details aus:
+     - Bot handle: your-bot-name
+     - Subscription: Ihr Abonnement
+     - Resource group: erstellen oder auswählen
+     - Pricing: F0 (kostenlos) oder S1
+   - Klicken Sie auf "Create"
+
+2. **Bot-Endpunkt konfigurieren**
+
+   In Ihrem Bot Service:
+   - Gehen Sie zu **Configuration**
+   - Setzen Sie **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
+
+3. **App-Zugangsdaten abrufen**
+
+   Unter **Configuration**:
+   - Kopieren Sie die **Microsoft App ID**
+   - Klicken Sie neben der Microsoft App ID auf "Manage"
+   - Erstellen Sie ein neues **Client Secret**
+   - Kopieren Sie den Secret-Wert (wird nur einmal angezeigt!)
+
+4. **Teams-Kanal aktivieren**
+
+   In Ihrem Bot Service:
+   - Gehen Sie zu **Channels**
+   - Klicken Sie auf **Microsoft Teams**
+   - Akzeptieren Sie die Bedingungen und aktivieren Sie den Kanal
+
+5. **Teams-App-Paket erstellen**
+
+   Erstellen Sie ein Manifest für Ihre Teams-App:
+
+   ```json title="manifest.json"
+   {
+     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+     "manifestVersion": "1.16",
+     "version": "1.0.0",
+     "id": "{{BOT_ID}}",
+     "packageName": "com.yourcompany.supportbot",
+     "developer": {
+       "name": "Your Company",
+       "websiteUrl": "https://yourcompany.com",
+       "privacyUrl": "https://yourcompany.com/privacy",
+       "termsOfUseUrl": "https://yourcompany.com/terms"
+     },
+     "name": {
+       "short": "Support Bot",
+       "full": "Support Bot for Customer Service"
+     },
+     "description": {
+       "short": "Customer support assistant",
+       "full": "AI-powered customer support assistant"
+     },
+     "icons": {
+       "outline": "outline.png",
+       "color": "color.png"
+     },
+     "accentColor": "#0078D4",
+     "bots": [
+       {
+         "botId": "{{BOT_ID}}",
+         "scopes": ["personal", "team", "groupchat"],
+         "supportsFiles": true,
+         "isNotificationOnly": false
+       }
+     ],
+     "permissions": ["identity", "messageTeamMembers"],
+     "validDomains": ["your-domain.com"]
+   }
+   ```
+
+6. **Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-teams": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "app_id": "your-microsoft-app-id",
+       "app_password": "your-client-secret",
+       "tenant_id": "your-azure-tenant-id"
+     }
+   }
+   ```
+
+7. **Setup ausführen**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+8. **App in Teams installieren**
+
+   - Packen Sie `manifest.json` zusammen mit den Icons als ZIP
+   - Gehen Sie zum Teams Admin Center oder laden Sie direkt hoch
+   - Installieren Sie die App für Ihr Team oder Ihre Benutzer
+
+</Steps>
+
+## Konfigurationsoptionen
+
+| Option | Erforderlich | Beschreibung |
+|--------|----------|-------------|
+| `enabled` | Ja | Provider aktivieren/deaktivieren |
+| `public_base_url` | Ja | Öffentliche URL für den Webhook |
+| `app_id` | Ja | Microsoft App ID |
+| `app_password` | Ja | Client Secret |
+| `tenant_id` | Nein | Azure AD Tenant ID (für Single-Tenant-Apps) |
+
+## Funktionen
+
+### Textnachrichten
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown-Formatierung
+
+Teams unterstützt einen Teil von Markdown:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - Bullet 1
+      - Bullet 2
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+Teams bietet eine sehr gute Unterstützung für Adaptive Cards:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "How can I assist you today?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Create Ticket"
+              data:
+                action: "ticket"
+```
+
+### Hero Cards
+
+```yaml
+- id: hero_card
+  type: reply
+  config:
+    hero_card:
+      title: "Support Bot"
+      subtitle: "Your AI Assistant"
+      text: "I can help with technical issues, billing questions, and more."
+      images:
+        - url: "https://example.com/bot-image.png"
+      buttons:
+        - type: messageBack
+          title: "Get Started"
+          text: "get started"
+          displayText: "Getting started..."
+```
+
+### Vorschläge (Quick Replies)
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - title: "Check Status"
+        value: "status"
+      - title: "Create Ticket"
+        value: "ticket"
+      - title: "Contact Human"
+        value: "human"
+```
+
+### Datei-Anhänge
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - contentType: "application/pdf"
+        contentUrl: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Kartenaktionen verarbeiten
+
+```yaml title="flows/on_card_action.ygtc"
+name: handle_card_action
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "data.action == 'help'"
+          next: show_help
+        - expression: "data.action == 'ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: invoke
+    name: "adaptiveCard/action"
+    target: route_action
+```
+
+## Kanal-Konfiguration
+
+### Team-Kanal
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          teams:
+            provider: messaging-teams
+            config:
+              team_id: "19:xxx@thread.tacv2"
+              channel_id: "19:yyy@thread.tacv2"
+```
+
+### Persönlicher Chat
+
+Für persönliche 1:1-Chats ist keine Kanal-Konfiguration erforderlich. Der Bot antwortet jedem, der ihm schreibt.
+
+## Proaktives Messaging
+
+Senden Sie Nachrichten ohne Benutzerinitiative:
+
+```yaml
+- id: proactive
+  type: reply
+  config:
+    message: "Reminder: Your ticket #123 needs attention"
+    conversation_reference:
+      conversation_id: "{{stored_conversation_id}}"
+      service_url: "{{stored_service_url}}"
+```
+
+<Aside type="note">
+Speichern Sie die Conversation Reference, wenn Benutzer zum ersten Mal mit Ihrem Bot interagieren, damit später proaktive Nachrichten möglich sind.
+</Aside>
+
+## Fehlerbehebung
+
+### Bot antwortet nicht
+
+1. **Endpunkt-Konfiguration prüfen** im Azure Bot Service
+2. **SSL-Zertifikat prüfen**, ob es gültig ist
+3. **App-Zugangsdaten prüfen**, ob sie korrekt sind
+4. **Activity-Logs prüfen** in Azure
+
+### Fehler "Unauthorized"
+
+- App ID und Password prüfen
+- Tenant ID für Single-Tenant-Apps prüfen
+- Sicherstellen, dass der Bot im Teams-Kanal aktiviert ist
+
+### Karte wird nicht gerendert
+
+- Prüfen Sie das Karten-JSON mit [Adaptive Cards Designer](https://adaptivecards.io/designer/)
+- Prüfen Sie, ob Teams die Kartenversion unterstützt
+- Stellen Sie sicher, dass alle erforderlichen Felder vorhanden sind
+
+### Verzögerte Nachrichten
+
+- Teams kann Nachrichten bündeln; das ist normal
+- Prüfen Sie die Leistung Ihres Servers
+- Stellen Sie sicher, dass kein Rate Limiting greift
+
+## Sicherheit
+
+<Aside type="caution">
+Validieren Sie immer das JWT-Token in eingehenden Anfragen, um sicherzustellen, dass sie von Microsoft stammen.
+</Aside>
+
+Greentic validiert automatisch:
+- JWT-Signatur
+- Issuer- und Audience-Claims
+- Token-Ablauf
+
+## Nächste Schritte
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Karten visuell entwerfen
+- [Slack-Provider](/de/providers/messaging/slack/) - Slack-Integration hinzufügen
+- [WebChat-Provider](/de/providers/messaging/webchat/) - In Websites einbetten

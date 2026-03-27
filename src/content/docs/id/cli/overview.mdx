@@ -1,0 +1,181 @@
+---
+title: Ikhtisar GTC CLI
+description: Antarmuka baris perintah untuk platform Greentic
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Pendahuluan
+
+**GTC CLI** (`gtc`) adalah antarmuka baris perintah utama untuk platform Greentic. CLI ini menyediakan perintah untuk:
+
+- Membuat dan mengelola bundle
+- Menyiapkan provider
+- Menjalankan server runtime
+- Membangun dan memvalidasi pack/flow
+
+## Instalasi
+
+<Tabs>
+<TabItem label="Cargo">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="Dari Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+</Tabs>
+
+Verifikasi instalasi:
+
+```bash
+gtc --version
+```
+
+## Arsitektur CLI
+
+Binary `gtc` menyusun subcommand dari beberapa repo:
+
+| Perintah | Repo Sumber | Tujuan |
+|---------|-------------|--------|
+| `gtc wizard` | `greentic-dev` | Wizard pembuatan bundle |
+| `gtc setup` | `greentic-setup` | Setup/konfigurasi provider |
+| `gtc start` | `greentic-start` | Server runtime |
+| `gtc pack` | `greentic-pack` | Pembangunan pack |
+| `gtc flow` | `greentic-flow` | Validasi flow |
+
+## Referensi Perintah
+
+### Opsi Global
+
+```bash
+gtc [OPTIONS] <COMMAND>
+
+Options:
+  -v, --verbose     Enable verbose output
+  -q, --quiet       Suppress non-essential output
+  --config <PATH>   Path to config file
+  -h, --help        Print help
+  -V, --version     Print version
+```
+
+### Perintah
+
+| Perintah | Deskripsi |
+|---------|-----------|
+| `wizard` | Membuat bundle baru dari jawaban wizard |
+| `setup` | Mengonfigurasi provider di dalam bundle |
+| `start` | Menjalankan server runtime |
+| `pack` | Manajemen pack (build, verify, publish) |
+| `flow` | Manajemen flow (validate, doctor) |
+
+## Alur Kerja yang Umum
+
+### Membuat dan Menjalankan Proyek Baru
+
+```bash
+# 1. Create bundle from wizard
+gtc wizard --answers wizard-answers.yaml
+
+# 2. Setup providers (interactive)
+gtc setup ./my-bundle
+
+# 3. Start the runtime
+gtc start ./my-bundle
+```
+
+### Alur Kerja Pengembangan
+
+```bash
+# Validate flows
+gtc flow doctor ./my-bundle/apps/my-app/flows/
+
+# Build a pack
+gtc pack build ./my-pack/
+
+# Start with verbose logging
+gtc start ./my-bundle --verbose
+
+# Start with ngrok tunnel
+gtc start ./my-bundle --ngrok on
+```
+
+### Deployment Produksi
+
+```bash
+# Setup with answers file (non-interactive)
+gtc setup --answers production-answers.json ./my-bundle
+
+# Start without tunnels
+gtc start ./my-bundle --cloudflared off --ngrok off
+```
+
+## File Konfigurasi
+
+GTC dapat menggunakan file konfigurasi (`greentic.toml`):
+
+```toml title="greentic.toml"
+[runtime]
+host = "0.0.0.0"
+port = 8080
+
+[nats]
+enabled = true
+url = "nats://localhost:4222"
+
+[logging]
+level = "info"
+format = "json"
+
+[telemetry]
+enabled = true
+otlp_endpoint = "http://localhost:4317"
+```
+
+## Variabel Lingkungan
+
+| Variabel | Deskripsi | Default |
+|----------|-----------|---------|
+| `GREENTIC_LOG_LEVEL` | Verbositas log | `info` |
+| `GREENTIC_CONFIG` | Path file konfigurasi | `greentic.toml` |
+| `GREENTIC_NATS_URL` | URL server NATS | `nats://localhost:4222` |
+| `GREENTIC_REDIS_URL` | URL Redis | `redis://localhost:6379` |
+
+## Exit Code
+
+| Kode | Arti |
+|------|------|
+| `0` | Berhasil |
+| `1` | Kesalahan umum |
+| `2` | Kesalahan konfigurasi |
+| `3` | Kesalahan runtime |
+| `4` | Kesalahan validasi |
+
+## Mendapatkan Bantuan
+
+```bash
+# General help
+gtc --help
+
+# Command-specific help
+gtc wizard --help
+gtc setup --help
+gtc start --help
+```
+
+## Langkah Berikutnya
+
+- [gtc wizard](/id/cli/wizard/) - Pembuatan bundle
+- [gtc setup](/id/cli/setup/) - Setup provider
+- [gtc start](/id/cli/start/) - Server runtime
+- [Membangun Pack](/id/cli/building-packs/) - Manajemen pack

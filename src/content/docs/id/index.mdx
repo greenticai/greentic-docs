@@ -1,0 +1,48 @@
+---
+title: Greentic Platform
+description: Platform berbasis komponen WASM, multi-tenant untuk membangun digital worker berbasis AI
+template: splash
+hero:
+  tagline: Bangun dan jalankan pipeline otomasi agentic otonom dengan WebAssembly
+  actions:
+    - text: Mulai
+      link: /id/getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: Lihat di GitHub
+      link: https://github.com/greenticai
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Fitur Utama
+
+<CardGrid stagger>
+	<Card title="Komponen WASM" icon="puzzle">
+		Eksekusi portabel dan ter-sandbox menggunakan WebAssembly (WASI Preview 2). Bangun sekali, jalankan di mana saja.
+	</Card>
+	<Card title="Multi-Tenant" icon="setting">
+		Isolasi tenant bawaan dengan `TenantCtx` untuk deployment yang aman dan skalabel.
+	</Card>
+	<Card title="Orkestrasi Berbasis Flow" icon="random">
+		Definisikan pipeline otomasi dengan graf flow berbasis YAML (file `.ygtc`).
+	</Card>
+	<Card title="Ekosistem Provider" icon="external">
+		Terhubung ke Slack, Teams, Telegram, WhatsApp, dan lainnya melalui pack provider WASM.
+	</Card>
+</CardGrid>
+
+## Sorotan Arsitektur
+
+- **Flow** - Graf orkestrasi berbasis YAML dari node komponen WASM
+- **Pack** - Arsip `.gtpack` bertanda tangan berisi flow, komponen, dan aset
+- **Komponen** - Building block WASM portabel yang mengimplementasi antarmuka WIT Greentic
+- **Provider** - Komponen WASM yang menjembatani layanan eksternal (messaging, event, secret)
+
+## Tautan Cepat
+
+- [Panduan Mulai Cepat](/id/getting-started/quick-start/) - Mulai dan jalankan dalam hitungan menit
+- [Konsep Inti](/id/concepts/architecture/) - Pahami arsitektur platform
+- [Referensi GTC CLI](/id/cli/overview/) - Kuasai tool command-line
+- [Provider Messaging](/id/providers/messaging/overview/) - Hubungkan channel messaging Anda

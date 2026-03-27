@@ -1,0 +1,338 @@
+---
+title: Flows
+description: 理解 Greentic 中的 flow 定义
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+## 什么是 Flow？
+
+**Flow** 是一个用 YAML 定义的编排图，用来描述消息和数据如何在你的数字员工中流转。Flows 存储在 `.ygtc` 文件中，并定义了：
+
+- **Nodes** - 独立的处理步骤（WASM components）
+- **Edges** - 节点之间的连接
+- **Triggers** - 什么会启动该 flow
+- **Conditions** - 分支逻辑
+
+## 基本 Flow 结构
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+# Define the nodes (processing steps)
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! How can I help you today?"
+
+# Define what triggers this flow
+triggers:
+  - type: message
+    pattern: "hello|hi|hey"
+    target: greet
+```
+
+## Flow 组件
+
+### Nodes
+
+Nodes 是 flow 的构建块。每个节点都表示一个处理数据的 WASM component：
+
+```yaml
+nodes:
+  - id: unique_node_id
+    type: node_type           # Component type
+    config:                   # Component-specific configuration
+      key: value
+    next: next_node_id        # Optional: next node to execute
+```
+
+#### 常见 Node 类型
+
+| 类型 | 用途 |
+|------|---------|
+| `reply` | 向用户发送消息 |
+| `llm` | 调用 LLM（OpenAI 等） |
+| `template` | 渲染 Handlebars 模板 |
+| `script` | 执行 Rhai 脚本 |
+| `branch` | 条件分支 |
+| `http` | 发起 HTTP 请求 |
+| `state` | 管理 session state |
+
+### Edges
+
+Edges 用于连接节点。它们可以是隐式的（通过 `next`）或显式的：
+
+```yaml
+nodes:
+  - id: start
+    type: template
+    config:
+      template: "Processing your request..."
+    next: process
+
+  - id: process
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "{{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{llm_response}}"
+```
+
+### Triggers
+
+Triggers 定义了什么会启动一个 flow：
+
+```yaml
+triggers:
+  # Message pattern trigger
+  - type: message
+    pattern: "order|purchase|buy"
+    target: handle_order
+
+  # Default trigger (catch-all)
+  - type: default
+    target: fallback_handler
+
+  # Event trigger
+  - type: event
+    event_type: "user.created"
+    target: welcome_user
+```
+
+## 条件分支
+
+使用 `branch` 节点实现条件逻辑：
+
+```yaml
+nodes:
+  - id: check_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent == 'greeting'"
+          next: greet_user
+        - expression: "intent == 'help'"
+          next: show_help
+        - expression: "intent == 'order'"
+          next: process_order
+      default: fallback
+
+  - id: greet_user
+    type: reply
+    config:
+      message: "Hello! Nice to meet you!"
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's what I can help you with..."
+
+  - id: fallback
+    type: reply
+    config:
+      message: "I'm not sure I understand. Can you rephrase?"
+```
+
+## 使用状态
+
+Flows 可以读取和写入 session state：
+
+```yaml
+nodes:
+  - id: save_name
+    type: state
+    config:
+      action: set
+      key: "user_name"
+      value: "{{extracted_name}}"
+    next: confirm
+
+  - id: get_name
+    type: state
+    config:
+      action: get
+      key: "user_name"
+      output: "stored_name"
+    next: greet_by_name
+```
+
+## LLM 集成
+
+集成 LLM 以生成 AI 驱动的响应：
+
+```yaml
+nodes:
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        You are a helpful customer service agent.
+        Extract the user's intent and any relevant entities.
+      prompt: "User message: {{message}}"
+      output_format: json
+    next: process_result
+```
+
+## 模板渲染
+
+使用 Handlebars 模板生成动态内容：
+
+```yaml
+nodes:
+  - id: format_response
+    type: template
+    config:
+      template: |
+        Hi {{user_name}}!
+
+        Here's your order summary:
+        {{#each items}}
+        - {{name}}: ${{price}}
+        {{/each}}
+
+        Total: ${{total}}
+    next: send_response
+```
+
+## Flow 校验
+
+在部署前校验你的 flows：
+
+```bash
+greentic-flow doctor ./flows/
+
+# Or with the GTC CLI
+gtc flow validate ./flows/hello.ygtc
+```
+
+<Aside type="tip">
+使用 `greentic-flow doctor` 可以捕获以下问题：
+- 缺失的节点引用
+- 无效的节点类型
+- 循环依赖
+- Schema 违规
+</Aside>
+
+## 最佳实践
+
+1. **保持 flows 聚焦** - 每个用户意图或工作流使用一个 flow
+2. **使用有意义的 ID** - 节点 ID 应描述其用途
+3. **用注释补充文档** - 为复杂 flows 添加说明
+4. **渐进式测试** - 每次修改后都进行校验
+5. **为 flows 做版本管理** - 使用语义化版本
+
+## 示例：完整的客户服务 Flow
+
+```yaml title="flows/customer_service.ygtc"
+name: customer_service
+version: "1.0"
+description: Handle customer inquiries with AI assistance
+
+nodes:
+  # Analyze the incoming message
+  - id: analyze_intent
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        Classify the customer's intent into one of:
+        - greeting
+        - order_status
+        - product_question
+        - complaint
+        - other
+
+        Respond with JSON: {"intent": "...", "confidence": 0.0-1.0}
+      prompt: "{{message}}"
+      output_format: json
+    next: route_intent
+
+  # Route based on intent
+  - id: route_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent.intent == 'greeting'"
+          next: handle_greeting
+        - expression: "intent.intent == 'order_status'"
+          next: handle_order_status
+        - expression: "intent.intent == 'complaint'"
+          next: handle_complaint
+      default: handle_general
+
+  # Handle greeting
+  - id: handle_greeting
+    type: reply
+    config:
+      message: "Hello! Welcome to our support. How can I help you today?"
+
+  # Handle order status
+  - id: handle_order_status
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/orders/{{order_id}}"
+    next: format_order_response
+
+  - id: format_order_response
+    type: template
+    config:
+      template: |
+        Your order #{{order_id}} is currently: {{status}}
+        Expected delivery: {{delivery_date}}
+    next: send_order_response
+
+  - id: send_order_response
+    type: reply
+    config:
+      message: "{{formatted_response}}"
+
+  # Handle complaints with escalation
+  - id: handle_complaint
+    type: reply
+    config:
+      message: "I'm sorry to hear that. Let me connect you with a specialist who can help resolve this."
+    next: escalate_to_human
+
+  - id: escalate_to_human
+    type: event
+    config:
+      event_type: "escalation.requested"
+      payload:
+        reason: "complaint"
+        conversation_id: "{{session_id}}"
+
+  # General handler
+  - id: handle_general
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: "You are a helpful customer service agent. Be friendly and concise."
+      prompt: "{{message}}"
+    next: send_general_response
+
+  - id: send_general_response
+    type: reply
+    config:
+      message: "{{llm_response}}"
+
+triggers:
+  - type: message
+    target: analyze_intent
+```
+
+## 下一步
+
+- [Packs](/zh/concepts/packs/) - 将你的 flows 打包用于部署
+- [Components](/zh/concepts/components/) - 创建自定义 node 类型
+- [Flow Schema Reference](/zh/reference/flow-schema/) - 完整 YAML schema

@@ -1,0 +1,349 @@
+---
+title: gtc start
+description: Jalankan server runtime Greentic
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Gambaran Umum
+
+Perintah `gtc start` meluncurkan server runtime Greentic. Perintah ini memulai semua layanan yang diperlukan termasuk server HTTP, bus NATS, dan executor flow.
+
+## Penggunaan
+
+```bash
+gtc start [OPTIONS] <BUNDLE_PATH>
+```
+
+## Opsi
+
+| Opsi | Deskripsi | Default |
+|--------|-----------|---------|
+| `--host <HOST>` | Alamat bind | `0.0.0.0` |
+| `--port <PORT>` | Port HTTP | `8080` |
+| `--cloudflared <on/off>` | Aktifkan tunnel Cloudflare | `on` |
+| `--ngrok <on/off>` | Aktifkan tunnel ngrok | `off` |
+| `--nats <on/off>` | Aktifkan NATS embedded | `on` |
+| `--skip-setup` | Lewati flow setup provider | `false` |
+| `--force-setup` | Paksa jalankan ulang flow setup | `false` |
+| `-v, --verbose` | Aktifkan logging verbose/debug | `false` |
+| `-q, --quiet` | Output minimal | `false` |
+
+## Penggunaan Dasar
+
+### Jalankan dengan Default
+
+```bash
+gtc start ./my-bundle
+```
+
+Ini akan memulai:
+- Server HTTP di `0.0.0.0:8080`
+- Server NATS embedded
+- Tunnel Cloudflared (jika tersedia)
+
+### Jalankan untuk Pengembangan
+
+```bash
+# Use ngrok instead of cloudflared
+gtc start ./my-bundle --cloudflared off --ngrok on
+
+# With verbose logging
+gtc start ./my-bundle --verbose
+
+# Skip setup (if already configured)
+gtc start ./my-bundle --skip-setup
+```
+
+### Jalankan untuk Produksi
+
+```bash
+# No tunnels, external NATS
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Custom port
+gtc start ./my-bundle --port 3000 --cloudflared off
+```
+
+## Konfigurasi Tunnel
+
+### Cloudflared (Default)
+
+Cloudflared membuat tunnel aman ke jaringan Cloudflare:
+
+```bash
+gtc start ./my-bundle --cloudflared on
+
+# Output:
+# Cloudflare tunnel started: https://random-words.trycloudflare.com
+# Webhook URLs will use: https://random-words.trycloudflare.com
+```
+
+<Aside type="note">
+URL Cloudflared berubah setiap restart kecuali Anda mengonfigurasi tunnel persisten.
+</Aside>
+
+### ngrok
+
+Gunakan ngrok untuk URL yang stabil selama pengembangan:
+
+```bash
+gtc start ./my-bundle --ngrok on
+
+# Output:
+# ngrok tunnel started: https://abc123.ngrok-free.app
+# Webhook URLs will use: https://abc123.ngrok-free.app
+```
+
+### Tanpa Tunnel
+
+Untuk produksi dengan domain publik:
+
+```bash
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Make sure your server is publicly accessible
+# and update provider webhooks with your domain
+```
+
+## Konfigurasi NATS
+
+### NATS Embedded (Default)
+
+```bash
+gtc start ./my-bundle --nats on
+
+# Starts embedded NATS on localhost:4222
+```
+
+### NATS Eksternal
+
+```bash
+# Disable embedded, use external
+gtc start ./my-bundle --nats off
+
+# Set NATS URL via environment
+GREENTIC_NATS_URL=nats://nats.example.com:4222 gtc start ./my-bundle --nats off
+```
+
+## Perilaku Flow Setup
+
+### Perilaku Normal
+
+Secara default, `gtc start` menjalankan flow setup jika provider belum dikonfigurasi:
+
+```bash
+gtc start ./my-bundle
+# Runs setup flows for unconfigured providers
+```
+
+### Lewati Setup
+
+Lewati seluruh flow setup (gunakan konfigurasi yang sudah ada):
+
+```bash
+gtc start ./my-bundle --skip-setup
+```
+
+### Paksa Setup
+
+Paksa jalankan ulang semua flow setup (berguna setelah URL berubah):
+
+```bash
+gtc start ./my-bundle --force-setup
+```
+
+## Endpoint Runtime
+
+Saat berjalan, server mengekspos:
+
+| Endpoint | Tujuan |
+|----------|--------|
+| `GET /health` | Health check |
+| `GET /ready` | Probe kesiapan |
+| `POST /webhook/{provider}/{tenant}/{team}` | Webhook provider |
+| `GET /api/v1/sessions` | Manajemen sesi |
+| `POST /api/v1/messages` | Kirim pesan |
+| `GET /auth/config` | Endpoint konfigurasi OAuth |
+| `POST /oauth/token-exchange` | Proxy pertukaran token OIDC sisi server |
+
+### Contoh Health Check
+
+```bash
+curl http://localhost:8080/health
+# {"status": "healthy"}
+```
+
+### Dukungan OAuth
+
+Runtime mengekspos dua endpoint untuk integrasi OAuth/OIDC dengan provider messaging yang memerlukan autentikasi pengguna (seperti WebChat atau Teams).
+
+#### `GET /auth/config`
+
+Membaca konfigurasi OAuth dari secrets store dan mengembalikannya ke client. Client menggunakan endpoint ini untuk menemukan pengaturan identity provider yang diperlukan untuk memulai authorization flow.
+
+```bash
+curl http://localhost:8080/auth/config
+# {
+#   "authority": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+#   "client_id": "your-client-id",
+#   "redirect_uri": "https://your-public-url/auth/callback",
+#   "scope": "openid profile"
+# }
+```
+
+#### `POST /oauth/token-exchange`
+
+Proxy pertukaran token sisi server untuk authorization code exchange OIDC. Endpoint ini memungkinkan client menukar authorization code dengan token tanpa terkena pembatasan CORS browser yang terjadi saat memanggil token endpoint identity provider langsung dari frontend.
+
+```bash
+curl -X POST http://localhost:8080/oauth/token-exchange \
+  -H "Content-Type: application/json" \
+  -d '{"code": "authorization_code_here", "redirect_uri": "https://your-public-url/auth/callback"}'
+```
+
+<Aside type="tip">
+Proxy token exchange menghilangkan kebutuhan browser untuk menghubungi token endpoint identity provider secara langsung, yang jika tidak akan gagal karena kebijakan CORS yang diberlakukan oleh sebagian besar identity provider.
+</Aside>
+
+### Static Route
+
+Static route (seperti health check dan endpoint OAuth) dapat dikonfigurasi tanpa memerlukan public base URL eksplisit. Artinya endpoint ini tersedia segera saat server mulai, bahkan sebelum tunnel atau URL publik terbentuk.
+
+<Aside type="note">
+Endpoint webhook provider tetap memerlukan public base URL agar layanan eksternal dapat mencapai server. Static route hanya lokal dan tidak bergantung pada ketersediaan tunnel.
+</Aside>
+
+## Logging
+
+### Level Log
+
+```bash
+# Debug (most verbose)
+GREENTIC_LOG_LEVEL=debug gtc start ./my-bundle
+
+# Info (default)
+GREENTIC_LOG_LEVEL=info gtc start ./my-bundle
+
+# Warning
+GREENTIC_LOG_LEVEL=warn gtc start ./my-bundle
+```
+
+### Mode Verbose
+
+```bash
+gtc start ./my-bundle --verbose
+
+# Equivalent to GREENTIC_LOG_LEVEL=debug
+```
+
+### Format Log
+
+```bash
+# JSON format (for production)
+GREENTIC_LOG_FORMAT=json gtc start ./my-bundle
+
+# Pretty format (for development, default)
+GREENTIC_LOG_FORMAT=pretty gtc start ./my-bundle
+```
+
+## Signal
+
+| Signal | Perilaku |
+|--------|----------|
+| `SIGTERM` | Shutdown anggun |
+| `SIGINT` (Ctrl+C) | Shutdown anggun |
+| `SIGHUP` | Muat ulang konfigurasi |
+
+## Variabel Lingkungan
+
+| Variabel | Deskripsi |
+|----------|-----------|
+| `GREENTIC_HOST` | Alamat bind |
+| `GREENTIC_PORT` | Port HTTP |
+| `GREENTIC_LOG_LEVEL` | Verbositas log |
+| `GREENTIC_LOG_FORMAT` | Format log (json/pretty) |
+| `GREENTIC_NATS_URL` | URL NATS eksternal |
+| `GREENTIC_REDIS_URL` | URL Redis untuk sesi |
+
+## Pemecahan Masalah
+
+### Port Sudah Dipakai
+
+```
+Error: Address already in use (os error 48)
+```
+
+Proses lain sedang memakai port 8080. Hentikan proses itu atau gunakan port lain:
+
+```bash
+gtc start ./my-bundle --port 3000
+```
+
+### Koneksi NATS Gagal
+
+```
+Error: Failed to connect to NATS
+```
+
+Jika menggunakan NATS eksternal, pastikan NATS berjalan dan dapat diakses. Jika tidak, aktifkan embedded:
+
+```bash
+gtc start ./my-bundle --nats on
+```
+
+### Tunnel Gagal Dimulai
+
+```
+Error: Failed to start cloudflared tunnel
+```
+
+Instal cloudflared atau gunakan ngrok sebagai gantinya:
+
+```bash
+# Install cloudflared
+brew install cloudflared
+
+# Or use ngrok
+gtc start ./my-bundle --cloudflared off --ngrok on
+```
+
+### Setup Provider Gagal
+
+```
+Error: Setup flow failed for messaging-telegram
+```
+
+Periksa kredensial Anda di file jawaban dan pastikan URL publik dapat diakses:
+
+```bash
+# Re-run setup
+gtc start ./my-bundle --force-setup --verbose
+```
+
+## Deployment Docker
+
+```dockerfile title="Dockerfile"
+FROM rust:1.90 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/gtc /usr/local/bin/
+COPY my-bundle /app/bundle
+WORKDIR /app
+EXPOSE 8080
+CMD ["gtc", "start", "/app/bundle", "--cloudflared", "off"]
+```
+
+```bash
+docker build -t my-worker .
+docker run -p 8080:8080 my-worker
+```
+
+## Langkah Berikutnya
+
+- [Membangun Pack](/id/cli/building-packs/) - Buat dan kelola pack
+- [Referensi Konfigurasi](/id/reference/configuration/) - Opsi konfigurasi lengkap
+- [Panduan Troubleshooting](/id/reference/troubleshooting/) - Masalah umum

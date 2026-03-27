@@ -1,13 +1,13 @@
 ---
 title: Script (Rhai)
-description: Rhai scripting component for custom logic
+description: Rhai-Scripting-Komponente für benutzerdefinierte Logik
 ---
 
-## Overview
+## Überblick
 
-The **Script** component enables custom logic using the Rhai scripting language, a simple yet powerful embedded scripting language for Rust.
+Die Komponente **Script** ermöglicht benutzerdefinierte Logik mit der Rhai-Skriptsprache, einer einfachen und zugleich leistungsfähigen eingebetteten Skriptsprache für Rust.
 
-## Basic Usage
+## Grundlegende Verwendung
 
 ```yaml
 - id: calculate
@@ -22,9 +22,9 @@ The **Script** component enables custom logic using the Rhai scripting language,
   output: calculated_total
 ```
 
-## Rhai Syntax
+## Rhai-Syntax
 
-### Variables
+### Variablen
 
 ```js
 let x = 42;
@@ -33,7 +33,7 @@ let items = [1, 2, 3];
 let user = #{ name: "Bob", age: 30 };
 ```
 
-### Functions
+### Funktionen
 
 ```js
 fn greet(name) {
@@ -43,7 +43,7 @@ fn greet(name) {
 let message = greet("World");
 ```
 
-### Control Flow
+### Kontrollfluss
 
 ```js
 if x > 10 {
@@ -64,7 +64,7 @@ while condition {
 }
 ```
 
-### Working with Objects
+### Mit Objekten arbeiten
 
 ```js
 let user = #{
@@ -76,9 +76,9 @@ let name = user.name;
 user.age = 25;
 ```
 
-## Flow Integration
+## Flow-Integration
 
-### Access Context
+### Auf Kontext zugreifen
 
 ```yaml
 - id: process
@@ -100,7 +100,7 @@ user.age = 25;
       }
 ```
 
-### Conditional Logic
+### Bedingte Logik
 
 ```yaml
 - id: validate
@@ -125,7 +125,7 @@ user.age = 25;
     default: show_error
 ```
 
-### Data Transformation
+### Datentransformation
 
 ```yaml
 - id: transform
@@ -146,9 +146,9 @@ user.age = 25;
       transformed
 ```
 
-## Built-in Functions
+## Eingebaute Funktionen
 
-### String Functions
+### String-Funktionen
 
 ```js
 let s = "Hello World";
@@ -162,7 +162,7 @@ s.trim()          // Remove whitespace
 s.sub_string(0,5) // "Hello"
 ```
 
-### Array Functions
+### Array-Funktionen
 
 ```js
 let arr = [1, 2, 3, 4, 5];
@@ -176,7 +176,7 @@ arr.map(|x| x * 2)     // [2, 4, 6, 8, 10]
 arr.reduce(|a, b| a + b, 0)  // 15
 ```
 
-### Object Functions
+### Objektfunktionen
 
 ```js
 let obj = #{ a: 1, b: 2 };
@@ -186,7 +186,7 @@ obj.values()      // [1, 2]
 obj.contains("a") // true
 ```
 
-## Error Handling
+## Fehlerbehandlung
 
 ```js
 try {
@@ -198,7 +198,7 @@ try {
 }
 ```
 
-## Example: Order Processing
+## Beispiel: Bestellverarbeitung
 
 ```yaml
 - id: process_order
@@ -238,7 +238,7 @@ try {
       }
 ```
 
-## Next Steps
+## Nächste Schritte
 
-- [Templates Component](/components/templates/)
-- [LLM OpenAI](/components/llm-openai/)
+- [Templates-Komponente](/de/components/templates/)
+- [LLM OpenAI](/de/components/llm-openai/)

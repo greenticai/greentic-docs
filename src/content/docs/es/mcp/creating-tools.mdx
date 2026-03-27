@@ -1,0 +1,272 @@
+---
+title: Crear herramientas MCP
+description: Crea herramientas MCP personalizadas para Greentic
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+Crea herramientas MCP personalizadas para ampliar las capacidades de tu trabajador digital con integraciones externas, lógica personalizada y acceso a datos.
+
+## Crear una herramienta
+
+<Steps>
+
+1. **Definir la interfaz WIT**
+
+   ```wit title="wit/tool.wit"
+   package greentic:my-tool;
+
+   interface tool {
+       record input {
+           query: string,
+           options: option<string>,
+       }
+
+       record output {
+           success: bool,
+           data: option<string>,
+           error: option<string>,
+       }
+
+       execute: func(input: input) -> output;
+   }
+
+   world my-tool {
+       export tool;
+   }
+   ```
+
+2. **Implementar en Rust**
+
+   ```rust title="src/lib.rs"
+   use wit_bindgen::generate;
+
+   generate!({
+       world: "my-tool",
+       path: "wit",
+   });
+
+   struct MyTool;
+
+   impl tool::Guest for MyTool {
+       fn execute(input: tool::Input) -> tool::Output {
+           // Your tool logic here
+           let result = process_query(&input.query);
+
+           tool::Output {
+               success: true,
+               data: Some(result),
+               error: None,
+           }
+       }
+   }
+
+   fn process_query(query: &str) -> String {
+       format!("Processed: {}", query)
+   }
+
+   export!(MyTool);
+   ```
+
+3. **Compilar el componente WASM**
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   ```
+
+4. **Crear el manifiesto de la herramienta**
+
+   ```yaml title="tool.yaml"
+   name: my_tool
+   version: "1.0.0"
+   description: My custom MCP tool
+
+   parameters:
+     - name: query
+       type: string
+       description: The query to process
+       required: true
+     - name: options
+       type: string
+       description: Optional configuration
+       required: false
+
+   returns:
+     type: object
+     properties:
+       success:
+         type: boolean
+       data:
+         type: string
+       error:
+         type: string
+
+   capabilities:
+     - network:outbound
+   ```
+
+5. **Registrar la herramienta**
+
+   ```yaml title="greentic.demo.yaml"
+   mcp:
+     tools:
+       - name: my_tool
+         component: "tools/my-tool.wasm"
+         manifest: "tools/my-tool.yaml"
+   ```
+
+</Steps>
+
+## Ejemplos de herramientas
+
+### Herramienta de solicitud HTTP
+
+```rust
+impl tool::Guest for HttpTool {
+    fn execute(input: tool::Input) -> tool::Output {
+        let url = &input.url;
+        let method = input.method.unwrap_or("GET".to_string());
+
+        match http_request(&method, url, input.body.as_deref()) {
+            Ok(response) => tool::Output {
+                success: true,
+                data: Some(response),
+                error: None,
+            },
+            Err(e) => tool::Output {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            },
+        }
+    }
+}
+```
+
+### Herramienta de consulta a base de datos
+
+```rust
+impl tool::Guest for DbTool {
+    fn execute(input: tool::Input) -> tool::Output {
+        // Get connection string from secrets
+        let conn_str = get_secret("database_url")?;
+
+        // Execute query (pseudo-code)
+        let results = db_query(&conn_str, &input.query)?;
+
+        tool::Output {
+            success: true,
+            data: Some(serde_json::to_string(&results)?),
+            error: None,
+        }
+    }
+}
+```
+
+### Herramienta de correo electrónico
+
+```rust
+impl tool::Guest for EmailTool {
+    fn execute(input: tool::Input) -> tool::Output {
+        let api_key = get_secret("sendgrid_api_key")?;
+
+        let result = send_email(
+            &api_key,
+            &input.to,
+            &input.subject,
+            &input.body,
+        );
+
+        match result {
+            Ok(_) => tool::Output {
+                success: true,
+                data: Some("Email sent".to_string()),
+                error: None,
+            },
+            Err(e) => tool::Output {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            },
+        }
+    }
+}
+```
+
+## Uso de herramientas en flows
+
+### Invocación directa
+
+```yaml
+- id: call_tool
+  type: mcp-tool
+  config:
+    tool: "my_tool"
+    parameters:
+      query: "{{user_query}}"
+  output: tool_result
+```
+
+### Con agente LLM
+
+```yaml
+- id: agent
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: |
+      You are an assistant with access to tools.
+      Use tools when needed to help the user.
+    tools:
+      - my_tool
+      - http_request
+      - send_email
+    tool_choice: "auto"
+```
+
+## Probar herramientas
+
+### Prueba unitaria
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_execute() {
+        let input = tool::Input {
+            query: "test".to_string(),
+            options: None,
+        };
+
+        let output = MyTool::execute(input);
+
+        assert!(output.success);
+        assert!(output.data.is_some());
+    }
+}
+```
+
+### Prueba de integración
+
+```bash
+# Test with sample input
+echo '{"query": "test"}' | greentic-mcp test ./my-tool.wasm
+```
+
+## Buenas prácticas
+
+1. **Maneja todos los errores** - Nunca hagas panic, siempre devuelve el error en la salida
+2. **Valida la entrada** - Verifica los parámetros antes de procesarlos
+3. **Usa secrets** - Nunca hardcodees credenciales
+4. **Agrega logging** - Ayuda con la depuración
+5. **Documenta a fondo** - Descripciones claras en el manifiesto
+6. **Prueba casos límite** - Maneja entradas vacías, datos grandes, etc.
+
+## Próximos pasos
+
+- [Resumen de MCP](/es/mcp/overview/)
+- [Guía de Components](/es/concepts/components/)

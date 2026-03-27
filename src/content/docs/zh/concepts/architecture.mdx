@@ -1,0 +1,200 @@
+---
+title: 架构概览
+description: 了解 Greentic 平台架构
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 高层架构
+
+Greentic 采用分层架构，并对关注点进行清晰分离：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Messaging Channels                    │
+│         (Slack, Teams, Telegram, WhatsApp, WebChat)     │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Gateway (HTTP/NATS)                    │
+│                 Public Endpoint Router                   │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    greentic-runner                       │
+│           (Production Runtime Host)                      │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │              Flow Executor                       │    │
+│  │         (Wasmtime Component Model)              │    │
+│  └─────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           Session Manager                        │    │
+│  │         (Memory / Redis)                         │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    WASM Components                       │
+│    (Flows, Providers, MCP Tools, Custom Components)     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## 核心组件
+
+<CardGrid>
+  <Card title="greentic-runner" icon="rocket">
+    主要的生产运行时，负责托管和执行 flows、管理 sessions，并协调所有平台服务。
+  </Card>
+  <Card title="greentic-flow" icon="random">
+    用于 `.ygtc` 文件的 flow schema 定义、中间表示（IR）、加载器与校验器。
+  </Card>
+  <Card title="greentic-pack" icon="puzzle">
+    Pack 构建 CLI，用于创建已签名的 `.gtpack` 归档，其中包含 flows、components 和 assets。
+  </Card>
+  <Card title="greentic-component" icon="setting">
+    用于构建 WASM components 的组件编写 CLI 与运行时工具集。
+  </Card>
+</CardGrid>
+
+## 运行时栈
+
+| 层级 | 技术 | 用途 |
+|-------|------------|---------|
+| **WASM Runtime** | Wasmtime v41 | Component model 执行 |
+| **Async Runtime** | Tokio v1 | 异步 I/O、任务调度 |
+| **HTTP Server** | Axum v0.8 | REST API、webhooks |
+| **Message Bus** | NATS | 事件分发、发布/订阅 |
+| **Session Store** | Memory/Redis | Flow 状态持久化 |
+| **Secrets** | AWS/Azure/GCP/Vault | 凭证管理 |
+
+## 数据流
+
+### 入站消息流
+
+```
+1. External Message (e.g., Slack)
+   │
+2. Webhook Handler (Provider Ingress)
+   │
+3. NATS: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+   │
+4. Flow Router (tenant/team resolution)
+   │
+5. Flow Executor (WASM component execution)
+   │
+6. Session State Update
+   │
+7. Reply/Action Nodes
+   │
+8. NATS: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+   │
+9. Provider Egress → External Service
+```
+
+### Pack 加载流程
+
+```
+1. Bundle Configuration (greentic.demo.yaml)
+   │
+2. Pack Resolver (local/OCI registry)
+   │
+3. Signature Verification (ed25519-dalek)
+   │
+4. CBOR Metadata Parsing
+   │
+5. WASM Component Instantiation
+   │
+6. WIT Interface Binding
+   │
+7. Runtime Registration
+```
+
+## 多租户模型
+
+Greentic 在每一层都实现了租户隔离：
+
+```
+Tenant
+  └── Environment (prod, staging, dev)
+        └── Team
+              └── Channel (messaging provider instance)
+                    └── Session (user conversation state)
+```
+
+### TenantCtx
+
+`TenantCtx` 结构体会贯穿所有操作：
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+## WIT 接口架构
+
+Greentic 使用 **WebAssembly Interface Types (WIT)** 规范来定义组件接口：
+
+```wit
+// greentic-interfaces/wit/component.wit
+package greentic:component;
+
+interface types {
+    record message {
+        id: string,
+        content: string,
+        sender: string,
+        timestamp: u64,
+    }
+
+    record outcome {
+        success: bool,
+        data: option<string>,
+        error: option<string>,
+    }
+}
+
+world component {
+    import types;
+    export execute: func(input: types.message) -> types.outcome;
+}
+```
+
+## 服务依赖关系
+
+```
+greentic-types  ─────────────────────────── (foundation)
+    ↑
+greentic-telemetry
+greentic-interfaces ← greentic-types
+greentic-config ← greentic-types
+    ↑
+greentic-session ← greentic-types
+greentic-state ← greentic-types + greentic-interfaces
+greentic-flow ← greentic-interfaces + greentic-types
+    ↑
+greentic-pack ← greentic-flow + greentic-types
+greentic-component ← greentic-interfaces + greentic-types
+greentic-mcp ← greentic-interfaces + greentic-types
+    ↑
+greentic-runner ← ALL of the above
+```
+
+## 可观测性
+
+Greentic 使用 **OpenTelemetry** 实现分布式追踪与指标采集：
+
+- **Tracing**: 使用 OTLP exporter 进行分布式 trace 关联
+- **Metrics**: Flow 执行时间、消息吞吐量、错误率
+- **Logging**: 携带 trace context 的结构化日志
+
+## 下一步
+
+- [Flows](/zh/concepts/flows/) - 了解 flow 定义
+- [Packs](/zh/concepts/packs/) - 理解 pack 结构
+- [Components](/zh/concepts/components/) - 构建自定义 WASM components

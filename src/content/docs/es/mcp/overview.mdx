@@ -1,0 +1,143 @@
+---
+title: Resumen de MCP
+description: Integración de Model Context Protocol en Greentic
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Introducción
+
+**MCP (Model Context Protocol)** es un estándar para conectar modelos de IA con herramientas externas y fuentes de datos. Greentic implementa MCP para:
+
+- Ejecución de herramientas en un entorno WASM aislado
+- Acceso seguro a APIs externas
+- Consultas a bases de datos
+- Operaciones de sistema de archivos
+
+## Características clave
+
+<CardGrid>
+  <Card title="Aislamiento WASM" icon="puzzle">
+    Las herramientas MCP se ejecutan en entornos WebAssembly aislados para mayor seguridad.
+  </Card>
+  <Card title="Descubrimiento de herramientas" icon="magnifier">
+    Registro automático de herramientas y publicación de capacidades.
+  </Card>
+  <Card title="Seguridad de tipos" icon="approve-check">
+    Las interfaces WIT garantizan invocaciones de herramientas con seguridad de tipos.
+  </Card>
+  <Card title="Observabilidad" icon="seti:pulse">
+    Trazas y logging incorporados para las ejecuciones de herramientas.
+  </Card>
+</CardGrid>
+
+## Arquitectura
+
+```
+LLM (with tool use)
+       │
+       ▼ Tool Call Request
+┌─────────────────────────────────┐
+│       greentic-mcp              │
+│   (MCP Executor / WASI Bridge)  │
+└─────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────┐
+│    WASM Tool Component          │
+│   (Sandboxed execution)         │
+└─────────────────────────────────┘
+       │
+       ▼ Tool Result
+Back to LLM
+```
+
+## MCP en flows
+
+### Definición de herramienta
+
+```yaml title="tools/database-query.yaml"
+name: database_query
+description: Query the customer database
+parameters:
+  - name: query
+    type: string
+    description: SQL query to execute
+    required: true
+  - name: limit
+    type: integer
+    description: Maximum rows to return
+    default: 10
+returns:
+  type: array
+  items:
+    type: object
+```
+
+### Uso de herramientas en un flow
+
+```yaml
+- id: query_orders
+  type: mcp-tool
+  config:
+    tool: "database_query"
+    parameters:
+      query: "SELECT * FROM orders WHERE customer_id = '{{customer_id}}'"
+      limit: 5
+  output: orders_result
+  next: process_orders
+```
+
+### Con LLM
+
+```yaml
+- id: agent_step
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant with database access."
+    tools:
+      - database_query
+      - send_email
+      - create_ticket
+    tool_choice: "auto"
+  next: handle_response
+```
+
+## Herramientas disponibles
+
+Greentic proporciona varias herramientas MCP integradas:
+
+| Herramienta | Descripción |
+|------|-------------|
+| `http_request` | Realizar solicitudes HTTP |
+| `database_query` | Consultar bases de datos |
+| `file_read` | Leer archivos (aislado) |
+| `file_write` | Escribir archivos (aislado) |
+| `send_email` | Enviar correos electrónicos |
+| `create_ticket` | Crear tickets de soporte |
+
+## Seguridad
+
+### Aislamiento WASM
+
+Todas las herramientas MCP se ejecutan en sandboxes WASM:
+- Sin acceso directo al sistema de archivos
+- Sin acceso a la red salvo que se conceda explícitamente
+- Aislamiento de memoria
+- Límites de tiempo de CPU
+
+### Modelo de capacidades
+
+Las herramientas declaran las capacidades requeridas:
+
+```yaml
+capabilities:
+  - network:outbound  # Can make outbound requests
+  - filesystem:read   # Can read files in sandbox
+```
+
+## Próximos pasos
+
+- [Crear herramientas MCP](/es/mcp/creating-tools/)
+- [Componente LLM OpenAI](/es/components/llm-openai/)

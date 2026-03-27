@@ -1,0 +1,355 @@
+---
+title: Microsoft Teams
+description: digital worker を Microsoft Teams に接続する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+Microsoft Teams provider は digital worker を Teams の channel と chat に統合します。次をサポートします:
+
+- channel message
+- personal chat
+- group chat
+- Adaptive Cards
+- interactive component
+- file attachment
+
+## 前提条件
+
+- Microsoft 365 tenant
+- Azure AD への admin 権限
+
+## セットアップ
+
+<Steps>
+
+1. **Azure Bot Registration を作成する**
+
+   [Azure Portal](https://portal.azure.com) に移動します:
+   - "Bot Services" を検索する
+   - "Create" をクリックする
+   - 詳細を入力する:
+     - Bot handle: your-bot-name
+     - Subscription: your subscription
+     - Resource group: 作成または選択
+     - Pricing: F0（free）または S1
+   - "Create" をクリックする
+
+2. **Bot Endpoint を設定する**
+
+   Bot Service で:
+   - **Configuration** に移動する
+   - **Messaging endpoint** を設定する: `https://your-domain.com/webhook/teams/{tenant}/{team}`
+
+3. **App 認証情報を取得する**
+
+   **Configuration** で:
+   - **Microsoft App ID** をコピーする
+   - Microsoft App ID の横にある "Manage" をクリックする
+   - 新しい **Client Secret** を作成する
+   - secret value をコピーする（表示は 1 回だけです）
+
+4. **Teams Channel を有効にする**
+
+   Bot Service で:
+   - **Channels** に移動する
+   - **Microsoft Teams** をクリックする
+   - 規約に同意して有効にする
+
+5. **Teams App Package を作成する**
+
+   Teams app 用の manifest を作成します:
+
+   ```json title="manifest.json"
+   {
+     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+     "manifestVersion": "1.16",
+     "version": "1.0.0",
+     "id": "{{BOT_ID}}",
+     "packageName": "com.yourcompany.supportbot",
+     "developer": {
+       "name": "Your Company",
+       "websiteUrl": "https://yourcompany.com",
+       "privacyUrl": "https://yourcompany.com/privacy",
+       "termsOfUseUrl": "https://yourcompany.com/terms"
+     },
+     "name": {
+       "short": "Support Bot",
+       "full": "Support Bot for Customer Service"
+     },
+     "description": {
+       "short": "Customer support assistant",
+       "full": "AI-powered customer support assistant"
+     },
+     "icons": {
+       "outline": "outline.png",
+       "color": "color.png"
+     },
+     "accentColor": "#0078D4",
+     "bots": [
+       {
+         "botId": "{{BOT_ID}}",
+         "scopes": ["personal", "team", "groupchat"],
+         "supportsFiles": true,
+         "isNotificationOnly": false
+       }
+     ],
+     "permissions": ["identity", "messageTeamMembers"],
+     "validDomains": ["your-domain.com"]
+   }
+   ```
+
+6. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-teams": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "app_id": "your-microsoft-app-id",
+       "app_password": "your-client-secret",
+       "tenant_id": "your-azure-tenant-id"
+     }
+   }
+   ```
+
+7. **セットアップを実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+8. **Teams に App をインストールする**
+
+   - `manifest.json` と icon を zip にまとめる
+   - Teams Admin Center に移動するか、直接 upload する
+   - team または user にインストールする
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | webhook 用の公開 URL |
+| `app_id` | Yes | Microsoft App ID |
+| `app_password` | Yes | Client Secret |
+| `tenant_id` | No | Azure AD Tenant ID（single-tenant app 用） |
+
+## 機能
+
+### テキストメッセージ
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown Formatting
+
+Teams は Markdown の一部をサポートします:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - Bullet 1
+      - Bullet 2
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+Teams は Adaptive Card を非常によくサポートしています:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "How can I assist you today?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Create Ticket"
+              data:
+                action: "ticket"
+```
+
+### Hero Cards
+
+```yaml
+- id: hero_card
+  type: reply
+  config:
+    hero_card:
+      title: "Support Bot"
+      subtitle: "Your AI Assistant"
+      text: "I can help with technical issues, billing questions, and more."
+      images:
+        - url: "https://example.com/bot-image.png"
+      buttons:
+        - type: messageBack
+          title: "Get Started"
+          text: "get started"
+          displayText: "Getting started..."
+```
+
+### Suggestions（Quick Replies）
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - title: "Check Status"
+        value: "status"
+      - title: "Create Ticket"
+        value: "ticket"
+      - title: "Contact Human"
+        value: "human"
+```
+
+### File Attachments
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - contentType: "application/pdf"
+        contentUrl: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Card Action の処理
+
+```yaml title="flows/on_card_action.ygtc"
+name: handle_card_action
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "data.action == 'help'"
+          next: show_help
+        - expression: "data.action == 'ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: invoke
+    name: "adaptiveCard/action"
+    target: route_action
+```
+
+## Channel 設定
+
+### Team Channel
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          teams:
+            provider: messaging-teams
+            config:
+              team_id: "19:xxx@thread.tacv2"
+              channel_id: "19:yyy@thread.tacv2"
+```
+
+### Personal Chat
+
+個人の 1:1 chat では channel 設定は不要です。bot はメッセージを送った相手に応答します。
+
+## Proactive Messaging
+
+user からの開始を待たずにメッセージを送信します:
+
+```yaml
+- id: proactive
+  type: reply
+  config:
+    message: "Reminder: Your ticket #123 needs attention"
+    conversation_reference:
+      conversation_id: "{{stored_conversation_id}}"
+      service_url: "{{stored_service_url}}"
+```
+
+<Aside type="note">
+後で proactive messaging を行えるように、user が最初に bot とやり取りしたときに conversation reference を保存してください。
+</Aside>
+
+## トラブルシューティング
+
+### Bot が応答しない
+
+1. **Azure Bot Service の endpoint 設定** を確認する
+2. **SSL certificate** が有効であることを確認する
+3. **app credentials** が正しいことを確認する
+4. Azure の **activity log** を確認する
+
+### "Unauthorized" Error
+
+- App ID と Password を確認する
+- single-tenant app の場合は tenant ID を確認する
+- bot が Teams channel で有効になっていることを確認する
+
+### Card が表示されない
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) で card JSON を検証する
+- Teams がその card version をサポートしていることを確認する
+- 必須 field がすべて存在することを確認する
+
+### メッセージが遅延する
+
+- Teams では message がまとめて配送されることがあり、これは正常です
+- server の performance を確認する
+- rate limit が発生していないことを確認する
+
+## セキュリティ
+
+<Aside type="caution">
+incoming request が Microsoft からのものであることを確認するため、常に JWT token を検証してください。
+</Aside>
+
+Greentic は次を自動検証します:
+- JWT signature
+- issuer と audience claim
+- token expiration
+
+## 次のステップ
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - card を視覚的に設計する
+- [Slack Provider](/ja/providers/messaging/slack/) - Slack integration を追加する
+- [WebChat Provider](/ja/providers/messaging/webchat/) - website に埋め込む

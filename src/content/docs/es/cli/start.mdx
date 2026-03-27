@@ -1,0 +1,349 @@
+---
+title: gtc start
+description: Inicia el servidor runtime de Greentic
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Resumen
+
+El comando `gtc start` inicia el servidor runtime de Greentic. Pone en marcha todos los servicios necesarios, incluyendo el servidor HTTP, el bus NATS y el ejecutor de flows.
+
+## Uso
+
+```bash
+gtc start [OPTIONS] <BUNDLE_PATH>
+```
+
+## Opciones
+
+| Opción | Descripción | Valor por defecto |
+|--------|-------------|-------------------|
+| `--host <HOST>` | Dirección de enlace | `0.0.0.0` |
+| `--port <PORT>` | Puerto HTTP | `8080` |
+| `--cloudflared <on/off>` | Habilita el túnel de Cloudflare | `on` |
+| `--ngrok <on/off>` | Habilita el túnel de ngrok | `off` |
+| `--nats <on/off>` | Habilita NATS embebido | `on` |
+| `--skip-setup` | Omite los flows de configuración de providers | `false` |
+| `--force-setup` | Fuerza la reejecución de los flows de configuración | `false` |
+| `-v, --verbose` | Habilita logs detallados/debug | `false` |
+| `-q, --quiet` | Salida mínima | `false` |
+
+## Uso básico
+
+### Iniciar con valores por defecto
+
+```bash
+gtc start ./my-bundle
+```
+
+Esto inicia:
+- Servidor HTTP en `0.0.0.0:8080`
+- Servidor NATS embebido
+- Túnel Cloudflared (si está disponible)
+
+### Iniciar para desarrollo
+
+```bash
+# Use ngrok instead of cloudflared
+gtc start ./my-bundle --cloudflared off --ngrok on
+
+# With verbose logging
+gtc start ./my-bundle --verbose
+
+# Skip setup (if already configured)
+gtc start ./my-bundle --skip-setup
+```
+
+### Iniciar para producción
+
+```bash
+# No tunnels, external NATS
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Custom port
+gtc start ./my-bundle --port 3000 --cloudflared off
+```
+
+## Configuración de túneles
+
+### Cloudflared (predeterminado)
+
+Cloudflared crea un túnel seguro hacia la red de Cloudflare:
+
+```bash
+gtc start ./my-bundle --cloudflared on
+
+# Output:
+# Cloudflare tunnel started: https://random-words.trycloudflare.com
+# Webhook URLs will use: https://random-words.trycloudflare.com
+```
+
+<Aside type="note">
+Las URLs de Cloudflared cambian en cada reinicio a menos que configures un túnel persistente.
+</Aside>
+
+### ngrok
+
+Usa ngrok para obtener una URL estable durante el desarrollo:
+
+```bash
+gtc start ./my-bundle --ngrok on
+
+# Output:
+# ngrok tunnel started: https://abc123.ngrok-free.app
+# Webhook URLs will use: https://abc123.ngrok-free.app
+```
+
+### Sin túnel
+
+Para producción con un dominio público:
+
+```bash
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Make sure your server is publicly accessible
+# and update provider webhooks with your domain
+```
+
+## Configuración de NATS
+
+### NATS embebido (predeterminado)
+
+```bash
+gtc start ./my-bundle --nats on
+
+# Starts embedded NATS on localhost:4222
+```
+
+### NATS externo
+
+```bash
+# Disable embedded, use external
+gtc start ./my-bundle --nats off
+
+# Set NATS URL via environment
+GREENTIC_NATS_URL=nats://nats.example.com:4222 gtc start ./my-bundle --nats off
+```
+
+## Comportamiento del flow de configuración
+
+### Comportamiento normal
+
+Por defecto, `gtc start` ejecuta flows de configuración si los providers aún no están configurados:
+
+```bash
+gtc start ./my-bundle
+# Runs setup flows for unconfigured providers
+```
+
+### Omitir configuración
+
+Omite por completo los flows de configuración (usa la configuración existente):
+
+```bash
+gtc start ./my-bundle --skip-setup
+```
+
+### Forzar configuración
+
+Fuerza la reejecución de todos los flows de configuración (útil después de cambios de URL):
+
+```bash
+gtc start ./my-bundle --force-setup
+```
+
+## Endpoints del runtime
+
+Cuando está en ejecución, el servidor expone:
+
+| Endpoint | Propósito |
+|----------|-----------|
+| `GET /health` | Comprobación de estado |
+| `GET /ready` | Probe de disponibilidad |
+| `POST /webhook/{provider}/{tenant}/{team}` | Webhooks de providers |
+| `GET /api/v1/sessions` | Gestión de sesiones |
+| `POST /api/v1/messages` | Enviar mensajes |
+| `GET /auth/config` | Endpoint de configuración OAuth |
+| `POST /oauth/token-exchange` | Proxy del lado del servidor para intercambio de tokens OIDC |
+
+### Ejemplo de comprobación de estado
+
+```bash
+curl http://localhost:8080/health
+# {"status": "healthy"}
+```
+
+### Soporte OAuth
+
+El runtime expone dos endpoints para la integración OAuth/OIDC con providers de mensajería que requieren autenticación de usuario (como WebChat o Teams).
+
+#### `GET /auth/config`
+
+Lee la configuración OAuth desde el secrets store y la devuelve al cliente. Los clientes usan este endpoint para descubrir la configuración del identity provider necesaria para iniciar un flujo de autorización.
+
+```bash
+curl http://localhost:8080/auth/config
+# {
+#   "authority": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+#   "client_id": "your-client-id",
+#   "redirect_uri": "https://your-public-url/auth/callback",
+#   "scope": "openid profile"
+# }
+```
+
+#### `POST /oauth/token-exchange`
+
+Un proxy del lado del servidor para el intercambio de tokens del authorization code OIDC. Este endpoint permite que los clientes intercambien un authorization code por tokens sin encontrarse con restricciones CORS del navegador al llamar directamente desde el frontend a los endpoints de tokens del identity provider.
+
+```bash
+curl -X POST http://localhost:8080/oauth/token-exchange \
+  -H "Content-Type: application/json" \
+  -d '{"code": "authorization_code_here", "redirect_uri": "https://your-public-url/auth/callback"}'
+```
+
+<Aside type="tip">
+El proxy de intercambio de tokens elimina la necesidad de que el navegador contacte directamente el endpoint de tokens del identity provider, lo que de otro modo fallaría debido a las políticas CORS aplicadas por la mayoría de identity providers.
+</Aside>
+
+### Rutas estáticas
+
+Las rutas estáticas (como las comprobaciones de estado y los endpoints OAuth) pueden configurarse sin requerir una URL base pública explícita. Esto significa que estos endpoints están disponibles inmediatamente cuando el servidor arranca, incluso antes de que exista un túnel o una URL pública.
+
+<Aside type="note">
+Los endpoints de webhook de providers siguen requiriendo una URL base pública para que los servicios externos puedan alcanzar el servidor. Las rutas estáticas son solo locales y no dependen de la disponibilidad del túnel.
+</Aside>
+
+## Logging
+
+### Niveles de log
+
+```bash
+# Debug (most verbose)
+GREENTIC_LOG_LEVEL=debug gtc start ./my-bundle
+
+# Info (default)
+GREENTIC_LOG_LEVEL=info gtc start ./my-bundle
+
+# Warning
+GREENTIC_LOG_LEVEL=warn gtc start ./my-bundle
+```
+
+### Modo verbose
+
+```bash
+gtc start ./my-bundle --verbose
+
+# Equivalent to GREENTIC_LOG_LEVEL=debug
+```
+
+### Formato de log
+
+```bash
+# JSON format (for production)
+GREENTIC_LOG_FORMAT=json gtc start ./my-bundle
+
+# Pretty format (for development, default)
+GREENTIC_LOG_FORMAT=pretty gtc start ./my-bundle
+```
+
+## Señales
+
+| Señal | Comportamiento |
+|--------|----------------|
+| `SIGTERM` | Apagado ordenado |
+| `SIGINT` (Ctrl+C) | Apagado ordenado |
+| `SIGHUP` | Recargar configuración |
+
+## Variables de entorno
+
+| Variable | Descripción |
+|----------|-------------|
+| `GREENTIC_HOST` | Dirección de enlace |
+| `GREENTIC_PORT` | Puerto HTTP |
+| `GREENTIC_LOG_LEVEL` | Verbosidad de logs |
+| `GREENTIC_LOG_FORMAT` | Formato del log (json/pretty) |
+| `GREENTIC_NATS_URL` | URL de NATS externo |
+| `GREENTIC_REDIS_URL` | URL de Redis para sesiones |
+
+## Solución de problemas
+
+### Puerto ya en uso
+
+```
+Error: Address already in use (os error 48)
+```
+
+Otro proceso está usando el puerto 8080. Detén ese proceso o usa un puerto diferente:
+
+```bash
+gtc start ./my-bundle --port 3000
+```
+
+### Falló la conexión a NATS
+
+```
+Error: Failed to connect to NATS
+```
+
+Si usas NATS externo, asegúrate de que esté ejecutándose y accesible. De lo contrario, habilita el embebido:
+
+```bash
+gtc start ./my-bundle --nats on
+```
+
+### El túnel no pudo iniciarse
+
+```
+Error: Failed to start cloudflared tunnel
+```
+
+Instala cloudflared o usa ngrok en su lugar:
+
+```bash
+# Install cloudflared
+brew install cloudflared
+
+# Or use ngrok
+gtc start ./my-bundle --cloudflared off --ngrok on
+```
+
+### Falló la configuración del provider
+
+```
+Error: Setup flow failed for messaging-telegram
+```
+
+Revisa tus credenciales en el archivo de respuestas y asegúrate de que la URL pública sea accesible:
+
+```bash
+# Re-run setup
+gtc start ./my-bundle --force-setup --verbose
+```
+
+## Despliegue con Docker
+
+```dockerfile title="Dockerfile"
+FROM rust:1.90 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/gtc /usr/local/bin/
+COPY my-bundle /app/bundle
+WORKDIR /app
+EXPOSE 8080
+CMD ["gtc", "start", "/app/bundle", "--cloudflared", "off"]
+```
+
+```bash
+docker build -t my-worker .
+docker run -p 8080:8080 my-worker
+```
+
+## Siguientes pasos
+
+- [Construcción de Packs](/es/cli/building-packs/) - Crear y gestionar packs
+- [Referencia de configuración](/es/reference/configuration/) - Opciones completas de configuración
+- [Guía de solución de problemas](/es/reference/troubleshooting/) - Problemas comunes

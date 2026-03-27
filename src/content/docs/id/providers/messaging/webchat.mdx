@@ -1,0 +1,667 @@
+---
+title: WebChat
+description: Sematkan widget chat di website Anda
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider WebChat memungkinkan Anda menyematkan widget chat langsung di website Anda. Provider ini mendukung:
+
+- Pesan real-time
+- Adaptive Cards
+- Unggah file
+- Theming kustom
+- Responsif di perangkat mobile
+- Autentikasi OAuth/OIDC (Google, Microsoft Entra ID, GitHub, OIDC kustom)
+- Locale picker bawaan untuk pemilihan bahasa
+
+## Arsitektur
+
+```
+User's Browser
+    │
+    ▼ WebSocket
+┌─────────────────────────────────────────┐
+│          WebChat Widget (React)         │
+│     (greentic-webchat component)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ Direct Line Protocol
+┌─────────────────────────────────────────┐
+│        Direct Line Server               │
+│   (greentic-messaging-providers)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ NATS
+┌─────────────────────────────────────────┐
+│          Greentic Runner                │
+└─────────────────────────────────────────┘
+```
+
+## Penyiapan
+
+<Steps>
+
+1. **Konfigurasikan Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "allowed_origins": ["https://yoursite.com"],
+       "session_timeout": 1800
+     }
+   }
+   ```
+
+2. **Jalankan Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **Mulai Runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+4. **Sematkan di Website**
+
+   Tambahkan widget ke HTML Anda:
+
+   ```html
+   <script src="https://your-domain.com/webchat/widget.js"></script>
+   <script>
+     GreenticWebChat.init({
+       directLine: {
+         domain: 'https://your-domain.com/webchat',
+         webSocket: true
+       },
+       tenant: 'demo',
+       team: 'default',
+       theme: {
+         primaryColor: '#0078D4'
+       }
+     });
+   </script>
+   ```
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|--------|----------|-------------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL dasar untuk Direct Line |
+| `allowed_origins` | Tidak | Origin yang diizinkan oleh CORS |
+| `session_timeout` | Tidak | Timeout sesi dalam detik (default: 1800) |
+| `token_expiry` | Tidak | Masa berlaku token dalam detik (default: 3600) |
+| `oauth_enabled` | Tidak | Aktifkan login OAuth/OIDC untuk WebChat (default: false) |
+| `oauth_provider` | Tidak | Provider OAuth: `google`, `microsoft`, `github`, atau `oidc` |
+| `oauth_client_id` | Tidak | OAuth client ID (wajib saat `oauth_enabled` bernilai true) |
+| `oauth_authority` | Tidak | URL authority/issuer OIDC (wajib untuk provider `microsoft` dan `oidc`) |
+| `oauth_scopes` | Tidak | Scope OAuth yang diminta (default bervariasi menurut provider) |
+
+## Konfigurasi Widget
+
+### Setup Dasar
+
+```html
+<script src="https://your-domain.com/webchat/widget.js"></script>
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### Dengan Theming
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    theme: {
+      primaryColor: '#0078D4',
+      backgroundColor: '#f5f5f5',
+      bubbleBackground: '#ffffff',
+      bubbleFromUserBackground: '#0078D4',
+      bubbleTextColor: '#333333',
+      bubbleFromUserTextColor: '#ffffff',
+      sendBoxBackground: '#ffffff',
+      sendBoxTextColor: '#333333'
+    }
+  });
+</script>
+```
+
+### Dengan Info Pengguna
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    user: {
+      id: 'user-123',
+      name: 'John Doe',
+      email: 'john@example.com'
+    }
+  });
+</script>
+```
+
+### Mulai dalam Keadaan Minimized
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    startMinimized: true,
+    showToggleButton: true
+  });
+</script>
+```
+
+## Fitur
+
+### Pesan Teks
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Adaptive Cards
+
+WebChat memiliki dukungan penuh untuk Adaptive Card:
+
+```yaml
+- id: welcome_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "I'm your virtual assistant. How can I help?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Contact Support"
+              data:
+                action: "support"
+```
+
+### Quick Replies (Suggested Actions)
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - "Check Order Status"
+      - "Talk to Support"
+      - "View FAQs"
+```
+
+### Unggah File
+
+Aktifkan unggah file:
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  uploadEnabled: true,
+  uploadAccept: '.pdf,.doc,.docx,.png,.jpg',
+  uploadMaxSize: 10485760  // 10MB
+});
+```
+
+Tangani unggahan dalam flow:
+
+```yaml
+- id: handle_upload
+  type: branch
+  config:
+    conditions:
+      - expression: "attachments.length > 0"
+        next: process_file
+      default: normal_message
+
+- id: process_file
+  type: reply
+  config:
+    message: "Thanks! I've received your file: {{attachments[0].name}}"
+```
+
+### Indikator Mengetik
+
+```yaml
+- id: thinking
+  type: reply
+  config:
+    typing: true
+    typing_duration: 2000  # milliseconds
+  next: actual_reply
+
+- id: actual_reply
+  type: reply
+  config:
+    message: "Here's what I found..."
+```
+
+## Integrasi API
+
+### JavaScript API
+
+```javascript
+// Get chat instance
+const chat = GreenticWebChat.getInstance();
+
+// Send message programmatically
+chat.sendMessage('Hello from JS!');
+
+// Minimize/maximize
+chat.minimize();
+chat.maximize();
+
+// Clear conversation
+chat.clear();
+
+// End conversation
+chat.end();
+
+// Listen for events
+chat.on('message', (event) => {
+  console.log('New message:', event.text);
+});
+
+chat.on('conversationStarted', () => {
+  console.log('Conversation started');
+});
+```
+
+### REST API
+
+Endpoint Direct Line REST API:
+
+```bash
+# Start conversation
+POST /webchat/v3/directline/conversations
+Authorization: Bearer <token>
+
+# Send message
+POST /webchat/v3/directline/conversations/{conversationId}/activities
+Content-Type: application/json
+
+{
+  "type": "message",
+  "text": "Hello!"
+}
+
+# Get messages
+GET /webchat/v3/directline/conversations/{conversationId}/activities
+```
+
+## Kustomisasi
+
+### CSS Kustom
+
+```html
+<style>
+  .greentic-webchat {
+    --primary-color: #0078D4;
+    --background-color: #ffffff;
+    --text-color: #333333;
+    --border-radius: 8px;
+    --font-family: 'Segoe UI', sans-serif;
+  }
+
+  .greentic-webchat .message-bubble {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .greentic-webchat .send-button {
+    background-color: var(--primary-color);
+  }
+</style>
+```
+
+### Avatar Kustom
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  botAvatar: 'https://example.com/bot-avatar.png',
+  userAvatar: 'https://example.com/user-avatar.png',
+  showAvatars: true
+});
+```
+
+### Header Kustom
+
+Area header dapat menampilkan judul, subjudul, dan tombol tutup. Saat locale picker diaktifkan, komponen ini akan muncul di header. Saat OAuth diaktifkan, tombol logout juga dirender di header di samping locale picker.
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  header: {
+    title: 'Support Chat',
+    subtitle: 'We usually reply within minutes',
+    showCloseButton: true
+  }
+});
+```
+
+## Dukungan Multi-Bahasa
+
+GUI WebChat menyertakan locale picker bawaan yang memungkinkan pengguna mengganti bahasa saat runtime. Locale picker muncul di header chat, sehingga pengguna dapat memilih bahasa pilihan mereka tanpa me-refresh halaman.
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  locale: 'es-ES',
+  showLocalePicker: true,
+  availableLocales: ['en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP'],
+  strings: {
+    'placeholder': 'Escribe un mensaje...',
+    'send': 'Enviar',
+    'connecting': 'Conectando...',
+    'reconnecting': 'Reconectando...'
+  }
+});
+```
+
+Saat `showLocalePicker` diaktifkan, pemilih bahasa muncul di header di samping tombol tutup (dan tombol logout jika OAuth diaktifkan). Mengubah locale akan memperbarui semua string UI dan memberi tahu flow agar respons dapat menyesuaikan bahasa yang dipilih.
+
+## Autentikasi OAuth/OIDC
+
+WebChat mendukung autentikasi OAuth/OIDC opsional untuk mewajibkan pengguna login sebelum mengakses chat. Saat diaktifkan, overlay login ditampilkan sebelum antarmuka chat tersedia. Implementasi ini menggunakan alur PKCE (Proof Key for Code Exchange) di sisi klien untuk keamanan.
+
+<Aside type="tip">
+Autentikasi OAuth sepenuhnya opsional. Jika tidak dikonfigurasi, WebChat berjalan tanpa kebutuhan login apa pun, seperti pada versi sebelumnya.
+</Aside>
+
+### Provider yang Didukung
+
+| Provider | Nilai `oauth_provider` | Catatan |
+|----------|----------------------|-------|
+| Google | `google` | Google OAuth 2.0 dengan Google Identity Services |
+| Microsoft (Entra ID) | `microsoft` | Azure AD / Entra ID, memerlukan `oauth_authority` |
+| GitHub | `github` | GitHub OAuth Apps |
+| OIDC Kustom | `oidc` | Provider apa pun yang kompatibel dengan OpenID Connect, memerlukan `oauth_authority` |
+
+### Cara Kerjanya
+
+1. Pengguna membuka widget WebChat
+2. Overlay login ditampilkan dengan tombol masuk untuk provider yang dikonfigurasi
+3. Pengguna melakukan autentikasi melalui alur login provider tersebut (PKCE sisi klien)
+4. Setelah autentikasi berhasil, overlay ditutup dan chat dapat diakses
+5. Identitas pengguna yang telah diautentikasi diteruskan ke flow sebagai user context
+6. Tombol logout muncul di header (di samping locale picker) untuk keluar
+
+### Setup Provider
+
+Setiap provider dikonfigurasi melalui file `answers.json` atau secara interaktif melalui wizard setup berbasis QA. Wizard setup menggunakan logika kondisional untuk memandu Anda hanya melalui field yang dibutuhkan untuk provider pilihan Anda.
+
+#### Google
+
+<Steps>
+
+1. **Buat kredensial OAuth** di [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+
+   - Buat OAuth 2.0 Client ID baru
+   - Atur jenis aplikasi menjadi "Web application"
+   - Tambahkan domain WebChat Anda ke "Authorized JavaScript origins"
+   - Tambahkan `https://your-domain.com/webchat/auth/callback` ke "Authorized redirect URIs"
+
+2. **Konfigurasikan provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "google",
+       "oauth_client_id": "123456789.apps.googleusercontent.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+3. **Jalankan setup dan start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Microsoft (Entra ID)
+
+<Steps>
+
+1. **Daftarkan aplikasi** di [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps)
+
+   - Daftarkan aplikasi baru di bawah "App registrations"
+   - Atur redirect URI ke `https://your-domain.com/webchat/auth/callback` (tipe: SPA)
+   - Di bawah "Authentication", aktifkan "Access tokens" dan "ID tokens" untuk implicit grant
+   - Catat Application (client) ID dan Directory (tenant) ID Anda
+
+2. **Konfigurasikan provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "microsoft",
+       "oauth_client_id": "your-application-client-id",
+       "oauth_authority": "https://login.microsoftonline.com/your-tenant-id/v2.0",
+       "oauth_scopes": "openid profile email User.Read"
+     }
+   }
+   ```
+
+3. **Jalankan setup dan start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### GitHub
+
+<Steps>
+
+1. **Buat OAuth App** di [GitHub Developer Settings](https://github.com/settings/developers)
+
+   - Buka "OAuth Apps" dan buat aplikasi baru
+   - Atur "Authorization callback URL" ke `https://your-domain.com/webchat/auth/callback`
+   - Catat Client ID
+
+2. **Konfigurasikan provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "github",
+       "oauth_client_id": "your-github-client-id",
+       "oauth_scopes": "read:user user:email"
+     }
+   }
+   ```
+
+3. **Jalankan setup dan start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Provider OIDC Kustom
+
+<Steps>
+
+1. **Daftarkan client** pada provider OIDC Anda
+
+   - Atur redirect URI ke `https://your-domain.com/webchat/auth/callback`
+   - Pastikan provider Anda mendukung PKCE
+   - Catat client ID serta issuer/authority URL
+
+2. **Konfigurasikan provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "oidc",
+       "oauth_client_id": "your-client-id",
+       "oauth_authority": "https://your-oidc-provider.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+   `oauth_authority` harus mengarah ke issuer URL tempat `/.well-known/openid-configuration` tersedia.
+
+3. **Jalankan setup dan start**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+### Konfigurasi Widget dengan OAuth
+
+Saat OAuth diaktifkan di sisi server, widget secara otomatis menampilkan overlay login. Tidak diperlukan konfigurasi tambahan di sisi klien. Identitas pengguna yang telah diautentikasi tersedia dalam flow melalui user context:
+
+```javascript
+GreenticWebChat.init({
+  directLine: {
+    domain: 'https://your-domain.com/webchat'
+  },
+  tenant: 'demo',
+  team: 'default'
+  // OAuth login overlay is shown automatically when oauth_enabled is true
+});
+```
+
+Setelah autentikasi, header menampilkan tombol logout di samping locale picker. Saat diklik, sesi dibersihkan dan pengguna dikembalikan ke overlay login.
+
+### Setup Interaktif via QA Wizard
+
+Alih-alih menulis `answers.json` secara manual, Anda dapat menggunakan wizard setup interaktif yang memandu Anda melalui konfigurasi provider tertentu dengan logika kondisional:
+
+```bash
+gtc setup ./my-bundle
+```
+
+Wizard mendeteksi saat `oauth_enabled` diatur ke `true` dan menampilkan pertanyaan lanjutan hanya untuk `oauth_provider` yang dipilih, sehingga Anda hanya melihat field yang relevan dengan identity provider pilihan Anda.
+
+## Keamanan
+
+<Aside type="caution">
+Selalu konfigurasikan `allowed_origins` di production untuk mencegah penyematan yang tidak sah.
+</Aside>
+
+### Keamanan Token
+
+- Token berumur pendek (default 1 jam)
+- Token dibatasi pada percakapan
+- Refresh token tidak diekspos ke klien
+
+### Keamanan OAuth/OIDC
+
+Saat OAuth diaktifkan:
+
+- Autentikasi menggunakan alur PKCE, yang tidak memerlukan client secret di frontend
+- Token divalidasi di sisi server sebelum akses chat diberikan
+- Overlay login memblokir semua interaksi chat sampai autentikasi berhasil
+- Logout sesi menghapus token dari klien dan membatalkan sesi di sisi server
+
+### Konfigurasi CORS
+
+```json
+{
+  "messaging-webchat": {
+    "allowed_origins": [
+      "https://www.example.com",
+      "https://app.example.com"
+    ]
+  }
+}
+```
+
+## Troubleshooting
+
+### Widget Tidak Dimuat
+
+1. Periksa console untuk error JavaScript
+2. Verifikasi URL script sudah benar
+3. Periksa konfigurasi CORS
+
+### Koneksi Gagal
+
+1. Verifikasi endpoint Direct Line dapat diakses
+2. Periksa dukungan WebSocket
+3. Tinjau pengaturan firewall
+
+### Pesan Tidak Terkirim
+
+1. Periksa percakapan masih aktif
+2. Verifikasi token belum kedaluwarsa
+3. Tinjau browser console untuk error
+
+## Langkah Selanjutnya
+
+- [Adaptive Cards](/id/components/cards2pack/) - Buat card yang kaya
+- [Theming Guide](/id/reference/webchat-theming/) - Kustomisasi lanjutan
+- [Flows Guide](/id/concepts/flows/) - Bangun flow percakapan

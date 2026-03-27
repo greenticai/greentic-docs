@@ -1,0 +1,277 @@
+---
+title: gtc wizard
+description: Crea nuevos bundles de Greentic con el comando wizard
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+El comando `gtc wizard` crea nuevos bundles de Greentic a partir de las respuestas del asistente. Genera la estructura completa del bundle, incluyendo archivos de configuración, configuraciones de providers y plantillas de apps.
+
+## Uso
+
+```bash
+gtc wizard [OPTIONS]
+```
+
+## Opciones
+
+| Opción | Descripción |
+|--------|-------------|
+| `--answers <FILE \| URL>` | Ruta o URL del archivo de respuestas del asistente (JSON o YAML). Admite rutas locales y URLs remotas `http://` / `https://`. |
+| `--dry-run` | Previsualiza los archivos generados sin escribirlos |
+| `--output <DIR>` | Directorio de salida (por defecto: directorio actual) |
+| `--template <NAME>` | Usa una plantilla específica |
+| `-v, --verbose` | Habilita salida detallada |
+
+## Archivo de respuestas del asistente
+
+### Formato JSON
+
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0",
+    "description": "Customer support digital worker"
+  },
+  "providers": {
+    "messaging": ["telegram", "slack"],
+    "events": ["webhook", "timer"]
+  },
+  "apps": [
+    {
+      "name": "support-bot",
+      "template": "customer-service"
+    }
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [
+        {
+          "id": "default",
+          "channels": ["telegram", "slack"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Formato YAML
+
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+  description: Customer support digital worker
+
+providers:
+  messaging:
+    - telegram
+    - slack
+  events:
+    - webhook
+    - timer
+
+apps:
+  - name: support-bot
+    template: customer-service
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - telegram
+          - slack
+```
+
+## Estructura generada
+
+Ejecutar el asistente genera:
+
+```
+my-digital-worker/
+├── greentic.demo.yaml          # Main configuration
+├── providers/
+│   ├── messaging/
+│   │   ├── messaging-telegram.gtpack
+│   │   └── messaging-slack.gtpack
+│   └── events/
+│       ├── events-webhook.gtpack
+│       └── events-timer.gtpack
+├── apps/
+│   └── support-bot/
+│       ├── app.yaml
+│       └── flows/
+│           └── on_message.ygtc
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## Ejemplos
+
+### Uso básico
+
+```bash
+# Interactive mode
+gtc wizard
+
+# With answers file
+gtc wizard --answers wizard-answers.yaml
+```
+
+### Modo de previsualización
+
+```bash
+# See what would be generated
+gtc wizard --answers wizard-answers.yaml --dry-run
+```
+
+### Archivo de respuestas remoto
+
+La opción `--answers` acepta URLs `http://` y `https://`, lo que facilita
+almacenar documentos de respuestas compartidos en una ubicación central y referenciarlos desde pipelines de CI/CD.
+
+```bash
+# Fetch answers from a remote URL
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
+
+# Combine with dry-run to preview before generating
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
+```
+
+<Aside type="tip">
+El soporte para URLs remotas es útil en pipelines de CI/CD donde las respuestas del asistente se almacenan en un repositorio compartido o en un servidor de artefactos y se descargan en tiempo de build.
+</Aside>
+
+### Directorio de salida personalizado
+
+```bash
+gtc wizard --answers wizard-answers.yaml --output ./my-project
+```
+
+### Usar plantillas
+
+```bash
+# List available templates
+gtc wizard --list-templates
+
+# Use specific template
+gtc wizard --template customer-service --answers answers.yaml
+```
+
+## Plantillas disponibles
+
+| Plantilla | Descripción |
+|-----------|-------------|
+| `minimal` | Bundle mínimo con un provider |
+| `customer-service` | Bot de FAQ con escalación |
+| `helpdesk` | Soporte IT con integración de tickets |
+| `multi-channel` | Múltiples canales de mensajería |
+
+## Flujo de trabajo
+
+<Steps>
+
+1. **Crear el archivo de respuestas**
+
+   Define la configuración de tu proyecto en JSON o YAML.
+
+2. **Ejecutar el asistente**
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+3. **Revisar los archivos generados**
+
+   Comprueba la estructura del bundle generado.
+
+4. **Configurar providers**
+
+   ```bash
+   gtc setup ./my-digital-worker
+   ```
+
+5. **Iniciar el runtime**
+
+   ```bash
+   gtc start ./my-digital-worker
+   ```
+
+</Steps>
+
+## Personalizar los flows generados
+
+El asistente genera plantillas básicas de flow. Personalízalas después de la generación:
+
+```yaml title="apps/support-bot/flows/on_message.ygtc"
+name: on_message
+version: "1.0"
+description: Handle incoming messages
+
+nodes:
+  # Add your custom nodes here
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Analyze: {{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{analysis_result}}"
+
+triggers:
+  - type: message
+    target: analyze
+```
+
+<Aside type="tip">
+Usa `--dry-run` primero para previsualizar la estructura generada antes de escribirla en disco.
+</Aside>
+
+## Solución de problemas
+
+### Archivo de respuestas no válido
+
+```
+Error: Failed to parse answers file
+```
+
+Asegúrate de que tu JSON/YAML sea válido. Usa un linter para comprobar la sintaxis.
+
+### Faltan campos requeridos
+
+```
+Error: Missing required field: project.name
+```
+
+Comprueba que todos los campos requeridos estén presentes en tu archivo de respuestas.
+
+### Plantilla no encontrada
+
+```
+Error: Template 'unknown' not found
+```
+
+Usa `gtc wizard --list-templates` para ver las plantillas disponibles.
+
+## Siguientes pasos
+
+- [gtc setup](/es/cli/setup/) - Configurar providers
+- [gtc start](/es/cli/start/) - Ejecutar el runtime
+- [Inicio rápido](/es/getting-started/quick-start/) - Flujo de trabajo completo

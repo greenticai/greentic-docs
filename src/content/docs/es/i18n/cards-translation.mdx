@@ -1,0 +1,235 @@
+---
+title: Traducción de Tarjetas
+description: Traducción de Adaptive Cards con i18n
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+Greentic permite traducir Adaptive Cards a varios idiomas. Puedes hacerlo de dos maneras:
+- **Un comando:** `generate --auto-translate` (extrae + traduce + compila)
+- **Paso a paso:** extraer → traducir → compilar
+
+## Inicio rápido (un comando)
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./my-pack \
+  --name my-pack \
+  --auto-translate \
+  --langs fr,de,ja
+```
+
+Listo. El pack incluye `assets/i18n/en.json`, `fr.json`, `de.json`, `ja.json`.
+
+## Flujo de trabajo paso a paso
+
+<Steps>
+
+1. **Crear tarjetas**
+
+   ```json title="cards/welcome.json"
+   {
+     "type": "AdaptiveCard",
+     "version": "1.4",
+     "body": [
+       { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+       { "type": "TextBlock", "text": "How can I help you today?" }
+     ],
+     "actions": [
+       { "type": "Action.Submit", "title": "Get Help" },
+       { "type": "Action.Submit", "title": "Contact Support" }
+     ]
+   }
+   ```
+
+2. **Extraer cadenas traducibles**
+
+   ```bash
+   greentic-cards2pack extract-i18n \
+     --input ./cards \
+     --output i18n/en.json
+   ```
+
+   Salida:
+
+   ```json title="i18n/en.json"
+   {
+     "card.welcome.body_0.text": "Welcome!",
+     "card.welcome.body_1.text": "How can I help you today?",
+     "card.welcome.actions_0.title": "Get Help",
+     "card.welcome.actions_1.title": "Contact Support"
+   }
+   ```
+
+3. **Traducir con greentic-i18n-translator**
+
+   ```bash
+   greentic-i18n-translator translate \
+     --langs fr,ja \
+     --en i18n/en.json
+   ```
+
+   Esto crea `i18n/fr.json` e `i18n/ja.json` en el mismo directorio.
+
+   <Aside type="note">
+   `greentic-i18n-translator` usa Codex CLI para la traducción. Instálalo con `cargo install greentic-i18n-translator`.
+   </Aside>
+
+4. **Generar el pack**
+
+   ```bash
+   greentic-cards2pack generate \
+     --cards ./cards \
+     --out ./my-pack \
+     --name my-pack
+   ```
+
+</Steps>
+
+## Formato de las claves
+
+Las claves extraídas siguen este patrón:
+
+```
+{prefix}.{cardId}.{json_path}.{field}
+```
+
+| Parte | Origen | Ejemplo |
+|------|--------|---------|
+| `prefix` | Flag `--prefix` (predeterminado: `card`) | `card` |
+| `cardId` | Campo `greentic.cardId` o nombre de archivo | `welcome` |
+| `json_path` | Posición en la estructura de la tarjeta | `body_0`, `actions_1` |
+| `field` | Nombre del campo | `text`, `title`, `label` |
+
+Ejemplos:
+- `card.welcome.body_0.text` → texto del primer TextBlock
+- `card.welcome.actions_0.title` → título de la primera acción
+- `card.form.body_1.placeholder` → placeholder del segundo elemento del body
+- `card.form.body_0_choices_2.title` → título de la tercera opción de choice
+
+## Glosario
+
+Mantén los nombres de marca y los términos técnicos consistentes en todas las traducciones:
+
+```json title="glossary.json"
+{
+  "Greentic": "Greentic",
+  "Dashboard": "Dashboard",
+  "CLI": "CLI"
+}
+```
+
+Úsalo con cualquiera de los dos enfoques:
+
+```bash
+# Un comando
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de \
+  --glossary glossary.json
+
+# Paso a paso
+greentic-i18n-translator translate \
+  --langs fr,de \
+  --en i18n/en.json \
+  --glossary glossary.json
+```
+
+## Qué se extrae
+
+| Campo | Elemento de origen |
+|-------|--------------|
+| `text` | TextBlock, RichTextBlock |
+| `title` | Actions, toggles, títulos de facts |
+| `label` | Etiquetas de input |
+| `placeholder` | Placeholders de input |
+| `errorMessage` | Mensajes de validación |
+| `altText` | Texto alternativo de imagen |
+| `fallbackText` | Contenido alternativo |
+| `value` | Valores de facts |
+
+**Se omite automáticamente:**
+- Cadenas vacías
+- Plantillas Handlebars puras: `{{variable}}`
+- Referencias a variables: `${var}`
+- Patrones i18n existentes: `$t(key)` (a menos que se use `--include-existing`)
+
+## Traducción en runtime
+
+### Configurar locales
+
+```yaml title="greentic.demo.yaml"
+i18n:
+  default_locale: "en"
+  locales:
+    en: "assets/i18n/en.json"
+    fr: "assets/i18n/fr.json"
+    ja: "assets/i18n/ja.json"
+```
+
+### Establecer locale en el flow
+
+```yaml
+- id: set_language
+  type: state
+  config:
+    key: "locale"
+    value: "fr"
+  next: show_welcome
+
+- id: show_welcome
+  type: adaptive-card
+  config:
+    card: "cards/welcome"
+    # Card text automatically resolved based on session locale
+```
+
+## Manejo de errores
+
+Los fallos de traducción **no son fatales**. Si `greentic-i18n-translator` falla para un idioma:
+- El pack igualmente se compila correctamente
+- Aparece una advertencia en `.cards2pack/manifest.json`
+- El bundle en inglés (`en.json`) siempre se crea
+
+Revisa las advertencias:
+
+```bash
+cat my-pack/.cards2pack/manifest.json | jq '.warnings[] | select(.kind == "translation")'
+```
+
+## Solución de problemas
+
+### Traductor no encontrado
+
+```
+auto-translation failed: failed to execute greentic-i18n-translator
+```
+
+Instala: `cargo install greentic-i18n-translator`
+
+O define una ruta personalizada: `export GREENTIC_I18N_TRANSLATOR_BIN=/path/to/translator`
+
+### Faltan traducciones en runtime
+
+Si falta una clave en el bundle del idioma de destino, el runtime usa como respaldo el texto fuente en inglés.
+
+### Se pierden placeholders en la traducción
+
+Asegúrate de que los placeholders de Handlebars se conserven:
+
+```json
+// Correct
+{ "card.welcome.body_0.text": "Bonjour, {{name}} !" }
+
+// Wrong — placeholder lost
+{ "card.welcome.body_0.text": "Bonjour, nom !" }
+```
+
+## Próximos pasos
+
+- [Referencia del CLI cards2pack](/es/components/cards2pack/)
+- [Especificación de I18nId](/es/i18n/i18nid-spec/)
+- [Resumen de i18n](/es/i18n/overview/)

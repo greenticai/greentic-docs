@@ -1,0 +1,421 @@
+---
+title: Slack
+description: Conecta tu trabajador digital a workspaces de Slack
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+El provider Slack integra tu trabajador digital con workspaces de Slack. Soporta:
+
+- Mensajes directos (DMs)
+- Mensajes en canales
+- Menciones de apps
+- Componentes interactivos (botones, menús)
+- Mensajería enriquecida con Block Kit
+- Slash commands
+- Respuestas en hilos
+
+## Requisitos previos
+
+- Un workspace de Slack
+- Acceso de administrador para crear una app de Slack
+
+## Configuración
+
+<Steps>
+
+1. **Crea una app de Slack**
+
+   Ve a [api.slack.com/apps](https://api.slack.com/apps) y haz clic en "Create New App":
+   - Elige "From scratch"
+   - Ingresa un nombre para la app (por ejemplo, "My Support Bot")
+   - Selecciona tu workspace
+
+2. **Configura los scopes del bot token**
+
+   Ve a **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**:
+
+   Scopes requeridos:
+   - `chat:write` - Enviar mensajes
+   - `im:history` - Leer el historial de DMs
+   - `im:write` - Abrir DMs
+   - `users:read` - Leer información de usuarios
+
+   Scopes opcionales:
+   - `channels:history` - Leer mensajes de canales
+   - `channels:read` - Listar canales
+   - `files:read` - Leer archivos
+   - `files:write` - Subir archivos
+
+3. **Habilita las suscripciones a eventos**
+
+   Ve a **Event Subscriptions**:
+   - Habilita Events
+   - Define Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}`
+
+   Suscríbete a eventos del bot:
+   - `message.im` - Mensajes por DM
+   - `message.channels` - Mensajes en canales
+   - `app_mention` - @mentions
+
+4. **Habilita la interactividad**
+
+   Ve a **Interactivity & Shortcuts**:
+   - Habilita Interactivity
+   - Define Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
+
+5. **Instala la app en el workspace**
+
+   Ve a **Install App** → **Install to Workspace**
+
+   Copia el **Bot User OAuth Token** (empieza con `xoxb-`)
+
+6. **Obtén las credenciales de la app**
+
+   Desde **Basic Information**:
+   - App ID
+   - Configuration Token (para actualizaciones del manifest)
+
+7. **Configura el provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-slack": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "api_base_url": "https://slack.com/api",
+       "bot_token": "xoxb-xxx-xxx-xxx",
+       "slack_app_id": "A07XXXXXX",
+       "slack_configuration_token": "xoxe.xoxp-xxx"
+     }
+   }
+   ```
+
+8. **Ejecuta la configuración**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Opciones de configuración
+
+| Opción | Requerido | Descripción |
+|--------|----------|-------------|
+| `enabled` | Sí | Habilita/deshabilita el provider |
+| `public_base_url` | Sí | URL pública para los webhooks |
+| `bot_token` | Sí | Bot User OAuth Token (`xoxb-...`) |
+| `slack_app_id` | Sí | App ID de Basic Information |
+| `slack_configuration_token` | No | Para actualizaciones automáticas del manifest |
+| `api_base_url` | No | URL de la API de Slack (por defecto: `https://slack.com/api`) |
+
+## Funcionalidades
+
+### Mensajes de texto
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you?"
+```
+
+### Formato Markdown
+
+Slack usa el formato mrkdwn:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `code`
+      >Blockquote
+      • Bullet point
+```
+
+### Mensajes con Block Kit
+
+Usa Block Kit de Slack para layouts enriquecidos:
+
+```yaml
+- id: rich_message
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "*Welcome!*\nHow can I assist you today?"
+      - type: divider
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Get Help"
+            action_id: "help_clicked"
+            value: "help"
+          - type: button
+            text:
+              type: plain_text
+              text: "View Status"
+            action_id: "status_clicked"
+            value: "status"
+```
+
+### Botones interactivos
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    blocks:
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Create Ticket"
+            style: primary
+            action_id: "create_ticket"
+          - type: button
+            text:
+              type: plain_text
+              text: "Cancel"
+            style: danger
+            action_id: "cancel"
+```
+
+### Menús de selección
+
+```yaml
+- id: select_option
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "Select a category:"
+        accessory:
+          type: static_select
+          action_id: "category_select"
+          options:
+            - text:
+                type: plain_text
+                text: "Technical Support"
+              value: "technical"
+            - text:
+                type: plain_text
+                text: "Billing"
+              value: "billing"
+            - text:
+                type: plain_text
+                text: "General"
+              value: "general"
+```
+
+### Respuestas en hilos
+
+Responde en un hilo:
+
+```yaml
+- id: thread_reply
+  type: reply
+  config:
+    message: "This replies in the thread"
+    thread_ts: "{{original_message.thread_ts}}"
+```
+
+### Subida de archivos
+
+```yaml
+- id: upload_file
+  type: reply
+  config:
+    files:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+        title: "Monthly Report"
+```
+
+### Mensajes efímeros
+
+Mensajes visibles solo para un usuario:
+
+```yaml
+- id: ephemeral
+  type: reply
+  config:
+    message: "Only you can see this"
+    ephemeral: true
+    user: "{{user_id}}"
+```
+
+## Manejo de interacciones
+
+### Clics en botones
+
+```yaml title="flows/on_interaction.ygtc"
+name: handle_interaction
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "action_id == 'help_clicked'"
+          next: show_help
+        - expression: "action_id == 'create_ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: block_action
+    target: route_action
+```
+
+### Cambios en menús de selección
+
+```yaml
+- id: handle_select
+  type: branch
+  config:
+    conditions:
+      - expression: "selected_value == 'technical'"
+        next: technical_flow
+      - expression: "selected_value == 'billing'"
+        next: billing_flow
+```
+
+## Slash Commands
+
+<Aside type="note">
+Los slash commands requieren configuración adicional de la app en Slack.
+</Aside>
+
+1. Ve a **Slash Commands** en la configuración de tu app
+2. Crea un comando (por ejemplo, `/support`)
+3. Define Request URL hacia tu webhook
+
+Manéjalo en tu flow:
+
+```yaml title="flows/slash_command.ygtc"
+name: slash_command
+version: "1.0"
+
+nodes:
+  - id: handle_command
+    type: reply
+    config:
+      message: "Support bot at your service!"
+      response_type: in_channel  # or "ephemeral"
+
+triggers:
+  - type: slash_command
+    command: "/support"
+    target: handle_command
+```
+
+## Configuración de canales
+
+### Canal único
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+```
+
+### Múltiples canales
+
+```yaml
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack-general:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+          slack-vip:
+            provider: messaging-slack
+            config:
+              channel_id: "C0987654321"
+```
+
+## Solución de problemas
+
+### La app no recibe mensajes
+
+1. **Verifica Event Subscriptions:**
+   - Comprueba que Request URL sea correcta
+   - Asegúrate de que los eventos estén habilitados
+   - Verifica que el bot esté suscrito a los eventos correctos
+
+2. **Revisa los permisos del bot:**
+   - Reinstala la app después de agregar scopes
+   - Verifica que el bot esté en el canal
+
+3. **Prueba el webhook:**
+   ```bash
+   curl https://your-domain.com/webhook/slack/demo/default
+   ```
+
+### Error "not_authed"
+
+Tu bot token es inválido o expiró. Obtén un token nuevo desde OAuth & Permissions.
+
+### Error "channel_not_found"
+
+- Verifica que el ID del canal sea correcto
+- Asegúrate de que el bot haya sido agregado al canal
+- Comprueba que el canal no esté archivado
+
+### Rate limiting
+
+Los límites de velocidad de Slack varían según el método. Manéjalos con cuidado:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+    max_retries: 3
+```
+
+## Seguridad
+
+<Aside type="caution">
+Verifica las firmas de las solicitudes de Slack para evitar solicitudes no autorizadas.
+</Aside>
+
+Greentic valida automáticamente:
+- La marca de tiempo de la solicitud
+- La firma usando el signing secret
+- La verificación del token
+
+## Próximos pasos
+
+- [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - Diseña mensajes enriquecidos
+- [Provider de Teams](/es/providers/messaging/teams/) - Agrega integración con Teams
+- [Guía de Flows](/es/concepts/flows/) - Construye flujos de trabajo complejos

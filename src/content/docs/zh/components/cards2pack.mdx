@@ -1,0 +1,270 @@
+---
+title: cards2pack
+description: 将 Adaptive Cards 转换为 Greentic packs
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概述
+
+**cards2pack** 是一个 CLI 工具，用于将 Adaptive Card JSON 文件转换为 Greentic packs。它会：
+
+- 扫描卡片、构建依赖图并生成 `.ygtc` flows
+- 提取用于 i18n 的可翻译字符串
+- 通过 `greentic-i18n-translator` 自动翻译卡片
+- 将所有内容打包成可部署的 `.gtpack`
+
+## 安装
+
+```bash
+cargo install greentic-cards2pack
+```
+
+所需工具：
+
+```bash
+cargo install greentic-flow greentic-pack
+cargo install greentic-i18n-translator  # optional, for --auto-translate
+```
+
+## 快速开始
+
+<Steps>
+
+1. **创建 Adaptive Cards**
+
+   ```json title="cards/welcome.json"
+   {
+     "type": "AdaptiveCard",
+     "version": "1.4",
+     "body": [
+       { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+       { "type": "TextBlock", "text": "How can I help you today?" }
+     ],
+     "actions": [
+       {
+         "type": "Action.Submit",
+         "title": "Get Started",
+         "data": { "flow": "demo", "step": "next-card" }
+       }
+     ]
+   }
+   ```
+
+2. **生成 pack**
+
+   ```bash
+   greentic-cards2pack generate \
+     --cards ./cards \
+     --out ./my-pack \
+     --name my-pack
+   ```
+
+3. **输出结果**
+
+   ```
+   my-pack/
+     pack.yaml
+     flows/main.ygtc
+     assets/cards/welcome.json
+     dist/my-pack.gtpack
+     .cards2pack/manifest.json
+   ```
+
+</Steps>
+
+## CLI 参考
+
+### `generate`
+
+主命令，用于扫描卡片、生成 flows 并构建 pack。
+
+```bash
+greentic-cards2pack generate [OPTIONS]
+```
+
+| 标志 | 说明 |
+|------|-------------|
+| `--cards <DIR>` | Adaptive Card JSON 文件目录（必需） |
+| `--out <DIR>` | 输出工作区目录（必需） |
+| `--name <NAME>` | Pack 名称（必需） |
+| `--strict` | 对缺失目标、重复项和无效 JSON 直接报错 |
+| `--group-by <MODE>` | Flow 分组方式：`folder` 或 `flow-field` |
+| `--default-flow <NAME>` | 未分组卡片的默认 flow 名称 |
+| `--prompt` | 启用基于 prompt 的路由（添加 `prompt2flow` 节点） |
+| `--prompt-json <FILE>` | 用于 prompt 路由的 answers JSON（需要 `--prompt`） |
+| `--auto-translate` | 最多使用 8 个并行线程自动翻译卡片（需要 `greentic-i18n-translator`） |
+| `--langs <CODES>` | 逗号分隔的语言代码；省略时会翻译到所有 65+ 个受支持的语言区域 |
+| `--glossary <FILE>` | 用于保持翻译一致性的 glossary JSON |
+| `--verbose` | 打印详细输出 |
+
+### `extract-i18n`
+
+将卡片中的可翻译字符串提取为一个 JSON bundle。
+
+```bash
+greentic-cards2pack extract-i18n [OPTIONS]
+```
+
+| 标志 | 说明 |
+|------|-------------|
+| `--input <DIR>` | 卡片 JSON 文件目录（必需） |
+| `--output <FILE>` | 输出 JSON 路径（默认：`i18n/en.json`） |
+| `--prefix <PREFIX>` | 键前缀（默认：`card`） |
+| `--include-existing` | 包含已经带有 `$t()` 模式的字符串 |
+| `--verbose` | 打印提取报告 |
+
+## 卡片识别
+
+卡片按以下优先级识别：
+1. 卡片 JSON 中的 `greentic.cardId` 字段
+2. 文件名主干（例如 `welcome.json` → `welcome`）
+
+卡片会按以下方式分组到 flows 中：
+- action data 中的 `flow` 字段
+- `--group-by folder`（目录结构）
+- `--default-flow` 兜底
+
+## i18n 与自动翻译
+
+### 提取字符串
+
+```bash
+greentic-cards2pack extract-i18n \
+  --input ./cards \
+  --output i18n/en.json \
+  --verbose
+```
+
+输出：
+
+```json title="i18n/en.json"
+{
+  "card.welcome.body_0.text": "Welcome!",
+  "card.welcome.body_1.text": "How can I help you today?",
+  "card.welcome.actions_0.title": "Get Started"
+}
+```
+
+<Aside type="note">
+键遵循 `{prefix}.{cardId}.{json_path}.{field}` 模式。卡片 ID 来自 `greentic.cardId` 或文件名。
+</Aside>
+
+<Aside type="tip">
+提取过程始终读取磁盘上的原始卡片文件，而不是任何被重写或中间生成的副本。这样可以确保提取出的字符串与作者编写的内容一致，避免内部转换导致偏差。
+</Aside>
+
+### 提取的字段类型
+
+| 字段 | 来源 |
+|-------|--------|
+| `text` | TextBlock 内容 |
+| `title` | Action 标题、卡片标题、toggle 标题 |
+| `label` | Input 标签 |
+| `placeholder` | Input 占位文本 |
+| `errorMessage` | 验证错误信息 |
+| `altText` | 图片替代文本 |
+| `fallbackText` | 回退内容 |
+| FactSet `title`/`value` | Fact 条目 |
+| ChoiceSet `title` | 选项标题 |
+
+### 自动翻译（单条命令）
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./my-pack \
+  --name my-pack \
+  --auto-translate \
+  --langs fr,de
+```
+
+这会从原始卡片文件中提取字符串，通过 `greentic-i18n-translator` 使用最多 8 个并发线程进行翻译，并将所有内容打包：
+
+```
+my-pack/assets/i18n/
+  en.json   # English (source)
+  fr.json   # French
+  de.json   # German
+```
+
+<Aside type="caution">
+翻译失败不会导致构建中止，pack 仍会继续构建，并在 `.cards2pack/manifest.json` 中记录警告。在非 strict 模式下，`greentic-pack build` 的错误也不会致命，因此即使某些验证检查失败，仍会生成 pack。
+</Aside>
+
+### Glossary
+
+使用 glossary 来保持品牌名和技术术语一致：
+
+```json title="glossary.json"
+{
+  "Greentic": "Greentic",
+  "Dashboard": "Dashboard"
+}
+```
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de \
+  --glossary glossary.json
+```
+
+## Flow 生成
+
+生成的 flow 片段会包裹在标记中：
+
+```yaml
+# BEGIN GENERATED (cards2pack)
+# ... generated nodes ...
+# END GENERATED (cards2pack)
+
+# Developer space below (preserved on regen)
+```
+
+重新生成时，标记之外的内容会被保留。
+
+### Strict 模式
+
+启用 `--strict` 时：
+- 缺失的路由目标会报错（而不是生成 stub 节点）
+- 重复的 `cardId` 值会报错
+- 无效 JSON 会报错
+
+## 模板变量
+
+使用 Handlebars 语法表示动态内容：
+
+```json
+{
+  "type": "TextBlock",
+  "text": "Hello, {{name}}!"
+}
+```
+
+<Aside type="note">
+纯模板表达式如 `{{variable}}` 会在 i18n 提取时被跳过。像 `Hello, {{name}}!` 这样的混合文本则会被提取。
+</Aside>
+
+## 示例：带翻译的多步骤表单
+
+```bash
+# Create cards in cards/ directory, then:
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./checkout-pack \
+  --name checkout \
+  --auto-translate \
+  --langs fr,ja,es \
+  --glossary glossary.json \
+  --strict
+```
+
+请参阅 [translate-demo example](https://github.com/greentic-ai/greentic-cards2pack/tree/master/examples/translate-demo) 获取完整演练。
+
+## 下一步
+
+- [Cards Translation Guide](/zh/i18n/cards-translation/)
+- [i18n Overview](/zh/i18n/overview/)
+- [Flows Guide](/zh/concepts/flows/)
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/)

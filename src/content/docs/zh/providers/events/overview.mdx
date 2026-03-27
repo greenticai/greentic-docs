@@ -1,0 +1,162 @@
+---
+title: Events Providers 概览
+description: 在你的数字员工中处理事件和触发器
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## 简介
+
+**Events Providers** 让你的数字员工能够响应消息之外的外部触发。它们负责处理：
+
+- 来自外部服务的 Webhook
+- 定时任务（timers/cron）
+- 邮件通知
+- SMS 通知
+
+## 可用 Providers
+
+<CardGrid>
+  <LinkCard
+    title="Webhook"
+    href="/zh/providers/events/webhook/"
+    description="接收来自外部服务的 HTTP webhook"
+  />
+  <LinkCard
+    title="Timer"
+    href="/zh/providers/events/timer/"
+    description="使用 cron 表达式调度任务"
+  />
+  <LinkCard
+    title="Email (SendGrid)"
+    href="/zh/providers/events/email-sendgrid/"
+    description="通过 SendGrid 发送事务型邮件"
+  />
+  <LinkCard
+    title="SMS (Twilio)"
+    href="/zh/providers/events/sms-twilio/"
+    description="通过 Twilio 发送 SMS 消息"
+  />
+</CardGrid>
+
+## 架构
+
+```
+External Service / Timer
+    │
+    ▼ HTTP / Schedule
+┌─────────────────────────────────────────┐
+│           Events Ingress                │
+│     (Process incoming event)            │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Event
+┌─────────────────────────────────────────┐
+│              NATS Bus                   │
+│    greentic.events.{env}.{tenant}.{type}│
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                 │
+│      (Process with event flows)         │
+└─────────────────────────────────────────┘
+```
+
+## 事件归一化
+
+所有事件都会被归一化为统一格式：
+
+```rust
+pub struct Event {
+    pub id: String,
+    pub event_type: String,
+    pub source: String,
+    pub timestamp: u64,
+    pub payload: Value,
+    pub metadata: Option<Value>,
+}
+```
+
+## 配置
+
+### 在 Bundle 中
+
+```yaml title="greentic.demo.yaml"
+providers:
+  events-webhook:
+    pack: "providers/events/events-webhook.gtpack"
+
+  events-timer:
+    pack: "providers/events/events-timer.gtpack"
+```
+
+### Event Flows
+
+```yaml title="flows/on_event.ygtc"
+name: handle_event
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        // Process the event
+        let payload = event.payload;
+        process_payload(payload)
+    next: respond
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+## NATS Subjects
+
+事件通过 NATS 流转：
+
+| Subject | 用途 |
+|---------|---------|
+| `greentic.events.{env}.{tenant}.{type}` | 事件通知 |
+| `greentic.events.{env}.{tenant}.{type}.result` | 事件处理结果 |
+
+## 常见模式
+
+### 事件驱动通知
+
+```yaml
+nodes:
+  - id: on_order
+    type: branch
+    config:
+      conditions:
+        - expression: "event.event_type == 'order.created'"
+          next: send_confirmation
+        - expression: "event.event_type == 'order.shipped'"
+          next: send_tracking
+```
+
+### 定时任务
+
+```yaml
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_email
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"  # 9 AM daily
+    target: daily_report
+```
+
+## 下一步
+
+- [Webhook Provider](/zh/providers/events/webhook/)
+- [Timer Provider](/zh/providers/events/timer/)
+- [Flows 指南](/zh/concepts/flows/)

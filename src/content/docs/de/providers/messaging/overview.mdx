@@ -1,0 +1,263 @@
+---
+title: Überblick über Messaging-Provider
+description: Verbinden Sie Ihren digitalen Worker mit Messaging-Plattformen
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Einführung
+
+Greentic unterstützt mehrere Messaging-Plattformen über **Messaging-Provider**. Jeder Provider ist ein WASM-Komponentenpaket, das Folgendes übernimmt:
+
+- **Ingress** - Nachrichten von der Plattform empfangen
+- **Egress** - Nachrichten an die Plattform senden
+- **Operationen** - Plattformspezifische Funktionen (Buttons, Karten, Threads)
+
+## Verfügbare Provider
+
+<CardGrid>
+  <LinkCard
+    title="Slack"
+    href="/de/providers/messaging/slack/"
+    description="Mit Slack-Workspaces verbinden mit vollständiger App-Unterstützung"
+  />
+  <LinkCard
+    title="Microsoft Teams"
+    href="/de/providers/messaging/teams/"
+    description="Mit Microsoft Teams-Kanälen und -Chats integrieren"
+  />
+  <LinkCard
+    title="Telegram"
+    href="/de/providers/messaging/telegram/"
+    description="Telegram-Bots mit Buttons und Inline-Keyboards erstellen"
+  />
+  <LinkCard
+    title="WhatsApp"
+    href="/de/providers/messaging/whatsapp/"
+    description="Mit der WhatsApp Business API verbinden"
+  />
+  <LinkCard
+    title="WebChat"
+    href="/de/providers/messaging/webchat/"
+    description="Chat-Widget in Ihre Website einbetten"
+  />
+  <LinkCard
+    title="Webex"
+    href="/de/providers/messaging/webex/"
+    description="Mit Cisco Webex Teams integrieren"
+  />
+  <LinkCard
+    title="Email"
+    href="/de/providers/messaging/email/"
+    description="E-Mails als Nachrichten senden und empfangen"
+  />
+</CardGrid>
+
+## Architektur
+
+```
+External Platform (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────────────────────────────┐
+│           Ingress Component             │
+│   (Parse platform-specific format)      │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.ingress.{tenant}... │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                  │
+│      (Process with your flows)          │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.egress.{tenant}...  │
+└─────────────────────────────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────────────────────────────┐
+│           Egress Component              │
+│     (Format for platform API)           │
+└─────────────────────────────────────────┘
+    │
+    ▼ API Call
+External Platform
+```
+
+## Nachrichtennormalisierung
+
+Alle Provider normalisieren Nachrichten auf ein gemeinsames Format:
+
+```rust
+pub struct NormalizedMessage {
+    pub id: String,
+    pub channel_id: String,
+    pub sender_id: String,
+    pub sender_name: Option<String>,
+    pub content: String,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+    pub attachments: Vec<Attachment>,
+    pub metadata: Option<Value>,
+}
+```
+
+Dadurch können Ihre Flows plattformübergreifend ohne Änderungen arbeiten.
+
+## Provider-Konfiguration
+
+### Im Bundle
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+  messaging-slack:
+    pack: "providers/messaging/messaging-slack.gtpack"
+    setup_flow: "setup_default"
+```
+
+### Setup-Antworten
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHI..."
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "xoxb-xxx-xxx",
+    "slack_app_id": "A07XXX"
+  }
+}
+```
+
+## NATS-Subjects
+
+Nachrichten fließen über NATS mit tenant-spezifischen Subjects:
+
+| Subject | Richtung |
+|---------|-----------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | Eingehend |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | Ausgehend |
+
+## Gemeinsame Funktionen
+
+### Textnachrichten
+
+Alle Provider unterstützen grundlegende Textnachrichten:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Rich Content
+
+Die meisten Provider unterstützen Rich Content:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+```
+
+### Buttons/Aktionen
+
+Interaktive Elemente (providerabhängig):
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - label: "Get Help"
+        action: "help"
+      - label: "Contact Support"
+        action: "support"
+```
+
+### Anhänge
+
+Unterstützung für Dateien und Medien:
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - type: file
+        url: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Multi-Channel-Flows
+
+Schreiben Sie Flows, die kanalübergreifend funktionieren:
+
+```yaml title="flows/on_message.ygtc"
+name: universal_handler
+version: "1.0"
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      # Works on any platform
+      message: "Hello! I'm your assistant."
+    next: ask_intent
+
+  - id: ask_intent
+    type: reply
+    config:
+      message: "How can I help you today?"
+      # Buttons render differently per platform
+      buttons:
+        - label: "Get Started"
+          action: "start"
+        - label: "Help"
+          action: "help"
+
+triggers:
+  - type: message
+    pattern: "hello|hi"
+    target: greet
+```
+
+## Provider-Vergleich
+
+| Funktion | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Email |
+|---------|-------|-------|----------|----------|---------|-------|-------|
+| Text | Ja | Ja | Ja | Ja | Ja | Ja | Ja |
+| Rich Cards | Ja | Ja | Teilweise | Ja | Ja | Ja | Nein |
+| Buttons | Ja | Ja | Ja | Ja | Ja | Ja | Nein |
+| Dateien | Ja | Ja | Ja | Ja | Ja | Ja | Ja |
+| Threads | Ja | Ja | Ja | Nein | Nein | Ja | Ja |
+| Reaktionen | Ja | Ja | Nein | Ja | Nein | Nein | Nein |
+
+## Nächste Schritte
+
+Wählen Sie einen Provider für den Einstieg:
+
+- [Telegram](/de/providers/messaging/telegram/) - Einfachste Einrichtung, ideal zum Testen
+- [Slack](/de/providers/messaging/slack/) - Voll ausgestattete Workspace-Integration
+- [WebChat](/de/providers/messaging/webchat/) - In Ihre Website einbetten

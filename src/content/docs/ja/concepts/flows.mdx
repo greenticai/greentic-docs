@@ -1,0 +1,338 @@
+---
+title: Flows
+description: Greentic における flow definition を理解する
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+## Flow とは?
+
+**Flow** は、メッセージとデータが digital worker 内をどのように移動するかを記述する YAML 定義の orchestration graph です。flow は `.ygtc` ファイルに保存され、次を定義します:
+
+- **Nodes** - 個々の処理ステップ (WASM components)
+- **Edges** - node 間の接続
+- **Triggers** - flow を開始するきっかけ
+- **Conditions** - 分岐ロジック
+
+## 基本的な Flow 構造
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+# Define the nodes (processing steps)
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! How can I help you today?"
+
+# Define what triggers this flow
+triggers:
+  - type: message
+    pattern: "hello|hi|hey"
+    target: greet
+```
+
+## Flow の構成要素
+
+### Nodes
+
+node は flow の building block です。各 node はデータを処理する WASM component を表します:
+
+```yaml
+nodes:
+  - id: unique_node_id
+    type: node_type           # Component type
+    config:                   # Component-specific configuration
+      key: value
+    next: next_node_id        # Optional: next node to execute
+```
+
+#### 一般的な Node Types
+
+| Type | 用途 |
+|------|------|
+| `reply` | ユーザーにメッセージを返す |
+| `llm` | LLM を呼び出す (OpenAI など) |
+| `template` | Handlebars template を render する |
+| `script` | Rhai script を実行する |
+| `branch` | 条件分岐 |
+| `http` | HTTP request を送る |
+| `state` | session state を管理する |
+
+### Edges
+
+edge は node 同士を接続します。`next` による暗黙的な接続、または明示的な接続が可能です:
+
+```yaml
+nodes:
+  - id: start
+    type: template
+    config:
+      template: "Processing your request..."
+    next: process
+
+  - id: process
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "{{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{llm_response}}"
+```
+
+### Triggers
+
+trigger は flow を開始する条件を定義します:
+
+```yaml
+triggers:
+  # Message pattern trigger
+  - type: message
+    pattern: "order|purchase|buy"
+    target: handle_order
+
+  # Default trigger (catch-all)
+  - type: default
+    target: fallback_handler
+
+  # Event trigger
+  - type: event
+    event_type: "user.created"
+    target: welcome_user
+```
+
+## 条件分岐
+
+条件ロジックには `branch` node を使用します:
+
+```yaml
+nodes:
+  - id: check_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent == 'greeting'"
+          next: greet_user
+        - expression: "intent == 'help'"
+          next: show_help
+        - expression: "intent == 'order'"
+          next: process_order
+      default: fallback
+
+  - id: greet_user
+    type: reply
+    config:
+      message: "Hello! Nice to meet you!"
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's what I can help you with..."
+
+  - id: fallback
+    type: reply
+    config:
+      message: "I'm not sure I understand. Can you rephrase?"
+```
+
+## State を扱う
+
+flow は session state の読み書きができます:
+
+```yaml
+nodes:
+  - id: save_name
+    type: state
+    config:
+      action: set
+      key: "user_name"
+      value: "{{extracted_name}}"
+    next: confirm
+
+  - id: get_name
+    type: state
+    config:
+      action: get
+      key: "user_name"
+      output: "stored_name"
+    next: greet_by_name
+```
+
+## LLM 統合
+
+AI を活用した応答のために LLM を統合できます:
+
+```yaml
+nodes:
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        You are a helpful customer service agent.
+        Extract the user's intent and any relevant entities.
+      prompt: "User message: {{message}}"
+      output_format: json
+    next: process_result
+```
+
+## Template Rendering
+
+動的コンテンツには Handlebars template を使います:
+
+```yaml
+nodes:
+  - id: format_response
+    type: template
+    config:
+      template: |
+        Hi {{user_name}}!
+
+        Here's your order summary:
+        {{#each items}}
+        - {{name}}: ${{price}}
+        {{/each}}
+
+        Total: ${{total}}
+    next: send_response
+```
+
+## Flow Validation
+
+deployment の前に flow を検証します:
+
+```bash
+greentic-flow doctor ./flows/
+
+# Or with the GTC CLI
+gtc flow validate ./flows/hello.ygtc
+```
+
+<Aside type="tip">
+`greentic-flow doctor` を使うと、次のような問題を検出できます:
+- 欠落している node 参照
+- 無効な node type
+- 循環依存
+- schema 違反
+</Aside>
+
+## ベストプラクティス
+
+1. **Keep flows focused** - 1つの user intent または workflow ごとに 1 flow にする
+2. **Use meaningful IDs** - node ID は役割が分かる名前にする
+3. **Document with comments** - 複雑な flow には説明コメントを追加する
+4. **Test incrementally** - 変更のたびに検証する
+5. **Version your flows** - semantic versioning を使う
+
+## 例: 完全なカスタマーサービス Flow
+
+```yaml title="flows/customer_service.ygtc"
+name: customer_service
+version: "1.0"
+description: Handle customer inquiries with AI assistance
+
+nodes:
+  # Analyze the incoming message
+  - id: analyze_intent
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        Classify the customer's intent into one of:
+        - greeting
+        - order_status
+        - product_question
+        - complaint
+        - other
+
+        Respond with JSON: {"intent": "...", "confidence": 0.0-1.0}
+      prompt: "{{message}}"
+      output_format: json
+    next: route_intent
+
+  # Route based on intent
+  - id: route_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent.intent == 'greeting'"
+          next: handle_greeting
+        - expression: "intent.intent == 'order_status'"
+          next: handle_order_status
+        - expression: "intent.intent == 'complaint'"
+          next: handle_complaint
+      default: handle_general
+
+  # Handle greeting
+  - id: handle_greeting
+    type: reply
+    config:
+      message: "Hello! Welcome to our support. How can I help you today?"
+
+  # Handle order status
+  - id: handle_order_status
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/orders/{{order_id}}"
+    next: format_order_response
+
+  - id: format_order_response
+    type: template
+    config:
+      template: |
+        Your order #{{order_id}} is currently: {{status}}
+        Expected delivery: {{delivery_date}}
+    next: send_order_response
+
+  - id: send_order_response
+    type: reply
+    config:
+      message: "{{formatted_response}}"
+
+  # Handle complaints with escalation
+  - id: handle_complaint
+    type: reply
+    config:
+      message: "I'm sorry to hear that. Let me connect you with a specialist who can help resolve this."
+    next: escalate_to_human
+
+  - id: escalate_to_human
+    type: event
+    config:
+      event_type: "escalation.requested"
+      payload:
+        reason: "complaint"
+        conversation_id: "{{session_id}}"
+
+  # General handler
+  - id: handle_general
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: "You are a helpful customer service agent. Be friendly and concise."
+      prompt: "{{message}}"
+    next: send_general_response
+
+  - id: send_general_response
+    type: reply
+    config:
+      message: "{{llm_response}}"
+
+triggers:
+  - type: message
+    target: analyze_intent
+```
+
+## 次のステップ
+
+- [Packs](/ja/concepts/packs/) - deployment 用に flow を package 化する
+- [Components](/ja/concepts/components/) - カスタム node type を作成する
+- [Flow Schema Reference](/ja/reference/flow-schema/) - 完全な YAML schema

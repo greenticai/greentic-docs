@@ -1,0 +1,350 @@
+---
+title: Telegram
+description: digital worker を Telegram に接続する
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概要
+
+Telegram provider を使うと、digital worker は Telegram bot 経由でやり取りできます。次をサポートします:
+
+- テキストメッセージ
+- inline keyboard（button）
+- reply keyboard
+- file attachment
+- media（photo、video、document）
+- group chat
+
+## 前提条件
+
+- Telegram account
+- Telegram bot（@BotFather で作成）
+
+## セットアップ
+
+<Steps>
+
+1. **Telegram bot を作成する**
+
+   Telegram を開いて [@BotFather](https://t.me/botfather) にメッセージを送ります:
+
+   ```
+   /newbot
+   ```
+
+   指示に従って進めます:
+   - bot の名前を入力する（例: "My Support Bot"）
+   - username を入力する（末尾は `bot` にする。例: "my_support_bot"）
+
+   BotFather は次のような **bot token** を返します:
+   ```
+   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   ```
+
+2. **provider を設定する**
+
+   answers file を作成または更新します:
+
+   ```json title="answers.json"
+   {
+     "messaging-telegram": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+     }
+   }
+   ```
+
+3. **setup を実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **runtime を起動する**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+5. **bot をテストする**
+
+   Telegram を開き、username で bot を見つけてメッセージを送ります。
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | webhook 用の公開 URL |
+| `bot_token` | Yes | @BotFather から取得する bot token |
+| `api_base_url` | No | Telegram API URL（デフォルト: `https://api.telegram.org`） |
+
+## 機能
+
+### テキストメッセージ
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown Formatting
+
+Telegram は MarkdownV2 をサポートします:
+
+```yaml
+- id: formatted_reply
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `Code`
+      [Link](https://example.com)
+    parse_mode: MarkdownV2
+```
+
+### Inline Keyboard（Buttons）
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - row:
+          - label: "Get Help"
+            callback_data: "action:help"
+          - label: "Settings"
+            callback_data: "action:settings"
+      - row:
+          - label: "Contact Support"
+            url: "https://support.example.com"
+```
+
+### Reply Keyboards
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "Choose an option:"
+    reply_keyboard:
+      - ["Option A", "Option B"]
+      - ["Option C", "Cancel"]
+    resize_keyboard: true
+    one_time_keyboard: true
+```
+
+### Photo を送る
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    photo:
+      url: "https://example.com/image.jpg"
+      caption: "Here's your image!"
+```
+
+### Document を送る
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    document:
+      url: "https://example.com/report.pdf"
+      filename: "report.pdf"
+      caption: "Your monthly report"
+```
+
+### 特定メッセージへの返信
+
+```yaml
+- id: reply_to_message
+  type: reply
+  config:
+    message: "This is a reply to your previous message"
+    reply_to_message_id: "{{original_message_id}}"
+```
+
+## Button Callback の処理
+
+user が inline keyboard の button をクリックすると、callback を受け取ります:
+
+```yaml title="flows/on_callback.ygtc"
+name: handle_callback
+version: "1.0"
+
+nodes:
+  - id: check_action
+    type: branch
+    config:
+      conditions:
+        - expression: "callback_data == 'action:help'"
+          next: show_help
+        - expression: "callback_data == 'action:settings'"
+          next: show_settings
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+  - id: show_settings
+    type: reply
+    config:
+      message: "Settings menu..."
+
+  - id: unknown_action
+    type: reply
+    config:
+      message: "Unknown action"
+
+triggers:
+  - type: callback_query
+    target: check_action
+```
+
+## Group Chat Support
+
+Telegram provider は group chat をサポートします:
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          telegram-group:
+            provider: messaging-telegram
+            config:
+              chat_id: "-1001234567890"  # Group chat ID
+```
+
+<Aside type="note">
+group chat ID は `-100` に続いて chat ID が入る形式です。
+</Aside>
+
+### Group Chat ID の取得
+
+1. bot を group に追加する
+2. group でメッセージを送る
+3. webhook payload の `chat.id` を確認する
+
+または Telegram API を使います:
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+```
+
+## Webhook 設定
+
+setup flow は webhook を自動設定します:
+
+```
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+{
+  "url": "https://your-domain.com/webhook/telegram/{tenant}/{team}",
+  "allowed_updates": ["message", "callback_query"]
+}
+```
+
+### 手動で Webhook を設定する
+
+必要であれば、手動で設定します:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/webhook/telegram/demo/default",
+    "allowed_updates": ["message", "callback_query"]
+  }'
+```
+
+## トラブルシューティング
+
+### Bot が応答しない
+
+1. **webhook status を確認する:**
+   ```bash
+   curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+   ```
+
+2. **公開 URL にアクセスできることを確認する:**
+   ```bash
+   curl https://your-domain.ngrok-free.app/health
+   ```
+
+3. **log を確認する:**
+   ```bash
+   gtc start ./my-bundle --verbose
+   ```
+
+### Webhook Registration Failed
+
+```
+Error: 401 Unauthorized
+```
+
+bot token が正しく、期限切れでないことを確認してください。
+
+### メッセージを受信できない
+
+1. bot が開始されていることを確認する（user が `/start` を送信済み）
+2. group chat の場合は、bot が group にいることを確認する
+3. webhook URL が公開 URL と一致していることを確認する
+
+### Rate Limiting
+
+Telegram には rate limit があります:
+- 1 chat あたり 1 秒に 1 message
+- 全体で 1 秒に 30 message
+
+適切に処理してください:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_429: true
+    max_retries: 3
+```
+
+## セキュリティ
+
+<Aside type="caution">
+bot token を公開しないでください。安全な secrets storage に保管してください。
+</Aside>
+
+### Webhook Security
+
+Telegram は webhook request と一緒に secret token を送信します。Greentic はこれを自動で検証します。
+
+### Input Validation
+
+常に user input を検証してください:
+
+```yaml
+- id: validate
+  type: script
+  config:
+    script: |
+      if message.len() > 4096 {
+        return error("Message too long")
+      }
+      message
+```
+
+## 次のステップ
+
+- [Slack Provider](/ja/providers/messaging/slack/) - Slack integration を追加する
+- [Flows Guide](/ja/concepts/flows/) - 複雑な workflow を構築する
+- [Buttons and Cards](/ja/components/adaptive-cards/) - rich UI 要素

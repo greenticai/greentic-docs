@@ -1,0 +1,420 @@
+---
+title: Slack
+description: Hubungkan digital worker Anda ke workspace Slack
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider Slack mengintegrasikan digital worker Anda dengan workspace Slack. Provider ini mendukung:
+
+- Direct message (DM)
+- Pesan channel
+- Mention app
+- Komponen interaktif (tombol, menu)
+- Pesan kaya Block Kit
+- Slash command
+- Balasan thread
+
+## Prasyarat
+
+- Sebuah workspace Slack
+- Akses admin untuk membuat app Slack
+
+## Penyiapan
+
+<Steps>
+
+1. **Buat App Slack**
+
+   Buka [api.slack.com/apps](https://api.slack.com/apps) dan klik "Create New App":
+   - Pilih "From scratch"
+   - Masukkan nama app (misalnya, "My Support Bot")
+   - Pilih workspace Anda
+
+2. **Konfigurasikan Bot Token Scopes**
+
+   Buka **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**:
+
+   Scope yang diperlukan:
+   - `chat:write` - Mengirim pesan
+   - `im:history` - Membaca riwayat DM
+   - `im:write` - Membuka DM
+   - `users:read` - Membaca info pengguna
+
+   Scope opsional:
+   - `channels:history` - Membaca pesan channel
+   - `channels:read` - Menampilkan daftar channel
+   - `files:read` - Membaca file
+   - `files:write` - Mengunggah file
+
+3. **Aktifkan Event Subscriptions**
+
+   Buka **Event Subscriptions**:
+   - Aktifkan Events
+   - Atur Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}`
+
+   Subscribe ke event bot:
+   - `message.im` - Pesan DM
+   - `message.channels` - Pesan channel
+   - `app_mention` - @mention
+
+4. **Aktifkan Interactivity**
+
+   Buka **Interactivity & Shortcuts**:
+   - Aktifkan Interactivity
+   - Atur Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
+
+5. **Install App ke Workspace**
+
+   Buka **Install App** → **Install to Workspace**
+
+   Salin **Bot User OAuth Token** (diawali dengan `xoxb-`)
+
+6. **Dapatkan Kredensial App**
+
+   Dari **Basic Information**:
+   - App ID
+   - Configuration Token (untuk pembaruan manifest)
+
+7. **Konfigurasikan Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-slack": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "api_base_url": "https://slack.com/api",
+       "bot_token": "xoxb-xxx-xxx-xxx",
+       "slack_app_id": "A07XXXXXX",
+       "slack_configuration_token": "xoxe.xoxp-xxx"
+     }
+   }
+   ```
+
+8. **Jalankan Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|------|-------|-----------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL publik untuk webhook |
+| `bot_token` | Ya | Bot User OAuth Token (`xoxb-...`) |
+| `slack_app_id` | Ya | App ID dari Basic Information |
+| `slack_configuration_token` | Tidak | Untuk pembaruan manifest otomatis |
+| `api_base_url` | Tidak | URL API Slack (default: `https://slack.com/api`) |
+
+## Fitur
+
+### Pesan Teks
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you?"
+```
+
+### Pemformatan Markdown
+
+Slack menggunakan format mrkdwn:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `code`
+      >Blockquote
+      • Bullet point
+```
+
+### Pesan Block Kit
+
+Gunakan Block Kit milik Slack untuk layout kaya:
+
+```yaml
+- id: rich_message
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "*Welcome!*\nHow can I assist you today?"
+      - type: divider
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Get Help"
+            action_id: "help_clicked"
+            value: "help"
+          - type: button
+            text:
+              type: plain_text
+              text: "View Status"
+            action_id: "status_clicked"
+            value: "status"
+```
+
+### Tombol Interaktif
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    blocks:
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Create Ticket"
+            style: primary
+            action_id: "create_ticket"
+          - type: button
+            text:
+              type: plain_text
+              text: "Cancel"
+            style: danger
+            action_id: "cancel"
+```
+
+### Menu Pilihan
+
+```yaml
+- id: select_option
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "Select a category:"
+        accessory:
+          type: static_select
+          action_id: "category_select"
+          options:
+            - text:
+                type: plain_text
+                text: "Technical Support"
+              value: "technical"
+            - text:
+                type: plain_text
+                text: "Billing"
+              value: "billing"
+            - text:
+                type: plain_text
+                text: "General"
+              value: "general"
+```
+
+### Balasan Thread
+
+Balas dalam thread:
+
+```yaml
+- id: thread_reply
+  type: reply
+  config:
+    message: "This replies in the thread"
+    thread_ts: "{{original_message.thread_ts}}"
+```
+
+### Unggah File
+
+```yaml
+- id: upload_file
+  type: reply
+  config:
+    files:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+        title: "Monthly Report"
+```
+
+### Pesan Ephemeral
+
+Pesan yang hanya terlihat oleh satu pengguna:
+
+```yaml
+- id: ephemeral
+  type: reply
+  config:
+    message: "Only you can see this"
+    ephemeral: true
+    user: "{{user_id}}"
+```
+
+## Menangani Interaksi
+
+### Klik Tombol
+
+```yaml title="flows/on_interaction.ygtc"
+name: handle_interaction
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "action_id == 'help_clicked'"
+          next: show_help
+        - expression: "action_id == 'create_ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: block_action
+    target: route_action
+```
+
+### Perubahan Select Menu
+
+```yaml
+- id: handle_select
+  type: branch
+  config:
+    conditions:
+      - expression: "selected_value == 'technical'"
+        next: technical_flow
+      - expression: "selected_value == 'billing'"
+        next: billing_flow
+```
+
+## Slash Commands
+
+<Aside type="note">
+Slash command memerlukan konfigurasi app tambahan di Slack.
+</Aside>
+
+1. Buka **Slash Commands** di pengaturan app Anda
+2. Buat command (misalnya, `/support`)
+3. Atur Request URL ke webhook Anda
+
+Tangani di flow Anda:
+
+```yaml title="flows/slash_command.ygtc"
+name: slash_command
+version: "1.0"
+
+nodes:
+  - id: handle_command
+    type: reply
+    config:
+      message: "Support bot at your service!"
+      response_type: in_channel  # or "ephemeral"
+
+triggers:
+  - type: slash_command
+    command: "/support"
+    target: handle_command
+```
+
+## Konfigurasi Channel
+
+### Channel Tunggal
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+```
+
+### Banyak Channel
+
+```yaml
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack-general:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+          slack-vip:
+            provider: messaging-slack
+            config:
+              channel_id: "C0987654321"
+```
+
+## Troubleshooting
+
+### App Tidak Menerima Pesan
+
+1. **Verifikasi Event Subscriptions:**
+   - Periksa apakah Request URL benar
+   - Pastikan event diaktifkan
+   - Verifikasi bot berlangganan ke event yang benar
+
+2. **Periksa Izin Bot:**
+   - Install ulang app setelah menambahkan scope
+   - Pastikan bot ada di channel
+
+3. **Uji Webhook:**
+   ```bash
+   curl https://your-domain.com/webhook/slack/demo/default
+   ```
+
+### Error "not_authed"
+
+Bot token Anda tidak valid atau sudah kedaluwarsa. Ambil token baru dari OAuth & Permissions.
+
+### Error "channel_not_found"
+
+- Verifikasi channel ID sudah benar
+- Pastikan bot ditambahkan ke channel
+- Periksa apakah channel tidak diarsipkan
+
+### Rate Limiting
+
+Rate limit Slack bervariasi per metode. Tangani dengan baik:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+    max_retries: 3
+```
+
+## Keamanan
+
+<Aside type="caution">
+Verifikasi signature request Slack untuk mencegah request yang tidak sah.
+</Aside>
+
+Greentic secara otomatis memvalidasi:
+- Timestamp request
+- Signature menggunakan signing secret
+- Verifikasi token
+
+## Langkah Berikutnya
+
+- [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - Rancang pesan kaya
+- [Provider Teams](/id/providers/messaging/teams/) - Tambahkan integrasi Teams

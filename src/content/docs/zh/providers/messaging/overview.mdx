@@ -1,0 +1,263 @@
+---
+title: Messaging Providers 概览
+description: 将你的数字员工连接到消息平台
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## 简介
+
+Greentic 通过 **Messaging Providers** 支持多个消息平台。每个 provider 都是一个 WASM component pack，负责处理：
+
+- **Ingress** - 从平台接收消息
+- **Egress** - 向平台发送消息
+- **Operations** - 平台特定功能（按钮、卡片、线程）
+
+## 可用 Providers
+
+<CardGrid>
+  <LinkCard
+    title="Slack"
+    href="/zh/providers/messaging/slack/"
+    description="连接到 Slack 工作区，并提供完整 app 支持"
+  />
+  <LinkCard
+    title="Microsoft Teams"
+    href="/zh/providers/messaging/teams/"
+    description="集成 Microsoft Teams 频道和聊天"
+  />
+  <LinkCard
+    title="Telegram"
+    href="/zh/providers/messaging/telegram/"
+    description="构建带按钮和 inline keyboard 的 Telegram 机器人"
+  />
+  <LinkCard
+    title="WhatsApp"
+    href="/zh/providers/messaging/whatsapp/"
+    description="连接到 WhatsApp Business API"
+  />
+  <LinkCard
+    title="WebChat"
+    href="/zh/providers/messaging/webchat/"
+    description="在你的网站中嵌入聊天组件"
+  />
+  <LinkCard
+    title="Webex"
+    href="/zh/providers/messaging/webex/"
+    description="与 Cisco Webex Teams 集成"
+  />
+  <LinkCard
+    title="Email"
+    href="/zh/providers/messaging/email/"
+    description="以消息形式发送和接收邮件"
+  />
+</CardGrid>
+
+## 架构
+
+```
+External Platform (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────────────────────────────┐
+│           Ingress Component             │
+│   (Parse platform-specific format)      │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.ingress.{tenant}... │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                  │
+│      (Process with your flows)          │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.egress.{tenant}...  │
+└─────────────────────────────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────────────────────────────┐
+│           Egress Component              │
+│     (Format for platform API)           │
+└─────────────────────────────────────────┘
+    │
+    ▼ API Call
+External Platform
+```
+
+## 消息归一化
+
+所有 provider 都会将消息归一化为统一格式：
+
+```rust
+pub struct NormalizedMessage {
+    pub id: String,
+    pub channel_id: String,
+    pub sender_id: String,
+    pub sender_name: Option<String>,
+    pub content: String,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+    pub attachments: Vec<Attachment>,
+    pub metadata: Option<Value>,
+}
+```
+
+这使你的 flows 无需修改就能在任意消息平台上运行。
+
+## Provider 配置
+
+### 在 Bundle 中
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+  messaging-slack:
+    pack: "providers/messaging/messaging-slack.gtpack"
+    setup_flow: "setup_default"
+```
+
+### Setup Answers
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHI..."
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "xoxb-xxx-xxx",
+    "slack_app_id": "A07XXX"
+  }
+}
+```
+
+## NATS Subjects
+
+消息会通过带有租户作用域的 NATS subject 流转：
+
+| Subject | 方向 |
+|---------|------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | 入站 |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | 出站 |
+
+## 通用功能
+
+### 文本消息
+
+所有 provider 都支持基础文本消息：
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### 富内容
+
+大多数 provider 支持富内容：
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+```
+
+### 按钮/操作
+
+交互元素（依 provider 而定）：
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - label: "Get Help"
+        action: "help"
+      - label: "Contact Support"
+        action: "support"
+```
+
+### 附件
+
+文件与媒体支持：
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - type: file
+        url: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## 多渠道 Flows
+
+编写可跨渠道运行的 flows：
+
+```yaml title="flows/on_message.ygtc"
+name: universal_handler
+version: "1.0"
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      # Works on any platform
+      message: "Hello! I'm your assistant."
+    next: ask_intent
+
+  - id: ask_intent
+    type: reply
+    config:
+      message: "How can I help you today?"
+      # Buttons render differently per platform
+      buttons:
+        - label: "Get Started"
+          action: "start"
+        - label: "Help"
+          action: "help"
+
+triggers:
+  - type: message
+    pattern: "hello|hi"
+    target: greet
+```
+
+## Provider 对比
+
+| 功能 | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Email |
+|------|-------|-------|----------|----------|---------|-------|-------|
+| Text | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| Rich Cards | 是 | 是 | 部分支持 | 是 | 是 | 是 | 否 |
+| Buttons | 是 | 是 | 是 | 是 | 是 | 是 | 否 |
+| Files | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| Threads | 是 | 是 | 是 | 否 | 否 | 是 | 是 |
+| Reactions | 是 | 是 | 否 | 是 | 否 | 否 | 否 |
+
+## 下一步
+
+选择一个 provider 开始：
+
+- [Telegram](/zh/providers/messaging/telegram/) - 设置最简单，适合测试
+- [Slack](/zh/providers/messaging/slack/) - 功能完整的工作区集成
+- [WebChat](/zh/providers/messaging/webchat/) - 嵌入到你的网站

@@ -1,0 +1,421 @@
+---
+title: Slack
+description: digital worker を Slack workspace に接続する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+Slack provider は digital worker を Slack workspace に統合します。次をサポートします:
+
+- ダイレクトメッセージ（DM）
+- channel message
+- app mention
+- interactive component（button、menu）
+- Block Kit rich messaging
+- slash command
+- thread reply
+
+## 前提条件
+
+- Slack workspace
+- Slack app を作成できる admin 権限
+
+## セットアップ
+
+<Steps>
+
+1. **Slack App を作成する**
+
+   [api.slack.com/apps](https://api.slack.com/apps) にアクセスし、"Create New App" をクリックします:
+   - "From scratch" を選ぶ
+   - app 名を入力する（例: "My Support Bot"）
+   - workspace を選ぶ
+
+2. **Bot Token Scope を設定する**
+
+   **OAuth & Permissions** → **Scopes** → **Bot Token Scopes** に移動します:
+
+   必須 scope:
+   - `chat:write` - メッセージを送信する
+   - `im:history` - DM 履歴を読む
+   - `im:write` - DM を開く
+   - `users:read` - user 情報を読む
+
+   任意 scope:
+   - `channels:history` - channel message を読む
+   - `channels:read` - channel を一覧する
+   - `files:read` - file を読む
+   - `files:write` - file を upload する
+
+3. **Event Subscriptions を有効にする**
+
+   **Event Subscriptions** に移動します:
+   - Events を有効にする
+   - Request URL を設定する: `https://your-domain.com/webhook/slack/{tenant}/{team}`
+
+   bot event を購読します:
+   - `message.im` - DM message
+   - `message.channels` - channel message
+   - `app_mention` - @mention
+
+4. **Interactivity を有効にする**
+
+   **Interactivity & Shortcuts** に移動します:
+   - Interactivity を有効にする
+   - Request URL を設定する: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
+
+5. **App を workspace にインストールする**
+
+   **Install App** → **Install to Workspace** に移動します。
+
+   **Bot User OAuth Token**（`xoxb-` で始まる）をコピーします。
+
+6. **App 認証情報を取得する**
+
+   **Basic Information** から次を取得します:
+   - App ID
+   - Configuration Token（manifest 自動更新用）
+
+7. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-slack": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "api_base_url": "https://slack.com/api",
+       "bot_token": "xoxb-xxx-xxx-xxx",
+       "slack_app_id": "A07XXXXXX",
+       "slack_configuration_token": "xoxe.xoxp-xxx"
+     }
+   }
+   ```
+
+8. **セットアップを実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | webhook 用の公開 URL |
+| `bot_token` | Yes | Bot User OAuth Token（`xoxb-...`） |
+| `slack_app_id` | Yes | Basic Information にある App ID |
+| `slack_configuration_token` | No | manifest の自動更新用 |
+| `api_base_url` | No | Slack API URL（デフォルト: `https://slack.com/api`） |
+
+## 機能
+
+### テキストメッセージ
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you?"
+```
+
+### Markdown Formatting
+
+Slack は mrkdwn format を使います:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `code`
+      >Blockquote
+      • Bullet point
+```
+
+### Block Kit メッセージ
+
+rich layout には Slack の Block Kit を使います:
+
+```yaml
+- id: rich_message
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "*Welcome!*\nHow can I assist you today?"
+      - type: divider
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Get Help"
+            action_id: "help_clicked"
+            value: "help"
+          - type: button
+            text:
+              type: plain_text
+              text: "View Status"
+            action_id: "status_clicked"
+            value: "status"
+```
+
+### Interactive Buttons
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    blocks:
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Create Ticket"
+            style: primary
+            action_id: "create_ticket"
+          - type: button
+            text:
+              type: plain_text
+              text: "Cancel"
+            style: danger
+            action_id: "cancel"
+```
+
+### Select Menus
+
+```yaml
+- id: select_option
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "Select a category:"
+        accessory:
+          type: static_select
+          action_id: "category_select"
+          options:
+            - text:
+                type: plain_text
+                text: "Technical Support"
+              value: "technical"
+            - text:
+                type: plain_text
+                text: "Billing"
+              value: "billing"
+            - text:
+                type: plain_text
+                text: "General"
+              value: "general"
+```
+
+### Thread Reply
+
+thread に返信します:
+
+```yaml
+- id: thread_reply
+  type: reply
+  config:
+    message: "This replies in the thread"
+    thread_ts: "{{original_message.thread_ts}}"
+```
+
+### File Upload
+
+```yaml
+- id: upload_file
+  type: reply
+  config:
+    files:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+        title: "Monthly Report"
+```
+
+### Ephemeral Message
+
+1人の user にだけ見えるメッセージです:
+
+```yaml
+- id: ephemeral
+  type: reply
+  config:
+    message: "Only you can see this"
+    ephemeral: true
+    user: "{{user_id}}"
+```
+
+## Interaction の処理
+
+### Button Clicks
+
+```yaml title="flows/on_interaction.ygtc"
+name: handle_interaction
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "action_id == 'help_clicked'"
+          next: show_help
+        - expression: "action_id == 'create_ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: block_action
+    target: route_action
+```
+
+### Select Menu の変更
+
+```yaml
+- id: handle_select
+  type: branch
+  config:
+    conditions:
+      - expression: "selected_value == 'technical'"
+        next: technical_flow
+      - expression: "selected_value == 'billing'"
+        next: billing_flow
+```
+
+## Slash Commands
+
+<Aside type="note">
+Slash command を使うには、Slack 側で追加の app 設定が必要です。
+</Aside>
+
+1. app 設定の **Slash Commands** に移動する
+2. command を作成する（例: `/support`）
+3. Request URL を webhook に設定する
+
+flow では次のように処理します:
+
+```yaml title="flows/slash_command.ygtc"
+name: slash_command
+version: "1.0"
+
+nodes:
+  - id: handle_command
+    type: reply
+    config:
+      message: "Support bot at your service!"
+      response_type: in_channel  # or "ephemeral"
+
+triggers:
+  - type: slash_command
+    command: "/support"
+    target: handle_command
+```
+
+## Channel 設定
+
+### 単一 channel
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+```
+
+### 複数 channel
+
+```yaml
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack-general:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+          slack-vip:
+            provider: messaging-slack
+            config:
+              channel_id: "C0987654321"
+```
+
+## トラブルシューティング
+
+### App がメッセージを受信しない
+
+1. **Event Subscriptions を確認する:**
+   - Request URL が正しいことを確認する
+   - event が有効になっていることを確認する
+   - bot が正しい event を購読していることを確認する
+
+2. **Bot の権限を確認する:**
+   - scope を追加した後は app を再インストールする
+   - bot が channel に参加していることを確認する
+
+3. **Webhook をテストする:**
+   ```bash
+   curl https://your-domain.com/webhook/slack/demo/default
+   ```
+
+### "not_authed" Error
+
+bot token が無効か期限切れです。OAuth & Permissions から新しい token を取得してください。
+
+### "channel_not_found" Error
+
+- channel ID が正しいことを確認する
+- bot が channel に追加されていることを確認する
+- channel が archived されていないことを確認する
+
+### Rate Limiting
+
+Slack の rate limit は method ごとに異なります。適切に処理してください:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+    max_retries: 3
+```
+
+## セキュリティ
+
+<Aside type="caution">
+不正なリクエストを防ぐため、Slack の request signature を検証してください。
+</Aside>
+
+Greentic は次を自動検証します:
+- Request timestamp
+- signing secret を使った signature
+- token verification
+
+## 次のステップ
+
+- [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - rich message を設計する
+- [Teams Provider](/ja/providers/messaging/teams/) - Teams integration を追加する
+- [Flows Guide](/ja/concepts/flows/) - 複雑な workflow を構築する

@@ -1,0 +1,169 @@
+---
+title: Timer
+description: 使用 cron 表达式调度任务
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+Timer events provider 支持使用 cron 表达式执行定时任务。适用于：
+
+- 每日报告
+- 周期性清理
+- 定时通知
+- 定期数据同步
+
+## 配置
+
+```json title="answers.json"
+{
+  "events-timer": {
+    "enabled": true,
+    "timezone": "America/New_York"
+  }
+}
+```
+
+## 配置选项
+
+| 选项 | 必需 | 描述 |
+|--------|----------|-------------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `timezone` | 否 | 默认时区（默认：UTC） |
+
+## 定义调度
+
+### 在 Flow 中
+
+```yaml title="flows/scheduled_tasks.ygtc"
+name: scheduled_tasks
+version: "1.0"
+
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_report
+
+  - id: send_report
+    type: reply
+    config:
+      channel: "slack-reports"
+      message: "Daily report: {{http_response}}"
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"
+    target: daily_report
+    timezone: "America/New_York"
+```
+
+### Cron 表达式格式
+
+```
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, 0=Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+## 常用调度
+
+| 调度 | Cron 表达式 | 描述 |
+|----------|-----------------|-------------|
+| 每分钟 | `* * * * *` | 每分钟运行一次 |
+| 每小时 | `0 * * * *` | 在第 0 分钟运行 |
+| 每天上午 9 点 | `0 9 * * *` | 每天 9:00 运行 |
+| 每周一 | `0 9 * * 1` | 周一 9:00 运行 |
+| 每月 1 日 | `0 0 1 * *` | 每月 1 日午夜运行 |
+
+## 示例
+
+### 每日清理
+
+```yaml
+nodes:
+  - id: cleanup
+    type: http
+    config:
+      method: DELETE
+      url: "https://api.example.com/sessions/expired"
+
+triggers:
+  - type: timer
+    cron: "0 2 * * *"  # 2 AM daily
+    target: cleanup
+```
+
+### 每周汇总
+
+```yaml
+nodes:
+  - id: generate_summary
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Generate weekly summary from: {{data}}"
+    next: send_summary
+
+triggers:
+  - type: timer
+    cron: "0 9 * * 1"  # Monday 9 AM
+    target: generate_summary
+```
+
+### 周期性健康检查
+
+```yaml
+nodes:
+  - id: health_check
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/health"
+    next: check_result
+
+  - id: check_result
+    type: branch
+    config:
+      conditions:
+        - expression: "http_response.status != 200"
+          next: alert
+      default: done
+
+  - id: alert
+    type: reply
+    config:
+      channel: "slack-alerts"
+      message: "Health check failed!"
+
+triggers:
+  - type: timer
+    cron: "*/5 * * * *"  # Every 5 minutes
+    target: health_check
+```
+
+## 时区处理
+
+<Aside type="note">
+Cron 表达式会按照配置的时区进行求值。
+</Aside>
+
+```yaml
+triggers:
+  - type: timer
+    cron: "0 9 * * *"
+    target: daily_task
+    timezone: "Europe/London"  # 9 AM London time
+```
+
+## 下一步
+
+- [Webhook Provider](/zh/providers/events/webhook/)
+- [Flows 指南](/zh/concepts/flows/)

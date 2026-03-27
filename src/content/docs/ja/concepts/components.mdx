@@ -1,0 +1,342 @@
+---
+title: Components
+description: Greentic のための WASM component の構築
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Component とは?
+
+**Component** は、Greentic WIT interface を実装するポータブルな WebAssembly (WASM) building block です。component には次の特徴があります:
+
+- **Sandboxed** - 分離された WASM environment で実行される
+- **Portable** - Wasmtime がある任意の platform で動作する
+- **Composable** - 組み合わせて複雑な workflow を構築できる
+- **Language-agnostic** - Rust、Go、または任意の WASM-compatible language で書ける
+
+## Component の種類
+
+| Type | 用途 | 例 |
+|------|------|----|
+| **Node** | flow の処理ステップ | LLM caller、template renderer |
+| **Provider** | 外部サービスとの bridge | Telegram、Slack、SendGrid |
+| **Tool** | MCP tool implementation | database query、API call |
+| **Operator** | メッセージ変換 | button handling、card rendering |
+
+## Component の作成
+
+### Project Setup
+
+component authoring CLI を使います:
+
+```bash
+# Create new component project
+greentic-component new my-processor
+
+cd my-processor
+```
+
+生成される構成:
+
+```
+my-processor/
+├── Cargo.toml
+├── src/
+│   └── lib.rs
+├── wit/
+│   └── component.wit
+└── build.sh
+```
+
+### Cargo.toml
+
+```toml title="Cargo.toml"
+[package]
+name = "my-processor"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.53"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+```
+
+### WIT Interface
+
+component の interface を定義します:
+
+```wit title="wit/component.wit"
+package greentic:my-processor;
+
+interface types {
+    record input {
+        message: string,
+        context: option<string>,
+    }
+
+    record output {
+        result: string,
+        success: bool,
+    }
+}
+
+world processor {
+    import types;
+
+    export process: func(input: types.input) -> types.output;
+}
+```
+
+### 実装
+
+```rust title="src/lib.rs"
+use wit_bindgen::generate;
+
+generate!({
+    world: "processor",
+    path: "wit",
+});
+
+struct MyProcessor;
+
+impl Guest for MyProcessor {
+    fn process(input: Input) -> Output {
+        // Your processing logic here
+        let result = format!("Processed: {}", input.message);
+
+        Output {
+            result,
+            success: true,
+        }
+    }
+}
+
+export!(MyProcessor);
+```
+
+### Build
+
+```bash
+# Build for WASM target
+cargo build --target wasm32-wasip2 --release
+
+# Output: target/wasm32-wasip2/release/my_processor.wasm
+```
+
+## 高度な Component パターン
+
+### Async operations
+
+component は、WASI interface を使って async operation を実行できます:
+
+```rust
+use wit_bindgen::generate;
+
+generate!({
+    world: "async-processor",
+    path: "wit",
+    async: true,
+});
+
+impl Guest for AsyncProcessor {
+    async fn process(input: Input) -> Output {
+        // Async HTTP call
+        let response = http_fetch(&input.url).await;
+
+        Output {
+            result: response.body,
+            success: response.status == 200,
+        }
+    }
+}
+```
+
+### State 管理
+
+component 内で session state にアクセスできます:
+
+```rust
+impl Guest for StatefulProcessor {
+    fn process(input: Input, state: &mut State) -> Output {
+        // Read from state
+        let counter = state.get("counter").unwrap_or(0);
+
+        // Update state
+        state.set("counter", counter + 1);
+
+        Output {
+            result: format!("Processed {} times", counter + 1),
+            success: true,
+        }
+    }
+}
+```
+
+### エラーハンドリング
+
+エラーハンドリングには Result 型を使います:
+
+```rust
+impl Guest for SafeProcessor {
+    fn process(input: Input) -> Result<Output, Error> {
+        if input.message.is_empty() {
+            return Err(Error::InvalidInput("Message cannot be empty".into()));
+        }
+
+        Ok(Output {
+            result: process_message(&input.message)?,
+            success: true,
+        })
+    }
+}
+```
+
+## 組み込み Components
+
+Greentic はいくつかの組み込み component を提供します:
+
+### component-llm-openai
+
+OpenAI-compatible LLM を呼び出します:
+
+```yaml
+- id: analyze
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant."
+    prompt: "{{message}}"
+```
+
+### component-templates
+
+Handlebars template を render します:
+
+```yaml
+- id: format
+  type: template
+  config:
+    template: "Hello, {{name}}! Your order #{{order_id}} is ready."
+```
+
+### component-script-rhai
+
+Rhai script を実行します:
+
+```yaml
+- id: calculate
+  type: script
+  config:
+    script: |
+      let total = 0;
+      for item in items {
+        total += item.price * item.quantity;
+      }
+      total
+```
+
+### component-adaptive-card
+
+Adaptive Cards を render および validate します:
+
+```yaml
+- id: show_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+    data:
+      user_name: "{{user_name}}"
+```
+
+## Component のテスト
+
+### Unit Tests
+
+```rust title="src/lib.rs"
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process() {
+        let input = Input {
+            message: "Hello".into(),
+            context: None,
+        };
+
+        let output = MyProcessor::process(input);
+
+        assert!(output.success);
+        assert!(output.result.contains("Processed"));
+    }
+}
+```
+
+### Integration Tests
+
+```bash
+# Run with test harness
+greentic-component test ./my-processor
+
+# Test with sample input
+echo '{"message": "test"}' | greentic-component run ./my-processor.wasm
+```
+
+## Component のベストプラクティス
+
+<Aside type="tip">
+production 品質の component のために、次のガイドラインに従ってください:
+</Aside>
+
+1. **Keep components focused** - 単一責務にする
+2. **Handle all errors** - production で panic させない
+3. **Minimize dependencies** - WASM binary を小さく保つ
+4. **Use strong types** - 型安全のために WIT を活用する
+5. **Document interfaces** - WIT definition を明確にする
+6. **Test thoroughly** - unit test と integration test を行う
+7. **Optimize size** - LTO と size optimization を使う
+
+## Component のデバッグ
+
+### WASM Inspection
+
+```bash
+# Inspect component exports
+wasm-tools component wit ./my-processor.wasm
+
+# Validate component
+wasm-tools validate ./my-processor.wasm
+```
+
+### Logging
+
+WASI logging interface を使います:
+
+```rust
+use greentic_interfaces::log;
+
+impl Guest for DebugProcessor {
+    fn process(input: Input) -> Output {
+        log::debug(&format!("Processing: {:?}", input));
+
+        // ... processing ...
+
+        log::info("Processing complete");
+        output
+    }
+}
+```
+
+## 次のステップ
+
+- [Providers](/ja/concepts/providers/) - provider component を構築する
+- [MCP Tools](/ja/mcp/creating-tools/) - MCP tool component を作成する
+- [WIT Interfaces Reference](/ja/reference/wit-interfaces/) - 完全な WIT specification

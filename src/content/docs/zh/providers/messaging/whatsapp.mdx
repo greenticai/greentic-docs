@@ -1,0 +1,364 @@
+---
+title: WhatsApp
+description: 将你的数字员工连接到 WhatsApp Business
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+WhatsApp provider 通过 Meta 与 WhatsApp Business API 集成。它支持：
+
+- 文本消息
+- 模板消息
+- 交互按钮
+- 列表消息
+- 媒体（图片、文档、音频、视频）
+- 位置共享
+
+## 前置条件
+
+- Meta Business 账号
+- WhatsApp Business API 访问权限
+- 已验证的电话号码
+
+## 设置
+
+<Steps>
+
+1. **创建 Meta App**
+
+   前往 [developers.facebook.com](https://developers.facebook.com)：
+   - 创建一个新 app（Business 类型）
+   - 添加 WhatsApp product
+   - 设置 WhatsApp Business API
+
+2. **获取 API 凭证**
+
+   在你的 Meta app dashboard 中：
+   - 前往 WhatsApp → Getting Started
+   - 复制 **Phone Number ID**
+   - 生成并复制 **Permanent Access Token**
+   - 记录 **Business Account ID**
+
+3. **配置 Webhook**
+
+   在 WhatsApp → Configuration 中：
+   - 设置 Callback URL：`https://your-domain.com/webhook/whatsapp/{tenant}/{team}`
+   - 设置 Verify Token（任意你自定义的字符串）
+   - 订阅：`messages`
+
+4. **配置 Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-whatsapp": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "phone_number_id": "123456789012345",
+       "access_token": "EAAxxxxx...",
+       "verify_token": "your-verify-token",
+       "business_account_id": "987654321098765"
+     }
+   }
+   ```
+
+5. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | webhook 的公网 URL |
+| `phone_number_id` | 是 | WhatsApp phone number ID |
+| `access_token` | 是 | Permanent access token |
+| `verify_token` | 是 | webhook 验证 token |
+| `business_account_id` | 否 | WhatsApp Business Account ID |
+| `api_version` | 否 | Graph API 版本（默认：v18.0） |
+
+## 功能
+
+### 文本消息
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### 模板消息
+
+<Aside type="caution">
+WhatsApp 要求在主动发起对话时使用预先批准的模板。模板必须先通过 Meta 审批后才能使用。
+</Aside>
+
+```yaml
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "order_confirmation"
+      language: "en"
+      components:
+        - type: body
+          parameters:
+            - type: text
+              text: "{{order_id}}"
+            - type: text
+              text: "{{customer_name}}"
+```
+
+### 交互按钮
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    interactive:
+      type: button
+      body:
+        text: "What would you like to do?"
+      action:
+        buttons:
+          - type: reply
+            reply:
+              id: "help"
+              title: "Get Help"
+          - type: reply
+            reply:
+              id: "status"
+              title: "Check Status"
+          - type: reply
+            reply:
+              id: "human"
+              title: "Talk to Human"
+```
+
+### 列表消息
+
+```yaml
+- id: show_menu
+  type: reply
+  config:
+    interactive:
+      type: list
+      header:
+        type: text
+        text: "Support Menu"
+      body:
+        text: "Please select an option:"
+      action:
+        button: "View Options"
+        sections:
+          - title: "Support"
+            rows:
+              - id: "technical"
+                title: "Technical Support"
+                description: "Hardware and software issues"
+              - id: "billing"
+                title: "Billing"
+                description: "Payment and invoices"
+          - title: "Sales"
+            rows:
+              - id: "pricing"
+                title: "Pricing"
+                description: "Product pricing information"
+```
+
+### 发送图片
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    media:
+      type: image
+      link: "https://example.com/product.jpg"
+      caption: "Here's the product image"
+```
+
+### 发送文档
+
+```yaml
+- id: send_document
+  type: reply
+  config:
+    media:
+      type: document
+      link: "https://example.com/invoice.pdf"
+      filename: "invoice.pdf"
+      caption: "Your invoice is attached"
+```
+
+### 发送位置
+
+```yaml
+- id: send_location
+  type: reply
+  config:
+    location:
+      latitude: 37.7749
+      longitude: -122.4194
+      name: "Our Office"
+      address: "123 Main St, San Francisco, CA"
+```
+
+## 处理按钮点击
+
+```yaml title="flows/on_button.ygtc"
+name: handle_button
+version: "1.0"
+
+nodes:
+  - id: route_button
+    type: branch
+    config:
+      conditions:
+        - expression: "button.id == 'help'"
+          next: show_help
+        - expression: "button.id == 'status'"
+          next: check_status
+        - expression: "button.id == 'human'"
+          next: escalate
+      default: unknown
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: interactive
+    target: route_button
+```
+
+## 消息模板
+
+### 创建模板
+
+1. 前往 Meta Business Suite → WhatsApp Manager → Message Templates
+2. 创建一个包含所需组件的新模板
+3. 提交审核（通常需要 24-48 小时）
+
+### 模板组件
+
+```yaml
+- id: send_notification
+  type: reply
+  config:
+    template:
+      name: "appointment_reminder"
+      language: "en"
+      components:
+        - type: header
+          parameters:
+            - type: image
+              image:
+                link: "https://example.com/logo.png"
+        - type: body
+          parameters:
+            - type: text
+              text: "{{customer_name}}"
+            - type: text
+              text: "{{appointment_time}}"
+        - type: button
+          sub_type: quick_reply
+          index: 0
+          parameters:
+            - type: payload
+              payload: "confirm"
+```
+
+## 24 小时时间窗
+
+<Aside type="note">
+WhatsApp 强制执行 24 小时消息窗口。如果用户在 24 小时内没有回复，你必须使用模板消息。
+</Aside>
+
+### 检查窗口状态
+
+```yaml
+- id: check_window
+  type: branch
+  config:
+    conditions:
+      - expression: "last_message_time + 86400 > now"
+        next: send_freeform
+      default: send_template
+
+- id: send_freeform
+  type: reply
+  config:
+    message: "Thanks for your message!"
+
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "follow_up"
+      language: "en"
+```
+
+## 故障排查
+
+### Webhook 验证失败
+
+1. 确认 `verify_token` 与配置一致
+2. 检查 webhook URL 可被公网访问
+3. 确保 HTTPS 配置正确
+
+### 消息未送达
+
+- 检查电话号码格式（包含国家区号）
+- 确认模板已通过审核（若使用模板）
+- 检查 24 小时时间窗状态
+- 查看 Meta webhook 日志
+
+### 速率限制
+
+WhatsApp 的速率限制基于质量评级：
+- Tier 1: 每天 1,000 条消息
+- Tier 2: 每天 10,000 条消息
+- Tier 3: 每天 100,000 条消息
+
+请优雅处理：
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+```
+
+## 安全
+
+<Aside type="caution">
+校验 webhook 签名，以确保请求来自 Meta。
+</Aside>
+
+Greentic 会校验：
+- X-Hub-Signature-256 header
+- 使用 app secret 计算的 payload 哈希
+
+## 最佳实践
+
+1. **合理使用模板** - 创建通用且已审核通过的模板
+2. **遵守 24 小时时间窗** - 跟踪用户互动状态
+3. **处理退订** - 尊重 STOP/UNSUBSCRIBE 请求
+4. **保持消息简洁** - WhatsApp 适合快速沟通
+5. **使用富媒体** - 图片和文档可以提升体验
+
+## 下一步
+
+- [Telegram Provider](/zh/providers/messaging/telegram/) - 替代消息渠道
+- [Template Guidelines](https://developers.facebook.com/docs/whatsapp/message-templates/) - Meta 的模板规则
+- [Flows Guide](/zh/concepts/flows/) - 构建复杂工作流

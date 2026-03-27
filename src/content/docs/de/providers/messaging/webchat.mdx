@@ -1,0 +1,667 @@
+---
+title: WebChat
+description: Ein Chat-Widget in Ihre Website einbetten
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der WebChat-Provider ermöglicht es Ihnen, ein Chat-Widget direkt in Ihre Website einzubetten. Er unterstützt:
+
+- Echtzeit-Messaging
+- Adaptive Cards
+- Datei-Uploads
+- Benutzerdefiniertes Theming
+- Mobile Responsiveness
+- OAuth/OIDC-Authentifizierung (Google, Microsoft Entra ID, GitHub, benutzerdefiniertes OIDC)
+- Integrierte Locale-Auswahl für die Sprachwahl
+
+## Architektur
+
+```
+User's Browser
+    │
+    ▼ WebSocket
+┌─────────────────────────────────────────┐
+│          WebChat Widget (React)         │
+│     (greentic-webchat component)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ Direct Line Protocol
+┌─────────────────────────────────────────┐
+│        Direct Line Server               │
+│   (greentic-messaging-providers)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ NATS
+┌─────────────────────────────────────────┐
+│          Greentic Runner                │
+└─────────────────────────────────────────┘
+```
+
+## Einrichtung
+
+<Steps>
+
+1. **Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "allowed_origins": ["https://yoursite.com"],
+       "session_timeout": 1800
+     }
+   }
+   ```
+
+2. **Setup ausführen**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **Runtime starten**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+4. **In Website einbetten**
+
+   Fügen Sie das Widget zu Ihrem HTML hinzu:
+
+   ```html
+   <script src="https://your-domain.com/webchat/widget.js"></script>
+   <script>
+     GreenticWebChat.init({
+       directLine: {
+         domain: 'https://your-domain.com/webchat',
+         webSocket: true
+       },
+       tenant: 'demo',
+       team: 'default',
+       theme: {
+         primaryColor: '#0078D4'
+       }
+     });
+   </script>
+   ```
+
+</Steps>
+
+## Konfigurationsoptionen
+
+| Option | Erforderlich | Beschreibung |
+|--------|----------|-------------|
+| `enabled` | Ja | Provider aktivieren/deaktivieren |
+| `public_base_url` | Ja | Basis-URL für Direct Line |
+| `allowed_origins` | Nein | Für CORS erlaubte Origins |
+| `session_timeout` | Nein | Session-Timeout in Sekunden (Standard: 1800) |
+| `token_expiry` | Nein | Token-Ablauf in Sekunden (Standard: 3600) |
+| `oauth_enabled` | Nein | OAuth/OIDC-Login für WebChat aktivieren (Standard: false) |
+| `oauth_provider` | Nein | OAuth-Provider: `google`, `microsoft`, `github` oder `oidc` |
+| `oauth_client_id` | Nein | OAuth-Client-ID (erforderlich, wenn `oauth_enabled` true ist) |
+| `oauth_authority` | Nein | OIDC-Authority-/Issuer-URL (erforderlich für `microsoft`- und `oidc`-Provider) |
+| `oauth_scopes` | Nein | Anzufordernde OAuth-Scopes (Standards variieren je nach Provider) |
+
+## Widget-Konfiguration
+
+### Grundlegendes Setup
+
+```html
+<script src="https://your-domain.com/webchat/widget.js"></script>
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### Mit Theming
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    theme: {
+      primaryColor: '#0078D4',
+      backgroundColor: '#f5f5f5',
+      bubbleBackground: '#ffffff',
+      bubbleFromUserBackground: '#0078D4',
+      bubbleTextColor: '#333333',
+      bubbleFromUserTextColor: '#ffffff',
+      sendBoxBackground: '#ffffff',
+      sendBoxTextColor: '#333333'
+    }
+  });
+</script>
+```
+
+### Mit Benutzerinformationen
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    user: {
+      id: 'user-123',
+      name: 'John Doe',
+      email: 'john@example.com'
+    }
+  });
+</script>
+```
+
+### Minimierter Start
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    startMinimized: true,
+    showToggleButton: true
+  });
+</script>
+```
+
+## Funktionen
+
+### Textnachrichten
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Adaptive Cards
+
+WebChat bietet vollständige Unterstützung für Adaptive Cards:
+
+```yaml
+- id: welcome_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "I'm your virtual assistant. How can I help?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Contact Support"
+              data:
+                action: "support"
+```
+
+### Quick Replies (Suggested Actions)
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - "Check Order Status"
+      - "Talk to Support"
+      - "View FAQs"
+```
+
+### Datei-Uploads
+
+Datei-Uploads aktivieren:
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  uploadEnabled: true,
+  uploadAccept: '.pdf,.doc,.docx,.png,.jpg',
+  uploadMaxSize: 10485760  // 10MB
+});
+```
+
+Uploads im Flow verarbeiten:
+
+```yaml
+- id: handle_upload
+  type: branch
+  config:
+    conditions:
+      - expression: "attachments.length > 0"
+        next: process_file
+      default: normal_message
+
+- id: process_file
+  type: reply
+  config:
+    message: "Thanks! I've received your file: {{attachments[0].name}}"
+```
+
+### Tippindikator
+
+```yaml
+- id: thinking
+  type: reply
+  config:
+    typing: true
+    typing_duration: 2000  # milliseconds
+  next: actual_reply
+
+- id: actual_reply
+  type: reply
+  config:
+    message: "Here's what I found..."
+```
+
+## API-Integration
+
+### JavaScript-API
+
+```javascript
+// Get chat instance
+const chat = GreenticWebChat.getInstance();
+
+// Send message programmatically
+chat.sendMessage('Hello from JS!');
+
+// Minimize/maximize
+chat.minimize();
+chat.maximize();
+
+// Clear conversation
+chat.clear();
+
+// End conversation
+chat.end();
+
+// Listen for events
+chat.on('message', (event) => {
+  console.log('New message:', event.text);
+});
+
+chat.on('conversationStarted', () => {
+  console.log('Conversation started');
+});
+```
+
+### REST-API
+
+Direct-Line-REST-API-Endpunkte:
+
+```bash
+# Start conversation
+POST /webchat/v3/directline/conversations
+Authorization: Bearer <token>
+
+# Send message
+POST /webchat/v3/directline/conversations/{conversationId}/activities
+Content-Type: application/json
+
+{
+  "type": "message",
+  "text": "Hello!"
+}
+
+# Get messages
+GET /webchat/v3/directline/conversations/{conversationId}/activities
+```
+
+## Anpassung
+
+### Benutzerdefiniertes CSS
+
+```html
+<style>
+  .greentic-webchat {
+    --primary-color: #0078D4;
+    --background-color: #ffffff;
+    --text-color: #333333;
+    --border-radius: 8px;
+    --font-family: 'Segoe UI', sans-serif;
+  }
+
+  .greentic-webchat .message-bubble {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .greentic-webchat .send-button {
+    background-color: var(--primary-color);
+  }
+</style>
+```
+
+### Benutzerdefinierter Avatar
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  botAvatar: 'https://example.com/bot-avatar.png',
+  userAvatar: 'https://example.com/user-avatar.png',
+  showAvatars: true
+});
+```
+
+### Benutzerdefinierter Header
+
+Der Header-Bereich kann einen Titel, einen Untertitel und einen Schließen-Button anzeigen. Wenn die Locale-Auswahl aktiviert ist, erscheint sie im Header. Wenn OAuth aktiviert ist, wird außerdem ein Logout-Button neben der Locale-Auswahl im Header gerendert.
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  header: {
+    title: 'Support Chat',
+    subtitle: 'We usually reply within minutes',
+    showCloseButton: true
+  }
+});
+```
+
+## Mehrsprachige Unterstützung
+
+Die WebChat-GUI enthält eine integrierte Locale-Auswahl, mit der Benutzer zur Laufzeit die Sprache wechseln können. Die Locale-Auswahl erscheint im Chat-Header und ermöglicht Benutzern, ihre bevorzugte Sprache auszuwählen, ohne die Seite neu zu laden.
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  locale: 'es-ES',
+  showLocalePicker: true,
+  availableLocales: ['en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP'],
+  strings: {
+    'placeholder': 'Escribe un mensaje...',
+    'send': 'Enviar',
+    'connecting': 'Conectando...',
+    'reconnecting': 'Reconectando...'
+  }
+});
+```
+
+Wenn `showLocalePicker` aktiviert ist, erscheint ein Sprachwähler im Header neben dem Schließen-Button (und dem Logout-Button, falls OAuth aktiviert ist). Beim Wechseln der Locale werden alle UI-Strings aktualisiert, und der Flow wird benachrichtigt, damit Antworten an die gewählte Sprache angepasst werden können.
+
+## OAuth/OIDC-Authentifizierung
+
+WebChat unterstützt optionale OAuth/OIDC-Authentifizierung, damit sich Benutzer anmelden müssen, bevor sie auf den Chat zugreifen können. Wenn sie aktiviert ist, wird ein Login-Overlay angezeigt, bevor die Chat-Oberfläche verfügbar wird. Die Implementierung verwendet aus Sicherheitsgründen einen clientseitigen PKCE-Flow (Proof Key for Code Exchange).
+
+<Aside type="tip">
+OAuth-Authentifizierung ist vollständig optional. Wenn sie nicht konfiguriert ist, arbeitet WebChat wie in früheren Versionen ohne Login-Anforderung.
+</Aside>
+
+### Unterstützte Provider
+
+| Provider | Wert für `oauth_provider` | Hinweise |
+|----------|----------------------|-------|
+| Google | `google` | Google OAuth 2.0 mit Google Identity Services |
+| Microsoft (Entra ID) | `microsoft` | Azure AD / Entra ID, erfordert `oauth_authority` |
+| GitHub | `github` | GitHub OAuth Apps |
+| Benutzerdefiniertes OIDC | `oidc` | Jeder OpenID-Connect-konforme Provider, erfordert `oauth_authority` |
+
+### Funktionsweise
+
+1. Der Benutzer öffnet das WebChat-Widget
+2. Ein Login-Overlay mit einer Anmelden-Schaltfläche für den konfigurierten Provider wird angezeigt
+3. Der Benutzer authentifiziert sich über den Login-Flow des Providers (clientseitiges PKCE)
+4. Nach erfolgreicher Authentifizierung wird das Overlay ausgeblendet und der Chat ist zugänglich
+5. Die Identität des authentifizierten Benutzers wird dem Flow als Benutzerkontext übergeben
+6. Im Header erscheint ein Logout-Button (neben der Locale-Auswahl) zum Abmelden
+
+### Provider-Setup
+
+Jeder Provider wird über die Datei `answers.json` oder interaktiv über den QA-basierten Setup-Assistenten konfiguriert. Der Setup-Assistent verwendet bedingte Logik, um Sie nur durch die Felder zu führen, die für den gewählten Provider erforderlich sind.
+
+#### Google
+
+<Steps>
+
+1. **OAuth-Zugangsdaten erstellen** in der [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+
+   - Erstellen Sie eine neue OAuth 2.0 Client ID
+   - Setzen Sie den Anwendungstyp auf "Web application"
+   - Fügen Sie Ihre WebChat-Domain zu "Authorized JavaScript origins" hinzu
+   - Fügen Sie `https://your-domain.com/webchat/auth/callback` zu "Authorized redirect URIs" hinzu
+
+2. **Den Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "google",
+       "oauth_client_id": "123456789.apps.googleusercontent.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+3. **Setup ausführen und starten**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Microsoft (Entra ID)
+
+<Steps>
+
+1. **Eine Anwendung registrieren** im [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps)
+
+   - Registrieren Sie eine neue Anwendung unter "App registrations"
+   - Setzen Sie die Redirect URI auf `https://your-domain.com/webchat/auth/callback` (Typ: SPA)
+   - Aktivieren Sie unter "Authentication" "Access tokens" und "ID tokens" für implicit grant
+   - Notieren Sie sich Ihre Application (client) ID und Directory (tenant) ID
+
+2. **Den Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "microsoft",
+       "oauth_client_id": "your-application-client-id",
+       "oauth_authority": "https://login.microsoftonline.com/your-tenant-id/v2.0",
+       "oauth_scopes": "openid profile email User.Read"
+     }
+   }
+   ```
+
+3. **Setup ausführen und starten**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### GitHub
+
+<Steps>
+
+1. **Eine OAuth App erstellen** in [GitHub Developer Settings](https://github.com/settings/developers)
+
+   - Gehen Sie zu "OAuth Apps" und erstellen Sie eine neue Anwendung
+   - Setzen Sie die "Authorization callback URL" auf `https://your-domain.com/webchat/auth/callback`
+   - Notieren Sie sich die Client ID
+
+2. **Den Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "github",
+       "oauth_client_id": "your-github-client-id",
+       "oauth_scopes": "read:user user:email"
+     }
+   }
+   ```
+
+3. **Setup ausführen und starten**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Benutzerdefinierter OIDC-Provider
+
+<Steps>
+
+1. **Einen Client registrieren** bei Ihrem OIDC-Provider
+
+   - Setzen Sie die Redirect URI auf `https://your-domain.com/webchat/auth/callback`
+   - Stellen Sie sicher, dass Ihr Provider PKCE unterstützt
+   - Notieren Sie sich die Client ID und die Issuer-/Authority-URL
+
+2. **Den Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "oidc",
+       "oauth_client_id": "your-client-id",
+       "oauth_authority": "https://your-oidc-provider.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+   `oauth_authority` muss auf die Issuer-URL zeigen, unter der `/.well-known/openid-configuration` verfügbar ist.
+
+3. **Setup ausführen und starten**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+### Widget-Konfiguration mit OAuth
+
+Wenn OAuth serverseitig aktiviert ist, zeigt das Widget automatisch das Login-Overlay an. Es ist keine zusätzliche clientseitige Konfiguration erforderlich. Die Identität des authentifizierten Benutzers ist in Flows über den Benutzerkontext verfügbar:
+
+```javascript
+GreenticWebChat.init({
+  directLine: {
+    domain: 'https://your-domain.com/webchat'
+  },
+  tenant: 'demo',
+  team: 'default'
+  // OAuth login overlay is shown automatically when oauth_enabled is true
+});
+```
+
+Nach der Authentifizierung zeigt der Header neben der Locale-Auswahl einen Logout-Button an. Ein Klick darauf löscht die Session und bringt den Benutzer zurück zum Login-Overlay.
+
+### Interaktives Setup über den QA-Assistenten
+
+Anstatt `answers.json` manuell zu schreiben, können Sie den interaktiven Setup-Assistenten verwenden, der Sie mit bedingter Logik durch die providerspezifische Konfiguration führt:
+
+```bash
+gtc setup ./my-bundle
+```
+
+Der Assistent erkennt, wenn `oauth_enabled` auf `true` gesetzt ist, und stellt Anschlussfragen nur für den ausgewählten `oauth_provider`, sodass Sie nur Felder sehen, die für Ihren gewählten Identity Provider relevant sind.
+
+## Sicherheit
+
+<Aside type="caution">
+Konfigurieren Sie in Produktion immer `allowed_origins`, um unbefugtes Einbetten zu verhindern.
+</Aside>
+
+### Token-Sicherheit
+
+- Tokens sind kurzlebig (standardmäßig 1 Stunde)
+- Tokens sind auf die Konversation beschränkt
+- Refresh Tokens werden nicht an den Client ausgegeben
+
+### OAuth/OIDC-Sicherheit
+
+Wenn OAuth aktiviert ist:
+
+- Verwendet die Authentifizierung den PKCE-Flow, der im Frontend kein Client Secret benötigt
+- Werden Tokens serverseitig validiert, bevor Chat-Zugriff gewährt wird
+- Blockiert das Login-Overlay jede Chat-Interaktion, bis die Authentifizierung erfolgreich war
+- Löscht Session-Logout Tokens vom Client und invalidiert die serverseitige Session
+
+### CORS-Konfiguration
+
+```json
+{
+  "messaging-webchat": {
+    "allowed_origins": [
+      "https://www.example.com",
+      "https://app.example.com"
+    ]
+  }
+}
+```
+
+## Fehlerbehebung
+
+### Widget wird nicht geladen
+
+1. Prüfen Sie die Konsole auf JavaScript-Fehler
+2. Stellen Sie sicher, dass die Script-URL korrekt ist
+3. Prüfen Sie die CORS-Konfiguration
+
+### Verbindung fehlgeschlagen
+
+1. Stellen Sie sicher, dass der Direct-Line-Endpunkt erreichbar ist
+2. Prüfen Sie die WebSocket-Unterstützung
+3. Sehen Sie die Firewall-Einstellungen durch
+
+### Nachrichten werden nicht gesendet
+
+1. Stellen Sie sicher, dass die Konversation aktiv ist
+2. Prüfen Sie, ob das Token nicht abgelaufen ist
+3. Sehen Sie die Browser-Konsole auf Fehler durch
+
+## Nächste Schritte
+
+- [Adaptive Cards](/de/components/cards2pack/) - Umfangreiche Karten erstellen
+- [Theming-Leitfaden](/de/reference/webchat-theming/) - Erweiterte Anpassung
+- [Flows-Leitfaden](/de/concepts/flows/) - Konversations-Flows erstellen

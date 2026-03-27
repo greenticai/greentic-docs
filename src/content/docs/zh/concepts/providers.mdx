@@ -1,0 +1,330 @@
+---
+title: Providers
+description: 理解 Greentic 中的 provider components
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 什么是 Provider？
+
+**Provider** 是一种将 Greentic 与外部服务桥接起来的 WASM component。Providers 负责：
+
+- **Ingress** - 从外部系统接收消息/事件
+- **Egress** - 向外部系统发送消息/事件
+- **Operations** - 平台特定功能（按钮、卡片、线程）
+
+## Provider 类型
+
+<CardGrid>
+  <Card title="Messaging Providers" icon="seti:message">
+    处理聊天消息：Slack、Teams、Telegram、WhatsApp、WebChat、Webex、Email
+  </Card>
+  <Card title="Events Providers" icon="seti:pulse">
+    处理事件：Webhooks、Timers、Email (SendGrid)、SMS (Twilio)
+  </Card>
+  <Card title="Secrets Providers" icon="seti:lock">
+    管理凭证：AWS、Azure、GCP、Vault、Kubernetes
+  </Card>
+  <Card title="State Providers" icon="seti:db">
+    持久化数据：Memory、Redis、PostgreSQL
+  </Card>
+</CardGrid>
+
+## Provider 架构
+
+### Messaging Provider 流程
+
+```
+External Service (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────┐
+│ Ingress Component │ ← Parse platform-specific format
+└─────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────┐
+│   NATS Bus      │ ← greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│ Flow Executor   │ ← Process with flows
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   NATS Bus      │ ← greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+└─────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────┐
+│ Egress Component│ ← Format for platform API
+└─────────────────┘
+    │
+    ▼ API Call
+External Service
+```
+
+## Provider Pack 结构
+
+```
+messaging-telegram.gtpack/
+├── pack.toml
+├── flows/
+│   ├── setup.ygtc        # Provider setup flow
+│   └── verify.ygtc       # Webhook verification
+├── components/
+│   ├── ingress.wasm      # Webhook handler
+│   ├── egress.wasm       # API sender
+│   └── operator.wasm     # Buttons, threads, cards
+└── assets/
+    └── schemas/
+        └── message.json  # Message schema
+```
+
+### Pack Manifest
+
+```toml title="pack.toml"
+[pack]
+name = "messaging-telegram"
+version = "1.0.0"
+description = "Telegram messaging provider"
+
+[capabilities]
+id = "greentic.cap.messaging.provider.v1"
+provides = ["telegram"]
+
+[flows]
+setup_default = "flows/setup.ygtc"
+verify_webhooks = "flows/verify.ygtc"
+
+[components]
+ingress = "components/ingress.wasm"
+egress = "components/egress.wasm"
+operator = "components/operator.wasm"
+
+[secrets]
+required = ["telegram_bot_token"]
+optional = ["public_base_url"]
+```
+
+## 构建一个 Provider
+
+### 1. 定义 WIT 接口
+
+```wit title="wit/provider.wit"
+package greentic:messaging-provider;
+
+interface ingress {
+    record raw-message {
+        body: list<u8>,
+        headers: list<tuple<string, string>>,
+        query-params: list<tuple<string, string>>,
+    }
+
+    record normalized-message {
+        id: string,
+        channel-id: string,
+        sender-id: string,
+        content: string,
+        timestamp: u64,
+        metadata: option<string>,
+    }
+
+    parse: func(raw: raw-message) -> result<normalized-message, string>;
+}
+
+interface egress {
+    record outbound-message {
+        channel-id: string,
+        content: string,
+        reply-to: option<string>,
+        attachments: list<attachment>,
+    }
+
+    record attachment {
+        type: string,
+        url: option<string>,
+        data: option<list<u8>>,
+    }
+
+    send: func(msg: outbound-message) -> result<string, string>;
+}
+
+world messaging-provider {
+    import greentic:types/core;
+
+    export ingress;
+    export egress;
+}
+```
+
+### 2. 实现 Ingress
+
+```rust title="src/ingress.rs"
+use wit_bindgen::generate;
+
+generate!({
+    world: "messaging-provider",
+    path: "wit",
+});
+
+impl ingress::Guest for TelegramIngress {
+    fn parse(raw: RawMessage) -> Result<NormalizedMessage, String> {
+        // Parse Telegram webhook payload
+        let payload: TelegramUpdate = serde_json::from_slice(&raw.body)
+            .map_err(|e| format!("Parse error: {}", e))?;
+
+        let message = payload.message
+            .ok_or("No message in update")?;
+
+        Ok(NormalizedMessage {
+            id: message.message_id.to_string(),
+            channel_id: message.chat.id.to_string(),
+            sender_id: message.from.id.to_string(),
+            content: message.text.unwrap_or_default(),
+            timestamp: message.date as u64,
+            metadata: Some(serde_json::to_string(&message)?),
+        })
+    }
+}
+```
+
+### 3. 实现 Egress
+
+```rust title="src/egress.rs"
+impl egress::Guest for TelegramEgress {
+    fn send(msg: OutboundMessage) -> Result<String, String> {
+        let bot_token = get_secret("telegram_bot_token")?;
+
+        let url = format!(
+            "https://api.telegram.org/bot{}/sendMessage",
+            bot_token
+        );
+
+        let payload = SendMessage {
+            chat_id: msg.channel_id.parse()?,
+            text: msg.content,
+            reply_to_message_id: msg.reply_to.map(|id| id.parse().ok()).flatten(),
+        };
+
+        let response = http_post(&url, &serde_json::to_vec(&payload)?)?;
+
+        if response.status == 200 {
+            Ok(response.body)
+        } else {
+            Err(format!("Telegram API error: {}", response.status))
+        }
+    }
+}
+```
+
+### 4. Setup Flow
+
+```yaml title="flows/setup.ygtc"
+name: setup_default
+version: "1.0"
+description: Configure Telegram webhook
+
+nodes:
+  - id: get_public_url
+    type: config
+    config:
+      key: "public_base_url"
+      output: "base_url"
+    next: set_webhook
+
+  - id: set_webhook
+    type: http
+    config:
+      method: POST
+      url: "https://api.telegram.org/bot{{secrets.telegram_bot_token}}/setWebhook"
+      body:
+        url: "{{base_url}}/webhook/telegram/{{tenant_id}}/{{team_id}}"
+    next: verify_result
+
+  - id: verify_result
+    type: branch
+    config:
+      conditions:
+        - expression: "http_response.ok == true"
+          next: success
+      default: failure
+
+  - id: success
+    type: log
+    config:
+      level: info
+      message: "Telegram webhook configured successfully"
+
+  - id: failure
+    type: error
+    config:
+      message: "Failed to configure Telegram webhook: {{http_response.description}}"
+
+triggers:
+  - type: setup
+    target: get_public_url
+```
+
+## Provider 配置
+
+### 在 Bundle 中
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+    config:
+      api_base_url: "https://api.telegram.org"
+```
+
+### Secrets
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  }
+}
+```
+
+## NATS Subjects
+
+Providers 通过 NATS 通信：
+
+| Subject Pattern | 用途 |
+|----------------|---------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | 入站消息 |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | 出站消息 |
+| `greentic.events.{env}.{tenant}.{type}` | 事件通知 |
+
+## 可用 Providers
+
+### Messaging
+
+- [Slack](/zh/providers/messaging/slack/)
+- [Microsoft Teams](/zh/providers/messaging/teams/)
+- [Telegram](/zh/providers/messaging/telegram/)
+- [WhatsApp](/zh/providers/messaging/whatsapp/)
+- [WebChat](/zh/providers/messaging/webchat/)
+- [Webex](/zh/providers/messaging/webex/)
+- [Email](/zh/providers/messaging/email/)
+
+### Events
+
+- [Webhook](/zh/providers/events/webhook/)
+- [Timer](/zh/providers/events/timer/)
+- [Email (SendGrid)](/zh/providers/events/email-sendgrid/)
+- [SMS (Twilio)](/zh/providers/events/sms-twilio/)
+
+## 下一步
+
+- [Messaging Providers Overview](/zh/providers/messaging/overview/)
+- [Events Providers Overview](/zh/providers/events/overview/)
+- [Multi-Tenancy](/zh/concepts/multi-tenancy/)

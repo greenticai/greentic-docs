@@ -1,0 +1,342 @@
+---
+title: Components
+description: 为 Greentic 构建 WASM components
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 什么是 Component？
+
+**Component** 是一个可移植的 WebAssembly (WASM) 构建单元，实现了 Greentic 的 WIT 接口。Components 具有以下特性：
+
+- **Sandboxed** - 在隔离的 WASM 环境中执行
+- **Portable** - 可在任何带有 Wasmtime 的平台上运行
+- **Composable** - 可组合构建复杂工作流
+- **Language-agnostic** - 可使用 Rust、Go 或任何兼容 WASM 的语言编写
+
+## Component 类型
+
+| 类型 | 用途 | 示例 |
+|------|---------|---------|
+| **Node** | Flow 处理步骤 | LLM 调用器、模板渲染器 |
+| **Provider** | 外部服务桥接 | Telegram、Slack、SendGrid |
+| **Tool** | MCP tool 实现 | 数据库查询、API 调用 |
+| **Operator** | 消息转换 | 按钮处理、卡片渲染 |
+
+## 创建一个 Component
+
+### 项目初始化
+
+使用组件编写 CLI：
+
+```bash
+# Create new component project
+greentic-component new my-processor
+
+cd my-processor
+```
+
+这会生成：
+
+```
+my-processor/
+├── Cargo.toml
+├── src/
+│   └── lib.rs
+├── wit/
+│   └── component.wit
+└── build.sh
+```
+
+### Cargo.toml
+
+```toml title="Cargo.toml"
+[package]
+name = "my-processor"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.53"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+```
+
+### WIT 接口
+
+定义你的组件接口：
+
+```wit title="wit/component.wit"
+package greentic:my-processor;
+
+interface types {
+    record input {
+        message: string,
+        context: option<string>,
+    }
+
+    record output {
+        result: string,
+        success: bool,
+    }
+}
+
+world processor {
+    import types;
+
+    export process: func(input: types.input) -> types.output;
+}
+```
+
+### 实现
+
+```rust title="src/lib.rs"
+use wit_bindgen::generate;
+
+generate!({
+    world: "processor",
+    path: "wit",
+});
+
+struct MyProcessor;
+
+impl Guest for MyProcessor {
+    fn process(input: Input) -> Output {
+        // Your processing logic here
+        let result = format!("Processed: {}", input.message);
+
+        Output {
+            result,
+            success: true,
+        }
+    }
+}
+
+export!(MyProcessor);
+```
+
+### 构建
+
+```bash
+# Build for WASM target
+cargo build --target wasm32-wasip2 --release
+
+# Output: target/wasm32-wasip2/release/my_processor.wasm
+```
+
+## 高级 Component 模式
+
+### 异步操作
+
+Components 可以使用 WASI 接口执行异步操作：
+
+```rust
+use wit_bindgen::generate;
+
+generate!({
+    world: "async-processor",
+    path: "wit",
+    async: true,
+});
+
+impl Guest for AsyncProcessor {
+    async fn process(input: Input) -> Output {
+        // Async HTTP call
+        let response = http_fetch(&input.url).await;
+
+        Output {
+            result: response.body,
+            success: response.status == 200,
+        }
+    }
+}
+```
+
+### 状态管理
+
+在 components 中访问 session state：
+
+```rust
+impl Guest for StatefulProcessor {
+    fn process(input: Input, state: &mut State) -> Output {
+        // Read from state
+        let counter = state.get("counter").unwrap_or(0);
+
+        // Update state
+        state.set("counter", counter + 1);
+
+        Output {
+            result: format!("Processed {} times", counter + 1),
+            success: true,
+        }
+    }
+}
+```
+
+### 错误处理
+
+使用 Result 类型进行错误处理：
+
+```rust
+impl Guest for SafeProcessor {
+    fn process(input: Input) -> Result<Output, Error> {
+        if input.message.is_empty() {
+            return Err(Error::InvalidInput("Message cannot be empty".into()));
+        }
+
+        Ok(Output {
+            result: process_message(&input.message)?,
+            success: true,
+        })
+    }
+}
+```
+
+## 内置 Components
+
+Greentic 提供了多个内置 components：
+
+### component-llm-openai
+
+调用兼容 OpenAI 的 LLM：
+
+```yaml
+- id: analyze
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant."
+    prompt: "{{message}}"
+```
+
+### component-templates
+
+渲染 Handlebars 模板：
+
+```yaml
+- id: format
+  type: template
+  config:
+    template: "Hello, {{name}}! Your order #{{order_id}} is ready."
+```
+
+### component-script-rhai
+
+执行 Rhai 脚本：
+
+```yaml
+- id: calculate
+  type: script
+  config:
+    script: |
+      let total = 0;
+      for item in items {
+        total += item.price * item.quantity;
+      }
+      total
+```
+
+### component-adaptive-card
+
+渲染并校验 Adaptive Cards：
+
+```yaml
+- id: show_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+    data:
+      user_name: "{{user_name}}"
+```
+
+## 测试 Components
+
+### 单元测试
+
+```rust title="src/lib.rs"
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process() {
+        let input = Input {
+            message: "Hello".into(),
+            context: None,
+        };
+
+        let output = MyProcessor::process(input);
+
+        assert!(output.success);
+        assert!(output.result.contains("Processed"));
+    }
+}
+```
+
+### 集成测试
+
+```bash
+# Run with test harness
+greentic-component test ./my-processor
+
+# Test with sample input
+echo '{"message": "test"}' | greentic-component run ./my-processor.wasm
+```
+
+## Component 最佳实践
+
+<Aside type="tip">
+遵循以下指南以构建生产可用的 components：
+</Aside>
+
+1. **保持组件聚焦** - 单一职责
+2. **处理所有错误** - 生产环境中绝不要 panic
+3. **尽量减少依赖** - 减小 WASM 二进制体积
+4. **使用强类型** - 利用 WIT 保证类型安全
+5. **记录接口文档** - 保持 WIT 定义清晰
+6. **充分测试** - 包含单元测试和集成测试
+7. **优化体积** - 使用 LTO 和体积优化
+
+## 调试 Components
+
+### WASM 检查
+
+```bash
+# Inspect component exports
+wasm-tools component wit ./my-processor.wasm
+
+# Validate component
+wasm-tools validate ./my-processor.wasm
+```
+
+### 日志
+
+使用 WASI 日志接口：
+
+```rust
+use greentic_interfaces::log;
+
+impl Guest for DebugProcessor {
+    fn process(input: Input) -> Output {
+        log::debug(&format!("Processing: {:?}", input));
+
+        // ... processing ...
+
+        log::info("Processing complete");
+        output
+    }
+}
+```
+
+## 下一步
+
+- [Providers](/zh/concepts/providers/) - 构建 provider components
+- [MCP Tools](/zh/mcp/creating-tools/) - 创建 MCP tool components
+- [WIT Interfaces Reference](/zh/reference/wit-interfaces/) - 完整 WIT 规范

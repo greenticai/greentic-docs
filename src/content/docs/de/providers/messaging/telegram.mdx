@@ -1,0 +1,350 @@
+---
+title: Telegram
+description: Verbinden Sie Ihren digitalen Worker mit Telegram
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der Telegram-Provider ermöglicht Ihrem digitalen Worker die Kommunikation über Telegram-Bots. Er unterstützt:
+
+- Textnachrichten
+- Inline-Keyboards (Buttons)
+- Reply-Keyboards
+- Datei-Anhänge
+- Medien (Fotos, Videos, Dokumente)
+- Gruppenchats
+
+## Voraussetzungen
+
+- Ein Telegram-Konto
+- Einen Telegram-Bot (erstellt über @BotFather)
+
+## Einrichtung
+
+<Steps>
+
+1. **Einen Telegram-Bot erstellen**
+
+   Öffnen Sie Telegram und schreiben Sie [@BotFather](https://t.me/botfather):
+
+   ```
+   /newbot
+   ```
+
+   Folgen Sie den Anweisungen:
+   - Geben Sie einen Namen für Ihren Bot ein (z. B. "My Support Bot")
+   - Geben Sie einen Benutzernamen ein (muss auf `bot` enden, z. B. "my_support_bot")
+
+   BotFather gibt Ihnen ein **bot token** wie dieses:
+   ```
+   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   ```
+
+2. **Den Provider konfigurieren**
+
+   Erstellen oder aktualisieren Sie Ihre Antwortdatei:
+
+   ```json title="answers.json"
+   {
+     "messaging-telegram": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+     }
+   }
+   ```
+
+3. **Setup ausführen**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **Runtime starten**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+5. **Ihren Bot testen**
+
+   Öffnen Sie Telegram, suchen Sie Ihren Bot anhand des Benutzernamens und senden Sie eine Nachricht!
+
+</Steps>
+
+## Konfigurationsoptionen
+
+| Option | Erforderlich | Beschreibung |
+|--------|----------|-------------|
+| `enabled` | Ja | Den Provider aktivieren/deaktivieren |
+| `public_base_url` | Ja | Öffentliche URL für den Webhook |
+| `bot_token` | Ja | Bot-Token von @BotFather |
+| `api_base_url` | Nein | Telegram-API-URL (Standard: `https://api.telegram.org`) |
+
+## Funktionen
+
+### Textnachrichten
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown-Formatierung
+
+Telegram unterstützt MarkdownV2:
+
+```yaml
+- id: formatted_reply
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `Code`
+      [Link](https://example.com)
+    parse_mode: MarkdownV2
+```
+
+### Inline-Keyboards (Buttons)
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - row:
+          - label: "Get Help"
+            callback_data: "action:help"
+          - label: "Settings"
+            callback_data: "action:settings"
+      - row:
+          - label: "Contact Support"
+            url: "https://support.example.com"
+```
+
+### Reply-Keyboards
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "Choose an option:"
+    reply_keyboard:
+      - ["Option A", "Option B"]
+      - ["Option C", "Cancel"]
+    resize_keyboard: true
+    one_time_keyboard: true
+```
+
+### Fotos senden
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    photo:
+      url: "https://example.com/image.jpg"
+      caption: "Here's your image!"
+```
+
+### Dokumente senden
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    document:
+      url: "https://example.com/report.pdf"
+      filename: "report.pdf"
+      caption: "Your monthly report"
+```
+
+### Auf bestimmte Nachricht antworten
+
+```yaml
+- id: reply_to_message
+  type: reply
+  config:
+    message: "This is a reply to your previous message"
+    reply_to_message_id: "{{original_message_id}}"
+```
+
+## Button-Callbacks verarbeiten
+
+Wenn ein Benutzer auf einen Inline-Keyboard-Button klickt, erhalten Sie einen Callback:
+
+```yaml title="flows/on_callback.ygtc"
+name: handle_callback
+version: "1.0"
+
+nodes:
+  - id: check_action
+    type: branch
+    config:
+      conditions:
+        - expression: "callback_data == 'action:help'"
+          next: show_help
+        - expression: "callback_data == 'action:settings'"
+          next: show_settings
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+  - id: show_settings
+    type: reply
+    config:
+      message: "Settings menu..."
+
+  - id: unknown_action
+    type: reply
+    config:
+      message: "Unknown action"
+
+triggers:
+  - type: callback_query
+    target: check_action
+```
+
+## Unterstützung für Gruppenchats
+
+Der Telegram-Provider unterstützt Gruppenchats:
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          telegram-group:
+            provider: messaging-telegram
+            config:
+              chat_id: "-1001234567890"  # Group chat ID
+```
+
+<Aside type="note">
+Gruppenchat-IDs beginnen mit `-100`, gefolgt von der Chat-ID.
+</Aside>
+
+### Gruppenchat-ID ermitteln
+
+1. Fügen Sie Ihren Bot zur Gruppe hinzu
+2. Senden Sie eine Nachricht in der Gruppe
+3. Prüfen Sie den Webhook-Payload auf `chat.id`
+
+Oder verwenden Sie die Telegram-API:
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+```
+
+## Webhook-Konfiguration
+
+Der Setup-Flow konfiguriert den Webhook automatisch:
+
+```
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+{
+  "url": "https://your-domain.com/webhook/telegram/{tenant}/{team}",
+  "allowed_updates": ["message", "callback_query"]
+}
+```
+
+### Manuelles Webhook-Setup
+
+Falls nötig, konfigurieren Sie ihn manuell:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/webhook/telegram/demo/default",
+    "allowed_updates": ["message", "callback_query"]
+  }'
+```
+
+## Fehlerbehebung
+
+### Bot antwortet nicht
+
+1. **Webhook-Status prüfen:**
+   ```bash
+   curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+   ```
+
+2. **Prüfen Sie, ob die öffentliche URL erreichbar ist:**
+   ```bash
+   curl https://your-domain.ngrok-free.app/health
+   ```
+
+3. **Logs prüfen:**
+   ```bash
+   gtc start ./my-bundle --verbose
+   ```
+
+### Webhook-Registrierung fehlgeschlagen
+
+```
+Error: 401 Unauthorized
+```
+
+Prüfen Sie, ob Ihr Bot-Token korrekt und nicht abgelaufen ist.
+
+### Nachrichten werden nicht empfangen
+
+1. Stellen Sie sicher, dass der Bot gestartet wurde (Benutzer hat `/start` gesendet)
+2. Prüfen Sie, ob sich der Bot in der Gruppe befindet (bei Gruppenchats)
+3. Stellen Sie sicher, dass die Webhook-URL Ihrer öffentlichen URL entspricht
+
+### Rate Limiting
+
+Telegram hat Rate Limits:
+- 1 Nachricht pro Sekunde pro Chat
+- 30 Nachrichten pro Sekunde insgesamt
+
+Behandeln Sie Rate Limits sauber:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_429: true
+    max_retries: 3
+```
+
+## Sicherheit
+
+<Aside type="caution">
+Geben Sie Ihr Bot-Token niemals preis. Bewahren Sie es in einem sicheren Secret Store auf.
+</Aside>
+
+### Webhook-Sicherheit
+
+Telegram sendet bei Webhook-Anfragen ein Secret Token. Greentic validiert dies automatisch.
+
+### Eingabevalidierung
+
+Validieren Sie Benutzereingaben immer:
+
+```yaml
+- id: validate
+  type: script
+  config:
+    script: |
+      if message.len() > 4096 {
+        return error("Message too long")
+      }
+      message
+```
+
+## Nächste Schritte
+
+- [Slack-Provider](/de/providers/messaging/slack/) - Slack-Integration hinzufügen
+- [Flows-Leitfaden](/de/concepts/flows/) - Komplexe Workflows erstellen
+- [Buttons und Karten](/de/components/adaptive-cards/) - Umfangreiche UI-Elemente

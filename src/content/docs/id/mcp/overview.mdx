@@ -1,0 +1,143 @@
+---
+title: Ringkasan MCP
+description: Integrasi Model Context Protocol di Greentic
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Pendahuluan
+
+**MCP (Model Context Protocol)** adalah standar untuk menghubungkan model AI ke tool dan sumber data eksternal. Greentic mengimplementasikan MCP untuk:
+
+- Eksekusi tool di lingkungan WASM yang ter-sandbox
+- Akses API eksternal yang aman
+- Query database
+- Operasi file system
+
+## Fitur Utama
+
+<CardGrid>
+  <Card title="Sandboxing WASM" icon="puzzle">
+    Tool MCP berjalan di lingkungan WebAssembly yang terisolasi untuk keamanan.
+  </Card>
+  <Card title="Penemuan Tool" icon="magnifier">
+    Pendaftaran tool otomatis dan iklan kapabilitas.
+  </Card>
+  <Card title="Keamanan Tipe" icon="approve-check">
+    Antarmuka WIT memastikan pemanggilan tool yang type-safe.
+  </Card>
+  <Card title="Observabilitas" icon="seti:pulse">
+    Tracing dan logging bawaan untuk eksekusi tool.
+  </Card>
+</CardGrid>
+
+## Arsitektur
+
+```
+LLM (with tool use)
+       │
+       ▼ Tool Call Request
+┌─────────────────────────────────┐
+│       greentic-mcp              │
+│   (MCP Executor / WASI Bridge)  │
+└─────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────┐
+│    WASM Tool Component          │
+│   (Sandboxed execution)         │
+└─────────────────────────────────┘
+       │
+       ▼ Tool Result
+Back to LLM
+```
+
+## MCP dalam Flow
+
+### Definisi Tool
+
+```yaml title="tools/database-query.yaml"
+name: database_query
+description: Query the customer database
+parameters:
+  - name: query
+    type: string
+    description: SQL query to execute
+    required: true
+  - name: limit
+    type: integer
+    description: Maximum rows to return
+    default: 10
+returns:
+  type: array
+  items:
+    type: object
+```
+
+### Menggunakan Tool dalam Flow
+
+```yaml
+- id: query_orders
+  type: mcp-tool
+  config:
+    tool: "database_query"
+    parameters:
+      query: "SELECT * FROM orders WHERE customer_id = '{{customer_id}}'"
+      limit: 5
+  output: orders_result
+  next: process_orders
+```
+
+### Dengan LLM
+
+```yaml
+- id: agent_step
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant with database access."
+    tools:
+      - database_query
+      - send_email
+      - create_ticket
+    tool_choice: "auto"
+  next: handle_response
+```
+
+## Tool yang Tersedia
+
+Greentic menyediakan beberapa tool MCP bawaan:
+
+| Tool | Deskripsi |
+|------|-----------|
+| `http_request` | Membuat request HTTP |
+| `database_query` | Menjalankan query database |
+| `file_read` | Membaca file (sandboxed) |
+| `file_write` | Menulis file (sandboxed) |
+| `send_email` | Mengirim email |
+| `create_ticket` | Membuat support ticket |
+
+## Keamanan
+
+### Sandboxing WASM
+
+Semua tool MCP berjalan di sandbox WASM:
+- Tidak ada akses file system langsung
+- Tidak ada akses jaringan kecuali diberikan secara eksplisit
+- Isolasi memori
+- Batas waktu CPU
+
+### Model Kapabilitas
+
+Tool mendeklarasikan kapabilitas yang dibutuhkan:
+
+```yaml
+capabilities:
+  - network:outbound  # Can make outbound requests
+  - filesystem:read   # Can read files in sandbox
+```
+
+## Langkah Berikutnya
+
+- [Membuat Tool MCP](/id/mcp/creating-tools/)
+- [Komponen LLM OpenAI](/id/components/llm-openai/)

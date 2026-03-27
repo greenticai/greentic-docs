@@ -1,13 +1,13 @@
 ---
 title: Script (Rhai)
-description: Rhai scripting component for custom logic
+description: 用于自定义逻辑的 Rhai 脚本组件
 ---
 
-## Overview
+## 概述
 
-The **Script** component enables custom logic using the Rhai scripting language, a simple yet powerful embedded scripting language for Rust.
+**Script** 组件支持使用 Rhai 脚本语言编写自定义逻辑。Rhai 是一种简单但强大的 Rust 内嵌脚本语言。
 
-## Basic Usage
+## 基本用法
 
 ```yaml
 - id: calculate
@@ -22,9 +22,9 @@ The **Script** component enables custom logic using the Rhai scripting language,
   output: calculated_total
 ```
 
-## Rhai Syntax
+## Rhai 语法
 
-### Variables
+### 变量
 
 ```js
 let x = 42;
@@ -33,7 +33,7 @@ let items = [1, 2, 3];
 let user = #{ name: "Bob", age: 30 };
 ```
 
-### Functions
+### 函数
 
 ```js
 fn greet(name) {
@@ -43,7 +43,7 @@ fn greet(name) {
 let message = greet("World");
 ```
 
-### Control Flow
+### 控制流
 
 ```js
 if x > 10 {
@@ -64,7 +64,7 @@ while condition {
 }
 ```
 
-### Working with Objects
+### 处理对象
 
 ```js
 let user = #{
@@ -76,9 +76,9 @@ let name = user.name;
 user.age = 25;
 ```
 
-## Flow Integration
+## Flow 集成
 
-### Access Context
+### 访问上下文
 
 ```yaml
 - id: process
@@ -100,7 +100,7 @@ user.age = 25;
       }
 ```
 
-### Conditional Logic
+### 条件逻辑
 
 ```yaml
 - id: validate
@@ -125,7 +125,7 @@ user.age = 25;
     default: show_error
 ```
 
-### Data Transformation
+### 数据转换
 
 ```yaml
 - id: transform
@@ -146,9 +146,9 @@ user.age = 25;
       transformed
 ```
 
-## Built-in Functions
+## 内置函数
 
-### String Functions
+### 字符串函数
 
 ```js
 let s = "Hello World";
@@ -162,7 +162,7 @@ s.trim()          // Remove whitespace
 s.sub_string(0,5) // "Hello"
 ```
 
-### Array Functions
+### 数组函数
 
 ```js
 let arr = [1, 2, 3, 4, 5];
@@ -176,7 +176,7 @@ arr.map(|x| x * 2)     // [2, 4, 6, 8, 10]
 arr.reduce(|a, b| a + b, 0)  // 15
 ```
 
-### Object Functions
+### 对象函数
 
 ```js
 let obj = #{ a: 1, b: 2 };
@@ -186,7 +186,7 @@ obj.values()      // [1, 2]
 obj.contains("a") // true
 ```
 
-## Error Handling
+## 错误处理
 
 ```js
 try {
@@ -198,7 +198,7 @@ try {
 }
 ```
 
-## Example: Order Processing
+## 示例：订单处理
 
 ```yaml
 - id: process_order
@@ -238,7 +238,7 @@ try {
       }
 ```
 
-## Next Steps
+## 下一步
 
-- [Templates Component](/components/templates/)
-- [LLM OpenAI](/components/llm-openai/)
+- [Templates Component](/zh/components/templates/)
+- [LLM OpenAI](/zh/components/llm-openai/)

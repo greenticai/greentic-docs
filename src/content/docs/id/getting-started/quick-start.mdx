@@ -1,0 +1,147 @@
+---
+title: Mulai Cepat
+description: Jalankan digital worker Greentic pertama Anda dalam hitungan menit
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Panduan ini akan membantu Anda menjalankan digital worker Greentic dasar secara lokal.
+
+## Prasyarat
+
+Sebelum memulai, pastikan Anda memiliki:
+
+- **Rust** 1.90 atau lebih baru (`rustup default 1.90`)
+- **Node.js** 18+ (untuk tool frontend)
+- **Git** untuk meng-clone repositori
+
+## Instalasi
+
+<Steps>
+
+1. **Instal GTC CLI**
+
+   ```bash
+   cargo install greentic-cli
+   ```
+
+   Atau build dari source:
+
+   ```bash
+   git clone https://github.com/greenticai/greentic.git
+   cd greentic/greentic
+   cargo build --release
+   ```
+
+2. **Buat bundle baru**
+
+   Gunakan wizard untuk membuat bundle baru dengan konfigurasi yang diinginkan:
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+   Atau jalankan secara interaktif:
+
+   ```bash
+   gtc wizard
+   ```
+
+3. **Konfigurasi provider**
+
+   Siapkan provider messaging Anda (contoh: Telegram, Slack):
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+   Untuk setup non-interaktif, gunakan file jawaban:
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **Jalankan runtime**
+
+   Luncurkan digital worker Anda:
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Contoh: Flow Hello World
+
+Buat flow sederhana yang merespons pesan:
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: Flow sapaan sederhana
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Halo! Saya digital worker Anda."
+
+triggers:
+  - type: message
+    pattern: "hello"
+    target: greet
+```
+
+## Struktur Bundle
+
+Bundle Greentic tipikal terlihat seperti ini:
+
+```
+my-bundle/
+├── greentic.demo.yaml      # Konfigurasi utama
+├── providers/
+│   └── messaging/
+│       └── messaging-telegram.gtpack
+├── apps/
+│   └── my-app/
+│       └── flows/
+│           └── on_message.ygtc
+└── seeds.yaml              # Data seed (opsional)
+```
+
+## File Konfigurasi
+
+File konfigurasi utama (`greentic.demo.yaml`) mendefinisikan setup Anda:
+
+```yaml title="greentic.demo.yaml"
+name: my-digital-worker
+version: "1.0"
+
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+
+apps:
+  my-app:
+    path: "apps/my-app"
+    default_flow: "on_message"
+
+tenants:
+  demo:
+    name: Demo Tenant
+    teams:
+      default:
+        channels:
+          telegram:
+            provider: messaging-telegram
+```
+
+## Langkah Selanjutnya
+
+Setelah setup dasar berjalan:
+
+- [Pelajari tentang Flow](/id/concepts/flows/) - Pahami definisi flow
+- [Konfigurasi Telegram](/id/providers/messaging/telegram/) - Siapkan bot Telegram
+- [Konfigurasi Slack](/id/providers/messaging/slack/) - Hubungkan ke workspace Slack
+- [Bangun komponen kustom](/id/concepts/components/) - Buat komponen WASM Anda sendiri

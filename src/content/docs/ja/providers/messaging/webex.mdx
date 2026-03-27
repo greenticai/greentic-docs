@@ -1,0 +1,119 @@
+---
+title: Webex
+description: digital worker を Cisco Webex に接続する
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+Webex provider は Cisco Webex Teams と統合します。次をサポートします:
+
+- ダイレクトメッセージ
+- Space（room）message
+- Adaptive Cards
+- file attachment
+- @mention
+
+## 前提条件
+
+- Webex account
+- Webex Developer access
+
+## セットアップ
+
+<Steps>
+
+1. **Webex Bot を作成する**
+
+   [developer.webex.com](https://developer.webex.com) に移動します:
+   - My Webex Apps → Create a Bot に進む
+   - bot の詳細を入力する
+   - **Bot Access Token** をコピーする
+
+2. **Webhook を作成する**
+
+   provider が webhook を自動作成します。手動で作成する場合は:
+   - Documentation → Webhooks API に移動する
+   - endpoint を向く webhook を作成する
+
+3. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-webex": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "access_token": "your-bot-access-token"
+     }
+   }
+   ```
+
+4. **setup を実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | webhook 用の公開 URL |
+| `access_token` | Yes | bot access token |
+
+## 機能
+
+### テキストメッセージ
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Markdown
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - List item
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+```yaml
+- id: card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.2"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+```
+
+### File Attachments
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your document"
+    files:
+      - url: "https://example.com/doc.pdf"
+```
+
+## 次のステップ
+
+- [Slack Provider](/ja/providers/messaging/slack/)
+- [Teams Provider](/ja/providers/messaging/teams/)

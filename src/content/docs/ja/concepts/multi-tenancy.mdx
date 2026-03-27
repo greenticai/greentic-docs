@@ -1,0 +1,315 @@
+---
+title: Multi-Tenancy
+description: Greentic における multi-tenant architecture を理解する
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概要
+
+Greentic は、**multi-tenant deployment** のためにゼロから設計されています。platform のあらゆる側面が tenant isolation をサポートしており、単一の deployment で複数の組織に安全にサービスを提供できます。
+
+## Tenant Hierarchy
+
+```
+Workspace
+└── Tenant (organization)
+    └── Environment (prod, staging, dev)
+        └── Team (department, group)
+            └── Channel (messaging provider instance)
+                └── Session (user conversation)
+```
+
+## TenantCtx
+
+`TenantCtx` struct は、すべての操作に渡って流れます:
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+すべての API call、flow execution、data access は `TenantCtx` によって scope されます。
+
+## 設定
+
+### Tenant Definition
+
+```yaml title="tenants/acme/tenant.gmap"
+tenant:
+  id: acme
+  name: "ACME Corporation"
+  settings:
+    timezone: "America/New_York"
+    language: "en-US"
+
+environments:
+  - id: prod
+    name: "Production"
+  - id: staging
+    name: "Staging"
+```
+
+### Team Definition
+
+```yaml title="tenants/acme/teams/support/team.gmap"
+team:
+  id: support
+  name: "Customer Support"
+  tenant_id: acme
+
+channels:
+  slack:
+    provider: messaging-slack
+    config:
+      workspace_id: "T123456"
+      channel_id: "C789012"
+
+  telegram:
+    provider: messaging-telegram
+    config:
+      chat_id: "-1001234567890"
+```
+
+### Bundle Configuration
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  acme:
+    name: "ACME Corporation"
+    teams:
+      support:
+        name: "Customer Support"
+        channels:
+          slack:
+            provider: messaging-slack
+          telegram:
+            provider: messaging-telegram
+
+      sales:
+        name: "Sales Team"
+        channels:
+          teams:
+            provider: messaging-teams
+
+  bigcorp:
+    name: "BigCorp Inc."
+    teams:
+      helpdesk:
+        channels:
+          webchat:
+            provider: messaging-webchat
+```
+
+## データ分離
+
+### Session Storage
+
+session は tenant context ごとに分離されます:
+
+```
+sessions/
+├── acme/
+│   ├── prod/
+│   │   ├── support/
+│   │   │   ├── session_001.cbor
+│   │   │   └── session_002.cbor
+│   │   └── sales/
+│   │       └── session_003.cbor
+│   └── staging/
+│       └── support/
+│           └── session_004.cbor
+└── bigcorp/
+    └── prod/
+        └── helpdesk/
+            └── session_005.cbor
+```
+
+### State Isolation
+
+working memory (state) は session ごとに scope されます:
+
+```rust
+// State key format
+let key = format!(
+    "state:{}:{}:{}:{}",
+    tenant_ctx.tenant_id,
+    tenant_ctx.env_id,
+    tenant_ctx.team_id.unwrap_or("default"),
+    session_id
+);
+```
+
+### NATS Subject Isolation
+
+message routing は tenant-scoped subject を使用します:
+
+```
+greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+                          │      │       │      │
+                          │      │       │      └─ Channel ID (slack, telegram)
+                          │      │       └──────── Team ID
+                          │      └─────────────── Tenant ID
+                          └────────────────────── Environment (prod, staging)
+```
+
+## Secret Isolation
+
+secret は tenant scope で保存および取得されます:
+
+```rust
+// Secret retrieval includes tenant context
+let secret = secrets_client
+    .get_secret(&tenant_ctx, "api_key")
+    .await?;
+```
+
+### Secret Namespacing
+
+```
+secrets/
+├── global/           # Platform-wide secrets
+│   └── signing_key
+├── acme/             # Tenant: ACME
+│   ├── slack_bot_token
+│   ├── openai_api_key
+│   └── teams/
+│       └── support/
+│           └── webhook_secret
+└── bigcorp/          # Tenant: BigCorp
+    └── telegram_bot_token
+```
+
+## Flow Isolation
+
+各 tenant は異なる flow と configuration を持つことができます:
+
+```yaml title="tenants/acme/apps/support-bot/flows/on_message.ygtc"
+name: acme_support_flow
+version: "1.0"
+
+# ACME-specific support flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Welcome to ACME Support! How can I help?"
+```
+
+```yaml title="tenants/bigcorp/apps/helpdesk/flows/on_message.ygtc"
+name: bigcorp_helpdesk_flow
+version: "1.0"
+
+# BigCorp-specific helpdesk flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "BigCorp Helpdesk here. What's your issue?"
+```
+
+## アクセス制御
+
+<Aside type="caution">
+tenant isolation は runtime level で強制されます。custom component では常に `TenantCtx` を検証してください。
+</Aside>
+
+### Component Access
+
+component は `TenantCtx` を受け取り、境界を守る必要があります:
+
+```rust
+impl Guest for MyComponent {
+    fn process(input: Input, ctx: &TenantCtx) -> Output {
+        // Verify tenant has access to requested resource
+        if !has_permission(ctx, &input.resource_id) {
+            return Output::error("Access denied");
+        }
+
+        // Process with tenant scope
+        process_for_tenant(ctx, input)
+    }
+}
+```
+
+### API Access
+
+REST API は tenant scope を強制します:
+
+```http
+GET /api/v1/sessions
+Authorization: Bearer <token>
+X-Tenant-ID: acme
+X-Team-ID: support
+```
+
+## Deployment Models
+
+### Single-Tenant
+
+tenant ごとに 1 つの Greentic instance:
+
+```
+┌─────────────────┐
+│ Greentic (ACME) │
+└─────────────────┘
+
+┌─────────────────┐
+│ Greentic (BigCorp)│
+└─────────────────┘
+```
+
+### Multi-Tenant Shared
+
+共有インフラ上で複数 tenant を運用:
+
+```
+┌───────────────────────────────────┐
+│         Greentic Instance         │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │ (prod)  │  │    (prod)      ││
+│  └─────────┘  └─────────────────┘│
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │(staging)│  │   (staging)    ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+```
+
+### Hybrid
+
+専有リソースと共有リソースを組み合わせるモデル:
+
+```
+┌───────────────────────────────────┐
+│    Shared Greentic Instance       │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │ Small   │  │   Medium        ││
+│  │ Tenants │  │   Tenants       ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+
+┌───────────────────────────────────┐
+│  Dedicated: Enterprise Tenant     │
+│  (Custom SLA, dedicated resources)│
+└───────────────────────────────────┘
+```
+
+## ベストプラクティス
+
+1. **Always pass TenantCtx** - tenant ID をハードコードしない
+2. **Validate at boundaries** - API と component level で tenant access を確認する
+3. **Use tenant-scoped logging** - すべての log entry に tenant ID を含める
+4. **Separate secrets** - tenant 間で secret を共有しない
+5. **Test isolation** - ある tenant が別の tenant の data にアクセスできないことを確認する
+6. **Monitor per-tenant** - tenant ごとに usage と error を追跡する
+
+## 次のステップ
+
+- [Architecture Overview](/ja/concepts/architecture/)
+- [Session Management](/ja/concepts/sessions/)
+- [Configuration Reference](/ja/reference/configuration/)

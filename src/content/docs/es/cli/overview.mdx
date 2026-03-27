@@ -1,0 +1,181 @@
+---
+title: Resumen de GTC CLI
+description: Interfaz de línea de comandos para la plataforma Greentic
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Introducción
+
+La **GTC CLI** (`gtc`) es la interfaz principal de línea de comandos para la plataforma Greentic. Proporciona comandos para:
+
+- Crear y gestionar bundles
+- Configurar providers
+- Ejecutar el servidor runtime
+- Construir y validar packs/flows
+
+## Instalación
+
+<Tabs>
+<TabItem label="Cargo">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="Desde el código fuente">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+</Tabs>
+
+Verifica la instalación:
+
+```bash
+gtc --version
+```
+
+## Arquitectura de la CLI
+
+El binario `gtc` compone subcomandos de múltiples repos:
+
+| Comando | Repositorio fuente | Propósito |
+|---------|--------------------|-----------|
+| `gtc wizard` | `greentic-dev` | Asistente de creación de bundles |
+| `gtc setup` | `greentic-setup` | Configuración de providers |
+| `gtc start` | `greentic-start` | Servidor runtime |
+| `gtc pack` | `greentic-pack` | Construcción de packs |
+| `gtc flow` | `greentic-flow` | Validación de flows |
+
+## Referencia de comandos
+
+### Opciones globales
+
+```bash
+gtc [OPTIONS] <COMMAND>
+
+Options:
+  -v, --verbose     Enable verbose output
+  -q, --quiet       Suppress non-essential output
+  --config <PATH>   Path to config file
+  -h, --help        Print help
+  -V, --version     Print version
+```
+
+### Comandos
+
+| Comando | Descripción |
+|---------|-------------|
+| `wizard` | Crear un nuevo bundle a partir de las respuestas del asistente |
+| `setup` | Configurar providers en un bundle |
+| `start` | Iniciar el servidor runtime |
+| `pack` | Gestión de packs (build, verify, publish) |
+| `flow` | Gestión de flows (validate, doctor) |
+
+## Flujos de trabajo comunes
+
+### Crear y ejecutar un proyecto nuevo
+
+```bash
+# 1. Create bundle from wizard
+gtc wizard --answers wizard-answers.yaml
+
+# 2. Setup providers (interactive)
+gtc setup ./my-bundle
+
+# 3. Start the runtime
+gtc start ./my-bundle
+```
+
+### Flujo de trabajo de desarrollo
+
+```bash
+# Validate flows
+gtc flow doctor ./my-bundle/apps/my-app/flows/
+
+# Build a pack
+gtc pack build ./my-pack/
+
+# Start with verbose logging
+gtc start ./my-bundle --verbose
+
+# Start with ngrok tunnel
+gtc start ./my-bundle --ngrok on
+```
+
+### Despliegue en producción
+
+```bash
+# Setup with answers file (non-interactive)
+gtc setup --answers production-answers.json ./my-bundle
+
+# Start without tunnels
+gtc start ./my-bundle --cloudflared off --ngrok off
+```
+
+## Archivo de configuración
+
+GTC puede usar un archivo de configuración (`greentic.toml`):
+
+```toml title="greentic.toml"
+[runtime]
+host = "0.0.0.0"
+port = 8080
+
+[nats]
+enabled = true
+url = "nats://localhost:4222"
+
+[logging]
+level = "info"
+format = "json"
+
+[telemetry]
+enabled = true
+otlp_endpoint = "http://localhost:4317"
+```
+
+## Variables de entorno
+
+| Variable | Descripción | Valor por defecto |
+|----------|-------------|-------------------|
+| `GREENTIC_LOG_LEVEL` | Verbosidad de logs | `info` |
+| `GREENTIC_CONFIG` | Ruta del archivo de configuración | `greentic.toml` |
+| `GREENTIC_NATS_URL` | URL del servidor NATS | `nats://localhost:4222` |
+| `GREENTIC_REDIS_URL` | URL de Redis | `redis://localhost:6379` |
+
+## Códigos de salida
+
+| Código | Significado |
+|--------|-------------|
+| `0` | Éxito |
+| `1` | Error general |
+| `2` | Error de configuración |
+| `3` | Error de runtime |
+| `4` | Error de validación |
+
+## Obtener ayuda
+
+```bash
+# General help
+gtc --help
+
+# Command-specific help
+gtc wizard --help
+gtc setup --help
+gtc start --help
+```
+
+## Siguientes pasos
+
+- [gtc wizard](/es/cli/wizard/) - Creación de bundles
+- [gtc setup](/es/cli/setup/) - Configuración de providers
+- [gtc start](/es/cli/start/) - Servidor runtime
+- [Construcción de Packs](/es/cli/building-packs/) - Gestión de packs

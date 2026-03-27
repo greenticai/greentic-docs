@@ -1,0 +1,299 @@
+---
+title: gtc setup
+description: 配置你的 Greentic bundle 中的 providers
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概述
+
+`gtc setup` 命令用于配置你的 Greentic bundle 中的 providers。它会为每个启用的 provider 运行 setup flows，收集凭据并配置 webhooks。
+
+## 用法
+
+```bash
+gtc setup [OPTIONS] <BUNDLE_PATH>
+```
+
+## 选项
+
+| 选项 | 说明 |
+|--------|-------------|
+| `--answers <FILE>` | answers 文件路径（非交互模式） |
+| `--dry-run` | 预览 setup 而不做任何更改 |
+| `--emit-answers <FILE>` | 生成 answers 模板 |
+| `--advanced` | 在 answers 模板中包含可选字段 |
+| `--provider <NAME>` | 仅设置指定 provider |
+| `--skip <NAME>` | 跳过指定 provider |
+| `-v, --verbose` | 启用详细输出 |
+
+## 交互式设置
+
+以交互方式运行 setup，CLI 会依次提示你配置每个 provider：
+
+```bash
+gtc setup ./my-bundle
+```
+
+CLI 会提示输入：
+- Provider 凭据（API keys、tokens）
+- 用于 webhooks 的公开 URL
+- 可选配置项
+
+## 非交互式设置
+
+### 生成 Answers 模板
+
+首先，生成一个包含所有必需字段的模板：
+
+```bash
+# Basic template (required fields only)
+gtc setup --dry-run --emit-answers answers.json ./my-bundle
+
+# Full template (including optional fields)
+gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
+```
+
+### Answers 文件格式
+
+<Tabs>
+<TabItem label="JSON">
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "api_base_url": "https://slack.com/api",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  },
+  "messaging-teams": {
+    "enabled": false
+  }
+}
+```
+
+</TabItem>
+<TabItem label="YAML">
+
+```yaml title="answers.yaml"
+messaging-telegram:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+
+messaging-slack:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  api_base_url: https://slack.com/api
+  bot_token: xoxb-xxx-xxx-xxx
+  slack_app_id: A07XXXXXX
+  slack_configuration_token: xoxe.xoxp-xxx
+
+messaging-teams:
+  enabled: false
+```
+
+</TabItem>
+</Tabs>
+
+### 应用 Answers
+
+```bash
+gtc setup --answers answers.json ./my-bundle
+```
+
+## Provider 专属配置
+
+### Telegram
+
+```json
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  }
+}
+```
+
+**如何获取凭据：**
+1. 在 Telegram 上向 [@BotFather](https://t.me/botfather) 发送消息
+2. 发送 `/newbot` 并按提示操作
+3. 复制 bot token
+
+### Slack
+
+```json
+{
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  }
+}
+```
+
+**如何获取凭据：**
+1. 前往 [api.slack.com/apps](https://api.slack.com/apps)
+2. 创建一个新应用或选择现有应用
+3. 在 OAuth & Permissions 中获取 Bot Token
+4. 在 Basic Information 中获取 App ID
+5. 在 App Manifest 中获取 Configuration Token
+
+### Microsoft Teams
+
+```json
+{
+  "messaging-teams": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "app_id": "your-app-id",
+    "app_password": "your-app-password",
+    "tenant_id": "your-tenant-id"
+  }
+}
+```
+
+### WhatsApp（通过 Meta）
+
+```json
+{
+  "messaging-whatsapp": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "phone_number_id": "123456789",
+    "access_token": "EAAxxxxx",
+    "verify_token": "your-verify-token"
+  }
+}
+```
+
+## 公开 URL 配置
+
+<Aside type="caution">
+基于 webhook 的 providers 需要一个可公开访问的 URL。使用 `gtc start` 搭配 ngrok 或 cloudflared 时，`public_base_url` 会被自动替换。
+</Aside>
+
+### 使用 ngrok
+
+```bash
+# Start ngrok in separate terminal
+ngrok http 8080
+
+# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
+# Use this as public_base_url in answers
+```
+
+### 使用 Cloudflared
+
+```bash
+# Cloudflared generates URL automatically with gtc start
+gtc start ./my-bundle --cloudflared on
+```
+
+## Setup Flow 执行过程
+
+当你运行 `gtc setup` 时，它会：
+
+<Steps>
+
+1. **加载 bundle 配置**
+
+   读取 `greentic.demo.yaml` 以查找 providers。
+
+2. **验证 answers**
+
+   检查所有必需字段是否存在。
+
+3. **运行 setup flows**
+
+   执行每个 provider 的 `setup_flow`（例如 webhook 注册）。
+
+4. **存储凭据**
+
+   将凭据保存到已配置的 secrets store。
+
+5. **运行验证**
+
+   执行 `verify_flow` 以确认设置成功。
+
+</Steps>
+
+## 选择性设置
+
+### 设置单个 Provider
+
+```bash
+gtc setup --provider messaging-telegram ./my-bundle
+```
+
+### 跳过指定 Provider
+
+```bash
+gtc setup --skip messaging-teams ./my-bundle
+```
+
+### 重新运行 Setup
+
+```bash
+# Force re-setup (useful after URL changes)
+gtc start ./my-bundle --force-setup
+```
+
+## 故障排查
+
+### Webhook 注册失败
+
+```
+Error: Failed to register webhook: 401 Unauthorized
+```
+
+检查你的 bot token 是否正确且未过期。
+
+### 缺少必填字段
+
+```
+Error: Missing required field 'bot_token' for messaging-telegram
+```
+
+确保 answers 文件中包含所有必填字段。
+
+### 公开 URL 无法访问
+
+```
+Error: Webhook verification failed: Connection refused
+```
+
+确保你的公开 URL 可从互联网访问。检查 ngrok/cloudflared 是否正在运行。
+
+### 找不到凭据
+
+```
+Error: Secret 'slack_bot_token' not found
+```
+
+运行 `gtc setup` 来配置 provider，或检查你的 answers 文件。
+
+## 最佳实践
+
+1. **在 CI/CD 中使用 answers 文件** - 避免在自动化流水线中使用交互式提示
+2. **妥善保护凭据** - 不要将包含真实 token 的 answers 文件提交到 git
+3. **使用环境变量** - 在 answers 中通过 `$ENV_VAR` 引用 secrets
+4. **使用 dry-run 测试** - 在实际更改前先预览 setup
+5. **URL 变更后重新生成** - 当公开 URL 变化时重新运行 setup
+
+## 下一步
+
+- [gtc start](/zh/cli/start/) - 运行 runtime 服务器
+- [Telegram Setup](/zh/providers/messaging/telegram/) - 详细的 Telegram 指南
+- [Slack Setup](/zh/providers/messaging/slack/) - 详细的 Slack 指南

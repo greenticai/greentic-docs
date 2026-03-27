@@ -1,0 +1,364 @@
+---
+title: WhatsApp
+description: Conecta tu trabajador digital a WhatsApp Business
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+El provider WhatsApp se integra con la WhatsApp Business API (mediante Meta). Soporta:
+
+- Mensajes de texto
+- Mensajes de plantilla
+- Botones interactivos
+- Mensajes de lista
+- Medios (imágenes, documentos, audio, video)
+- Compartir ubicación
+
+## Requisitos previos
+
+- Cuenta de Meta Business
+- Acceso a la WhatsApp Business API
+- Número de teléfono verificado
+
+## Configuración
+
+<Steps>
+
+1. **Crea una app de Meta**
+
+   Ve a [developers.facebook.com](https://developers.facebook.com):
+   - Crea una nueva app (tipo Business)
+   - Agrega el producto WhatsApp
+   - Configura la WhatsApp Business API
+
+2. **Obtén las credenciales de la API**
+
+   En el dashboard de tu app de Meta:
+   - Ve a WhatsApp → Getting Started
+   - Copia **Phone Number ID**
+   - Genera y copia **Permanent Access Token**
+   - Toma nota de tu **Business Account ID**
+
+3. **Configura el webhook**
+
+   En WhatsApp → Configuration:
+   - Define Callback URL: `https://your-domain.com/webhook/whatsapp/{tenant}/{team}`
+   - Define Verify Token (cualquier string que elijas)
+   - Suscríbete a: `messages`
+
+4. **Configura el provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-whatsapp": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "phone_number_id": "123456789012345",
+       "access_token": "EAAxxxxx...",
+       "verify_token": "your-verify-token",
+       "business_account_id": "987654321098765"
+     }
+   }
+   ```
+
+5. **Ejecuta la configuración**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Opciones de configuración
+
+| Opción | Requerido | Descripción |
+|--------|----------|-------------|
+| `enabled` | Sí | Habilita/deshabilita el provider |
+| `public_base_url` | Sí | URL pública para el webhook |
+| `phone_number_id` | Sí | ID del número de teléfono de WhatsApp |
+| `access_token` | Sí | Permanent access token |
+| `verify_token` | Sí | Token de verificación del webhook |
+| `business_account_id` | No | ID de la cuenta de WhatsApp Business |
+| `api_version` | No | Versión de la Graph API (por defecto: v18.0) |
+
+## Funcionalidades
+
+### Mensajes de texto
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Mensajes de plantilla
+
+<Aside type="caution">
+WhatsApp requiere plantillas preaprobadas para iniciar conversaciones. Meta debe aprobar las plantillas antes de usarlas.
+</Aside>
+
+```yaml
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "order_confirmation"
+      language: "en"
+      components:
+        - type: body
+          parameters:
+            - type: text
+              text: "{{order_id}}"
+            - type: text
+              text: "{{customer_name}}"
+```
+
+### Botones interactivos
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    interactive:
+      type: button
+      body:
+        text: "What would you like to do?"
+      action:
+        buttons:
+          - type: reply
+            reply:
+              id: "help"
+              title: "Get Help"
+          - type: reply
+            reply:
+              id: "status"
+              title: "Check Status"
+          - type: reply
+            reply:
+              id: "human"
+              title: "Talk to Human"
+```
+
+### Mensajes de lista
+
+```yaml
+- id: show_menu
+  type: reply
+  config:
+    interactive:
+      type: list
+      header:
+        type: text
+        text: "Support Menu"
+      body:
+        text: "Please select an option:"
+      action:
+        button: "View Options"
+        sections:
+          - title: "Support"
+            rows:
+              - id: "technical"
+                title: "Technical Support"
+                description: "Hardware and software issues"
+              - id: "billing"
+                title: "Billing"
+                description: "Payment and invoices"
+          - title: "Sales"
+            rows:
+              - id: "pricing"
+                title: "Pricing"
+                description: "Product pricing information"
+```
+
+### Enviar imágenes
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    media:
+      type: image
+      link: "https://example.com/product.jpg"
+      caption: "Here's the product image"
+```
+
+### Enviar documentos
+
+```yaml
+- id: send_document
+  type: reply
+  config:
+    media:
+      type: document
+      link: "https://example.com/invoice.pdf"
+      filename: "invoice.pdf"
+      caption: "Your invoice is attached"
+```
+
+### Enviar ubicación
+
+```yaml
+- id: send_location
+  type: reply
+  config:
+    location:
+      latitude: 37.7749
+      longitude: -122.4194
+      name: "Our Office"
+      address: "123 Main St, San Francisco, CA"
+```
+
+## Manejo de clics en botones
+
+```yaml title="flows/on_button.ygtc"
+name: handle_button
+version: "1.0"
+
+nodes:
+  - id: route_button
+    type: branch
+    config:
+      conditions:
+        - expression: "button.id == 'help'"
+          next: show_help
+        - expression: "button.id == 'status'"
+          next: check_status
+        - expression: "button.id == 'human'"
+          next: escalate
+      default: unknown
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: interactive
+    target: route_button
+```
+
+## Plantillas de mensajes
+
+### Crear plantillas
+
+1. Ve a Meta Business Suite → WhatsApp Manager → Message Templates
+2. Crea una nueva plantilla con los componentes requeridos
+3. Envíala para aprobación (normalmente 24-48 horas)
+
+### Componentes de plantilla
+
+```yaml
+- id: send_notification
+  type: reply
+  config:
+    template:
+      name: "appointment_reminder"
+      language: "en"
+      components:
+        - type: header
+          parameters:
+            - type: image
+              image:
+                link: "https://example.com/logo.png"
+        - type: body
+          parameters:
+            - type: text
+              text: "{{customer_name}}"
+            - type: text
+              text: "{{appointment_time}}"
+        - type: button
+          sub_type: quick_reply
+          index: 0
+          parameters:
+            - type: payload
+              payload: "confirm"
+```
+
+## Ventana de 24 horas
+
+<Aside type="note">
+WhatsApp aplica una ventana de mensajería de 24 horas. Después de 24 horas sin respuesta del usuario, debes usar mensajes de plantilla.
+</Aside>
+
+### Comprobar el estado de la ventana
+
+```yaml
+- id: check_window
+  type: branch
+  config:
+    conditions:
+      - expression: "last_message_time + 86400 > now"
+        next: send_freeform
+      default: send_template
+
+- id: send_freeform
+  type: reply
+  config:
+    message: "Thanks for your message!"
+
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "follow_up"
+      language: "en"
+```
+
+## Solución de problemas
+
+### Falló la verificación del webhook
+
+1. Verifica que `verify_token` coincida con la configuración
+2. Comprueba que la URL del webhook sea accesible públicamente
+3. Asegúrate de que HTTPS esté configurado correctamente
+
+### Mensaje no entregado
+
+- Revisa el formato del número de teléfono (incluye el código de país)
+- Verifica que la plantilla esté aprobada (si usas plantillas)
+- Comprueba el estado de la ventana de 24 horas
+- Revisa los logs del webhook de Meta
+
+### Rate limiting
+
+WhatsApp tiene límites de velocidad basados en la calificación de calidad:
+- Tier 1: 1,000 mensajes/día
+- Tier 2: 10,000 mensajes/día
+- Tier 3: 100,000 mensajes/día
+
+Manéjalos con cuidado:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+```
+
+## Seguridad
+
+<Aside type="caution">
+Valida las firmas del webhook para asegurarte de que las solicitudes provengan de Meta.
+</Aside>
+
+Greentic valida:
+- El header X-Hub-Signature-256
+- El hash del payload con el app secret
+
+## Mejores prácticas
+
+1. **Usa las plantillas con criterio** - Crea plantillas versátiles y aprobadas
+2. **Respeta la ventana de 24 horas** - Haz seguimiento de la interacción del usuario
+3. **Gestiona las cancelaciones** - Respeta las solicitudes STOP/UNSUBSCRIBE
+4. **Mantén los mensajes concisos** - WhatsApp es para comunicación rápida
+5. **Usa medios enriquecidos** - Las imágenes y documentos mejoran la UX
+
+## Próximos pasos
+
+- [Provider de Telegram](/es/providers/messaging/telegram/) - Mensajería alternativa
+- [Guía de plantillas](https://developers.facebook.com/docs/whatsapp/message-templates/) - Reglas de plantillas de Meta
+- [Guía de Flows](/es/concepts/flows/) - Construye flujos de trabajo complejos

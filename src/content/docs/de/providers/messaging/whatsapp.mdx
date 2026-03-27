@@ -1,0 +1,364 @@
+---
+title: WhatsApp
+description: Verbinden Sie Ihren digitalen Worker mit WhatsApp Business
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der WhatsApp-Provider integriert sich mit der WhatsApp Business API (über Meta). Er unterstützt:
+
+- Textnachrichten
+- Template-Nachrichten
+- Interaktive Buttons
+- Listen-Nachrichten
+- Medien (Bilder, Dokumente, Audio, Video)
+- Standortfreigabe
+
+## Voraussetzungen
+
+- Meta-Business-Konto
+- Zugriff auf die WhatsApp Business API
+- Verifizierte Telefonnummer
+
+## Einrichtung
+
+<Steps>
+
+1. **Meta-App erstellen**
+
+   Gehen Sie zu [developers.facebook.com](https://developers.facebook.com):
+   - Erstellen Sie eine neue App (Typ Business)
+   - Fügen Sie das Produkt WhatsApp hinzu
+   - Richten Sie die WhatsApp Business API ein
+
+2. **API-Zugangsdaten abrufen**
+
+   Im Dashboard Ihrer Meta-App:
+   - Gehen Sie zu WhatsApp → Getting Started
+   - Kopieren Sie die **Phone Number ID**
+   - Erzeugen und kopieren Sie das **Permanent Access Token**
+   - Notieren Sie sich Ihre **Business Account ID**
+
+3. **Webhook konfigurieren**
+
+   In WhatsApp → Configuration:
+   - Setzen Sie die Callback URL: `https://your-domain.com/webhook/whatsapp/{tenant}/{team}`
+   - Setzen Sie das Verify Token (beliebige Zeichenfolge Ihrer Wahl)
+   - Abonnieren Sie: `messages`
+
+4. **Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-whatsapp": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "phone_number_id": "123456789012345",
+       "access_token": "EAAxxxxx...",
+       "verify_token": "your-verify-token",
+       "business_account_id": "987654321098765"
+     }
+   }
+   ```
+
+5. **Setup ausführen**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Konfigurationsoptionen
+
+| Option | Erforderlich | Beschreibung |
+|--------|----------|-------------|
+| `enabled` | Ja | Provider aktivieren/deaktivieren |
+| `public_base_url` | Ja | Öffentliche URL für den Webhook |
+| `phone_number_id` | Ja | WhatsApp-Telefonnummern-ID |
+| `access_token` | Ja | Permanentes Access Token |
+| `verify_token` | Ja | Webhook-Verifizierungs-Token |
+| `business_account_id` | Nein | WhatsApp Business Account ID |
+| `api_version` | Nein | Graph-API-Version (Standard: v18.0) |
+
+## Funktionen
+
+### Textnachrichten
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Template-Nachrichten
+
+<Aside type="caution">
+WhatsApp erfordert vorab genehmigte Templates, um Konversationen zu initiieren. Templates müssen vor der Verwendung von Meta genehmigt werden.
+</Aside>
+
+```yaml
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "order_confirmation"
+      language: "en"
+      components:
+        - type: body
+          parameters:
+            - type: text
+              text: "{{order_id}}"
+            - type: text
+              text: "{{customer_name}}"
+```
+
+### Interaktive Buttons
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    interactive:
+      type: button
+      body:
+        text: "What would you like to do?"
+      action:
+        buttons:
+          - type: reply
+            reply:
+              id: "help"
+              title: "Get Help"
+          - type: reply
+            reply:
+              id: "status"
+              title: "Check Status"
+          - type: reply
+            reply:
+              id: "human"
+              title: "Talk to Human"
+```
+
+### Listen-Nachrichten
+
+```yaml
+- id: show_menu
+  type: reply
+  config:
+    interactive:
+      type: list
+      header:
+        type: text
+        text: "Support Menu"
+      body:
+        text: "Please select an option:"
+      action:
+        button: "View Options"
+        sections:
+          - title: "Support"
+            rows:
+              - id: "technical"
+                title: "Technical Support"
+                description: "Hardware and software issues"
+              - id: "billing"
+                title: "Billing"
+                description: "Payment and invoices"
+          - title: "Sales"
+            rows:
+              - id: "pricing"
+                title: "Pricing"
+                description: "Product pricing information"
+```
+
+### Bilder senden
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    media:
+      type: image
+      link: "https://example.com/product.jpg"
+      caption: "Here's the product image"
+```
+
+### Dokumente senden
+
+```yaml
+- id: send_document
+  type: reply
+  config:
+    media:
+      type: document
+      link: "https://example.com/invoice.pdf"
+      filename: "invoice.pdf"
+      caption: "Your invoice is attached"
+```
+
+### Standort senden
+
+```yaml
+- id: send_location
+  type: reply
+  config:
+    location:
+      latitude: 37.7749
+      longitude: -122.4194
+      name: "Our Office"
+      address: "123 Main St, San Francisco, CA"
+```
+
+## Button-Klicks verarbeiten
+
+```yaml title="flows/on_button.ygtc"
+name: handle_button
+version: "1.0"
+
+nodes:
+  - id: route_button
+    type: branch
+    config:
+      conditions:
+        - expression: "button.id == 'help'"
+          next: show_help
+        - expression: "button.id == 'status'"
+          next: check_status
+        - expression: "button.id == 'human'"
+          next: escalate
+      default: unknown
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: interactive
+    target: route_button
+```
+
+## Nachrichtentemplates
+
+### Templates erstellen
+
+1. Gehen Sie zu Meta Business Suite → WhatsApp Manager → Message Templates
+2. Erstellen Sie ein neues Template mit den erforderlichen Komponenten
+3. Reichen Sie es zur Genehmigung ein (in der Regel 24-48 Stunden)
+
+### Template-Komponenten
+
+```yaml
+- id: send_notification
+  type: reply
+  config:
+    template:
+      name: "appointment_reminder"
+      language: "en"
+      components:
+        - type: header
+          parameters:
+            - type: image
+              image:
+                link: "https://example.com/logo.png"
+        - type: body
+          parameters:
+            - type: text
+              text: "{{customer_name}}"
+            - type: text
+              text: "{{appointment_time}}"
+        - type: button
+          sub_type: quick_reply
+          index: 0
+          parameters:
+            - type: payload
+              payload: "confirm"
+```
+
+## 24-Stunden-Fenster
+
+<Aside type="note">
+WhatsApp erzwingt ein 24-Stunden-Nachrichtenfenster. Nach 24 Stunden ohne Benutzerantwort müssen Sie Template-Nachrichten verwenden.
+</Aside>
+
+### Fensterstatus prüfen
+
+```yaml
+- id: check_window
+  type: branch
+  config:
+    conditions:
+      - expression: "last_message_time + 86400 > now"
+        next: send_freeform
+      default: send_template
+
+- id: send_freeform
+  type: reply
+  config:
+    message: "Thanks for your message!"
+
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "follow_up"
+      language: "en"
+```
+
+## Fehlerbehebung
+
+### Webhook-Verifizierung fehlgeschlagen
+
+1. Prüfen Sie, ob `verify_token` mit der Konfiguration übereinstimmt
+2. Stellen Sie sicher, dass die Webhook-URL öffentlich erreichbar ist
+3. Stellen Sie sicher, dass HTTPS korrekt konfiguriert ist
+
+### Nachricht nicht zugestellt
+
+- Prüfen Sie das Telefonnummernformat (mit Ländervorwahl)
+- Stellen Sie sicher, dass das Template genehmigt ist (falls Templates verwendet werden)
+- Prüfen Sie den 24-Stunden-Fensterstatus
+- Sehen Sie die Meta-Webhook-Logs durch
+
+### Rate Limiting
+
+WhatsApp hat Rate Limits basierend auf der Qualitätsbewertung:
+- Tier 1: 1.000 Nachrichten/Tag
+- Tier 2: 10.000 Nachrichten/Tag
+- Tier 3: 100.000 Nachrichten/Tag
+
+Sauber behandeln:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+```
+
+## Sicherheit
+
+<Aside type="caution">
+Validieren Sie Webhook-Signaturen, um sicherzustellen, dass Anfragen von Meta stammen.
+</Aside>
+
+Greentic validiert:
+- X-Hub-Signature-256-Header
+- Payload-Hash mit App Secret
+
+## Best Practices
+
+1. **Templates sinnvoll einsetzen** - Erstellen Sie vielseitige, genehmigte Templates
+2. **Das 24-Stunden-Fenster beachten** - Verfolgen Sie die Benutzerinteraktion
+3. **Opt-outs verarbeiten** - Respektieren Sie STOP-/UNSUBSCRIBE-Anfragen
+4. **Nachrichten knapp halten** - WhatsApp ist für schnelle Kommunikation gedacht
+5. **Rich Media verwenden** - Bilder und Dokumente verbessern die UX
+
+## Nächste Schritte
+
+- [Telegram-Provider](/de/providers/messaging/telegram/) - Alternative für Messaging
+- [Template Guidelines](https://developers.facebook.com/docs/whatsapp/message-templates/) - Template-Regeln von Meta
+- [Flows-Leitfaden](/de/concepts/flows/) - Komplexe Workflows erstellen

@@ -1,0 +1,147 @@
+---
+title: Schnellstart
+description: Ihren ersten Greentic Digital Worker in wenigen Minuten starten
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Diese Anleitung hilft Ihnen dabei, einen grundlegenden Greentic Digital Worker lokal zu starten.
+
+## Voraussetzungen
+
+Bevor Sie beginnen, stellen Sie sicher, dass Folgendes vorhanden ist:
+
+- **Rust** 1.90 oder neuer (`rustup default 1.90`)
+- **Node.js** 18+ (für Frontend-Tools)
+- **Git** zum Klonen von Repositories
+
+## Installation
+
+<Steps>
+
+1. **Die GTC CLI installieren**
+
+   ```bash
+   cargo install greentic-cli
+   ```
+
+   Oder aus dem Quellcode bauen:
+
+   ```bash
+   git clone https://github.com/greenticai/greentic.git
+   cd greentic/greentic
+   cargo build --release
+   ```
+
+2. **Ein neues Bundle erstellen**
+
+   Verwenden Sie den Assistenten, um ein neues Bundle mit Ihrer gewünschten Konfiguration zu erstellen:
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+   Oder interaktiv ausführen:
+
+   ```bash
+   gtc wizard
+   ```
+
+3. **Provider konfigurieren**
+
+   Richten Sie Ihre Messaging-Provider ein (z. B. Telegram, Slack):
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+   Für ein nicht-interaktives Setup verwenden Sie eine Antwortdatei:
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **Die Runtime starten**
+
+   Starten Sie Ihren digitalen Worker:
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Beispiel: Hello-World-Flow
+
+Erstellen Sie einen einfachen Flow, der auf Nachrichten antwortet:
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! I'm your digital worker."
+
+triggers:
+  - type: message
+    pattern: "hello"
+    target: greet
+```
+
+## Bundle-Struktur
+
+Ein typisches Greentic-Bundle sieht so aus:
+
+```
+my-bundle/
+├── greentic.demo.yaml      # Main configuration
+├── providers/
+│   └── messaging/
+│       └── messaging-telegram.gtpack
+├── apps/
+│   └── my-app/
+│       └── flows/
+│           └── on_message.ygtc
+└── seeds.yaml              # Seed data (optional)
+```
+
+## Konfigurationsdatei
+
+Die Hauptkonfigurationsdatei (`greentic.demo.yaml`) definiert Ihr Setup:
+
+```yaml title="greentic.demo.yaml"
+name: my-digital-worker
+version: "1.0"
+
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+
+apps:
+  my-app:
+    path: "apps/my-app"
+    default_flow: "on_message"
+
+tenants:
+  demo:
+    name: Demo Tenant
+    teams:
+      default:
+        channels:
+          telegram:
+            provider: messaging-telegram
+```
+
+## Nächste Schritte
+
+Nachdem Ihr grundlegendes Setup läuft:
+
+- [Flows kennenlernen](/de/concepts/flows/) - Flow-Definitionen verstehen
+- [Telegram konfigurieren](/de/providers/messaging/telegram/) - Telegram-Bot einrichten
+- [Slack konfigurieren](/de/providers/messaging/slack/) - Mit einem Slack-Workspace verbinden
+- [Benutzerdefinierte Komponenten bauen](/de/concepts/components/) - Eigene WASM-Komponenten erstellen

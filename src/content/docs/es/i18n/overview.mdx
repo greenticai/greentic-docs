@@ -1,0 +1,136 @@
+---
+title: Resumen de i18n
+description: Soporte de internacionalización en Greentic
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Introducción
+
+Greentic ofrece soporte integral de internacionalización (i18n) mediante la biblioteca **greentic-i18n**. Esto permite:
+
+- Identificadores de cadenas deterministas
+- Recuperación de mensajes basada en locale
+- Traducción de Adaptive Cards
+- Cambio de idioma en runtime
+
+## Características clave
+
+<CardGrid>
+  <Card title="IDs deterministas" icon="puzzle">
+    La especificación I18nId v1 usa hashing BLAKE3 para identificadores consistentes y resistentes a colisiones.
+  </Card>
+  <Card title="Multiformato" icon="document">
+    Soporte para formatos de traducción JSON, YAML, PO y XLIFF.
+  </Card>
+  <Card title="Integración con tarjetas" icon="setting">
+    Soporte incorporado para traducir Adaptive Cards.
+  </Card>
+  <Card title="Cambio en runtime" icon="random">
+    Cambia de idioma por sesión sin reiniciar.
+  </Card>
+</CardGrid>
+
+## Cómo funciona
+
+```
+Source String: "Hello, World!"
+       │
+       ▼
+┌─────────────────────────────────┐
+│     BLAKE3 Hash Function        │
+│  blake3(normalize(string))      │
+└─────────────────────────────────┘
+       │
+       ▼
+I18nId: "i18n:v1:abc123def456"
+       │
+       ▼
+┌─────────────────────────────────┐
+│      Translation Lookup         │
+│   locale_map[id] → "Halo!"     │
+└─────────────────────────────────┘
+```
+
+## Inicio rápido
+
+### 1. Extraer cadenas
+
+Para Adaptive Cards:
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+```
+
+### 2. Traducir
+
+Usando `greentic-i18n-translator` (impulsado por Codex CLI):
+
+```bash
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+O traduce automáticamente durante la generación del pack:
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de,ja
+```
+
+### 3. Cargar en runtime
+
+```yaml
+i18n:
+  default_locale: "en"
+  locales:
+    en: "translations/en.json"
+    id: "translations/id.json"
+    ja: "translations/ja.json"
+```
+
+### 4. Usar en flows
+
+```yaml
+- id: greet
+  type: reply
+  config:
+    message_key: "i18n:v1:abc123"  # Resolved based on session locale
+```
+
+## Resolución de locale
+
+El locale se resuelve en este orden:
+
+1. Locale a nivel de sesión (establecido por usuario)
+2. Predeterminado a nivel de equipo
+3. Predeterminado a nivel de tenant
+4. Predeterminado global
+
+```yaml
+# Set session locale
+- id: set_language
+  type: state
+  config:
+    action: set
+    key: "locale"
+    value: "id"  # Indonesian
+```
+
+## Idiomas compatibles
+
+Se admite cualquier idioma. Configuraciones comunes:
+
+| Locale | Idioma |
+|--------|----------|
+| `en` | Inglés |
+| `id` | Indonesio |
+| `ja` | Japonés |
+| `zh` | Chino |
+| `es` | Español |
+| `de` | Alemán |
+
+## Próximos pasos
+
+- [Especificación de I18nId](/es/i18n/i18nid-spec/)
+- [Traducción de Tarjetas](/es/i18n/cards-translation/)

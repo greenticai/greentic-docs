@@ -1,0 +1,136 @@
+---
+title: i18n 概览
+description: Greentic 中的国际化支持
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 简介
+
+Greentic 通过 **greentic-i18n** 库提供完整的国际化（i18n）支持。它支持：
+
+- 确定性的字符串标识符
+- 基于 locale 的消息检索
+- Adaptive Card 翻译
+- 运行时语言切换
+
+## 关键特性
+
+<CardGrid>
+  <Card title="Deterministic IDs" icon="puzzle">
+    I18nId v1 规范使用 BLAKE3 哈希来生成一致、抗冲突的标识符。
+  </Card>
+  <Card title="Multi-Format" icon="document">
+    支持 JSON、YAML、PO 和 XLIFF 翻译格式。
+  </Card>
+  <Card title="Cards Integration" icon="setting">
+    内置对 Adaptive Cards 翻译的支持。
+  </Card>
+  <Card title="Runtime Switching" icon="random">
+    无需重启即可按 session 切换语言。
+  </Card>
+</CardGrid>
+
+## 工作原理
+
+```
+Source String: "Hello, World!"
+       │
+       ▼
+┌─────────────────────────────────┐
+│     BLAKE3 Hash Function        │
+│  blake3(normalize(string))      │
+└─────────────────────────────────┘
+       │
+       ▼
+I18nId: "i18n:v1:abc123def456"
+       │
+       ▼
+┌─────────────────────────────────┐
+│      Translation Lookup         │
+│   locale_map[id] → "Halo!"     │
+└─────────────────────────────────┘
+```
+
+## 快速开始
+
+### 1. 提取字符串
+
+对于 Adaptive Cards：
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+```
+
+### 2. 翻译
+
+使用 `greentic-i18n-translator`（由 Codex CLI 驱动）：
+
+```bash
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+或者在生成 pack 时自动翻译：
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de,ja
+```
+
+### 3. 在运行时加载
+
+```yaml
+i18n:
+  default_locale: "en"
+  locales:
+    en: "translations/en.json"
+    id: "translations/id.json"
+    ja: "translations/ja.json"
+```
+
+### 4. 在 Flows 中使用
+
+```yaml
+- id: greet
+  type: reply
+  config:
+    message_key: "i18n:v1:abc123"  # Resolved based on session locale
+```
+
+## Locale 解析顺序
+
+locale 按以下顺序解析：
+
+1. Session 级 locale（按用户设置）
+2. Team 级默认值
+3. Tenant 级默认值
+4. 全局默认值
+
+```yaml
+# Set session locale
+- id: set_language
+  type: state
+  config:
+    action: set
+    key: "locale"
+    value: "id"  # Indonesian
+```
+
+## 支持的语言
+
+支持任意语言。常见配置如下：
+
+| Locale | 语言 |
+|--------|----------|
+| `en` | 英语 |
+| `id` | 印度尼西亚语 |
+| `ja` | 日语 |
+| `zh` | 中文 |
+| `es` | 西班牙语 |
+| `de` | 德语 |
+
+## 下一步
+
+- [I18nId 规范](/zh/i18n/i18nid-spec/)
+- [Cards 翻译](/zh/i18n/cards-translation/)

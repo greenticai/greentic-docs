@@ -1,0 +1,169 @@
+---
+title: Timer
+description: Jadwalkan tugas dengan ekspresi cron
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider event Timer memungkinkan eksekusi tugas terjadwal menggunakan ekspresi cron. Gunakan untuk:
+
+- Laporan harian
+- Pembersihan berkala
+- Notifikasi terjadwal
+- Sinkronisasi data rutin
+
+## Konfigurasi
+
+```json title="answers.json"
+{
+  "events-timer": {
+    "enabled": true,
+    "timezone": "America/New_York"
+  }
+}
+```
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|------|-------|-----------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `timezone` | Tidak | Timezone default (default: UTC) |
+
+## Mendefinisikan Jadwal
+
+### Di Flow
+
+```yaml title="flows/scheduled_tasks.ygtc"
+name: scheduled_tasks
+version: "1.0"
+
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_report
+
+  - id: send_report
+    type: reply
+    config:
+      channel: "slack-reports"
+      message: "Daily report: {{http_response}}"
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"
+    target: daily_report
+    timezone: "America/New_York"
+```
+
+### Format Ekspresi Cron
+
+```
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, 0=Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+## Jadwal Umum
+
+| Jadwal | Ekspresi Cron | Deskripsi |
+|--------|----------------|-----------|
+| Setiap menit | `* * * * *` | Berjalan setiap menit |
+| Setiap jam | `0 * * * *` | Berjalan pada menit ke-0 |
+| Setiap hari pukul 9 pagi | `0 9 * * *` | Berjalan setiap hari pukul 9:00 |
+| Setiap Senin | `0 9 * * 1` | Berjalan hari Senin pukul 9:00 |
+| Tanggal 1 tiap bulan | `0 0 1 * *` | Berjalan tanggal 1 tiap bulan pada tengah malam |
+
+## Contoh
+
+### Pembersihan Harian
+
+```yaml
+nodes:
+  - id: cleanup
+    type: http
+    config:
+      method: DELETE
+      url: "https://api.example.com/sessions/expired"
+
+triggers:
+  - type: timer
+    cron: "0 2 * * *"  # 2 AM daily
+    target: cleanup
+```
+
+### Ringkasan Mingguan
+
+```yaml
+nodes:
+  - id: generate_summary
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Generate weekly summary from: {{data}}"
+    next: send_summary
+
+triggers:
+  - type: timer
+    cron: "0 9 * * 1"  # Monday 9 AM
+    target: generate_summary
+```
+
+### Health Check Berkala
+
+```yaml
+nodes:
+  - id: health_check
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/health"
+    next: check_result
+
+  - id: check_result
+    type: branch
+    config:
+      conditions:
+        - expression: "http_response.status != 200"
+          next: alert
+      default: done
+
+  - id: alert
+    type: reply
+    config:
+      channel: "slack-alerts"
+      message: "Health check failed!"
+
+triggers:
+  - type: timer
+    cron: "*/5 * * * *"  # Every 5 minutes
+    target: health_check
+```
+
+## Penanganan Timezone
+
+<Aside type="note">
+Ekspresi cron dievaluasi dalam timezone yang dikonfigurasi.
+</Aside>
+
+```yaml
+triggers:
+  - type: timer
+    cron: "0 9 * * *"
+    target: daily_task
+    timezone: "Europe/London"  # 9 AM London time
+```
+
+## Langkah Berikutnya
+
+- [Provider Webhook](/id/providers/events/webhook/)
+- [Panduan Flows](/id/concepts/flows/)

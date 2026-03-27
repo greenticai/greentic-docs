@@ -1,0 +1,667 @@
+---
+title: WebChat
+description: website に chat widget を埋め込む
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+WebChat provider を使うと、chat widget を website に直接埋め込めます。次をサポートします:
+
+- real-time messaging
+- Adaptive Cards
+- file upload
+- custom theming
+- mobile responsive
+- OAuth/OIDC authentication（Google、Microsoft Entra ID、GitHub、custom OIDC）
+- 言語選択用の built-in locale picker
+
+## アーキテクチャ
+
+```
+User's Browser
+    │
+    ▼ WebSocket
+┌─────────────────────────────────────────┐
+│          WebChat Widget (React)         │
+│     (greentic-webchat component)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ Direct Line Protocol
+┌─────────────────────────────────────────┐
+│        Direct Line Server               │
+│   (greentic-messaging-providers)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ NATS
+┌─────────────────────────────────────────┐
+│          Greentic Runner                │
+└─────────────────────────────────────────┘
+```
+
+## セットアップ
+
+<Steps>
+
+1. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "allowed_origins": ["https://yoursite.com"],
+       "session_timeout": 1800
+     }
+   }
+   ```
+
+2. **setup を実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **runtime を起動する**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+4. **website に埋め込む**
+
+   HTML に widget を追加します:
+
+   ```html
+   <script src="https://your-domain.com/webchat/widget.js"></script>
+   <script>
+     GreenticWebChat.init({
+       directLine: {
+         domain: 'https://your-domain.com/webchat',
+         webSocket: true
+       },
+       tenant: 'demo',
+       team: 'default',
+       theme: {
+         primaryColor: '#0078D4'
+       }
+     });
+   </script>
+   ```
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | Direct Line 用の base URL |
+| `allowed_origins` | No | CORS で許可する origin |
+| `session_timeout` | No | session timeout（秒、デフォルト: 1800） |
+| `token_expiry` | No | token expiration（秒、デフォルト: 3600） |
+| `oauth_enabled` | No | WebChat の OAuth/OIDC login を有効にする（デフォルト: false） |
+| `oauth_provider` | No | OAuth provider: `google`、`microsoft`、`github`、または `oidc` |
+| `oauth_client_id` | No | OAuth client ID（`oauth_enabled` が true の場合は必須） |
+| `oauth_authority` | No | OIDC authority/issuer URL（`microsoft` と `oidc` provider で必須） |
+| `oauth_scopes` | No | 要求する OAuth scope（provider ごとにデフォルトが異なる） |
+
+## Widget 設定
+
+### 基本設定
+
+```html
+<script src="https://your-domain.com/webchat/widget.js"></script>
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### Theming 付き
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    theme: {
+      primaryColor: '#0078D4',
+      backgroundColor: '#f5f5f5',
+      bubbleBackground: '#ffffff',
+      bubbleFromUserBackground: '#0078D4',
+      bubbleTextColor: '#333333',
+      bubbleFromUserTextColor: '#ffffff',
+      sendBoxBackground: '#ffffff',
+      sendBoxTextColor: '#333333'
+    }
+  });
+</script>
+```
+
+### User Info 付き
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    user: {
+      id: 'user-123',
+      name: 'John Doe',
+      email: 'john@example.com'
+    }
+  });
+</script>
+```
+
+### 最小化して開始
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    startMinimized: true,
+    showToggleButton: true
+  });
+</script>
+```
+
+## 機能
+
+### テキストメッセージ
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Adaptive Cards
+
+WebChat は Adaptive Card を完全にサポートします:
+
+```yaml
+- id: welcome_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "I'm your virtual assistant. How can I help?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Contact Support"
+              data:
+                action: "support"
+```
+
+### Quick Replies（Suggested Actions）
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - "Check Order Status"
+      - "Talk to Support"
+      - "View FAQs"
+```
+
+### File Upload
+
+file upload を有効にします:
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  uploadEnabled: true,
+  uploadAccept: '.pdf,.doc,.docx,.png,.jpg',
+  uploadMaxSize: 10485760  // 10MB
+});
+```
+
+flow で upload を処理します:
+
+```yaml
+- id: handle_upload
+  type: branch
+  config:
+    conditions:
+      - expression: "attachments.length > 0"
+        next: process_file
+      default: normal_message
+
+- id: process_file
+  type: reply
+  config:
+    message: "Thanks! I've received your file: {{attachments[0].name}}"
+```
+
+### Typing Indicator
+
+```yaml
+- id: thinking
+  type: reply
+  config:
+    typing: true
+    typing_duration: 2000  # milliseconds
+  next: actual_reply
+
+- id: actual_reply
+  type: reply
+  config:
+    message: "Here's what I found..."
+```
+
+## API Integration
+
+### JavaScript API
+
+```javascript
+// Get chat instance
+const chat = GreenticWebChat.getInstance();
+
+// Send message programmatically
+chat.sendMessage('Hello from JS!');
+
+// Minimize/maximize
+chat.minimize();
+chat.maximize();
+
+// Clear conversation
+chat.clear();
+
+// End conversation
+chat.end();
+
+// Listen for events
+chat.on('message', (event) => {
+  console.log('New message:', event.text);
+});
+
+chat.on('conversationStarted', () => {
+  console.log('Conversation started');
+});
+```
+
+### REST API
+
+Direct Line REST API endpoint:
+
+```bash
+# Start conversation
+POST /webchat/v3/directline/conversations
+Authorization: Bearer <token>
+
+# Send message
+POST /webchat/v3/directline/conversations/{conversationId}/activities
+Content-Type: application/json
+
+{
+  "type": "message",
+  "text": "Hello!"
+}
+
+# Get messages
+GET /webchat/v3/directline/conversations/{conversationId}/activities
+```
+
+## カスタマイズ
+
+### Custom CSS
+
+```html
+<style>
+  .greentic-webchat {
+    --primary-color: #0078D4;
+    --background-color: #ffffff;
+    --text-color: #333333;
+    --border-radius: 8px;
+    --font-family: 'Segoe UI', sans-serif;
+  }
+
+  .greentic-webchat .message-bubble {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .greentic-webchat .send-button {
+    background-color: var(--primary-color);
+  }
+</style>
+```
+
+### Custom Avatar
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  botAvatar: 'https://example.com/bot-avatar.png',
+  userAvatar: 'https://example.com/user-avatar.png',
+  showAvatars: true
+});
+```
+
+### Custom Header
+
+header 領域には title、subtitle、close button を表示できます。locale picker が有効な場合は header に表示されます。OAuth が有効な場合は、locale picker の横に logout button も表示されます。
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  header: {
+    title: 'Support Chat',
+    subtitle: 'We usually reply within minutes',
+    showCloseButton: true
+  }
+});
+```
+
+## 多言語対応
+
+WebChat GUI には built-in locale picker があり、user は実行中に言語を切り替えられます。locale picker は chat header に表示され、page を再読み込みせずに希望の言語を選べます。
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  locale: 'es-ES',
+  showLocalePicker: true,
+  availableLocales: ['en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP'],
+  strings: {
+    'placeholder': 'Escribe un mensaje...',
+    'send': 'Enviar',
+    'connecting': 'Conectando...',
+    'reconnecting': 'Reconectando...'
+  }
+});
+```
+
+`showLocalePicker` を有効にすると、close button の横（OAuth が有効な場合は logout button も含む位置）に言語 selector が表示されます。locale を変更すると UI string 全体が更新され、選択した言語に応じて応答を変えられるよう flow にも通知されます。
+
+## OAuth/OIDC Authentication
+
+WebChat は任意の OAuth/OIDC authentication をサポートし、chat へアクセスする前に user に login を要求できます。有効にすると、chat interface が利用可能になる前に login overlay が表示されます。実装はセキュリティのために client-side PKCE（Proof Key for Code Exchange）flow を使用します。
+
+<Aside type="tip">
+OAuth authentication は完全に任意です。設定しない場合、WebChat は以前の version と同様に login なしで動作します。
+</Aside>
+
+### 対応 provider
+
+| Provider | `oauth_provider` value | Notes |
+|----------|----------------------|-------|
+| Google | `google` | Google OAuth 2.0 with Google Identity Services |
+| Microsoft (Entra ID) | `microsoft` | Azure AD / Entra ID、`oauth_authority` が必要 |
+| GitHub | `github` | GitHub OAuth Apps |
+| Custom OIDC | `oidc` | OpenID Connect 準拠 provider、`oauth_authority` が必要 |
+
+### 仕組み
+
+1. user が WebChat widget を開く
+2. 設定された provider 用の sign-in button を持つ login overlay が表示される
+3. user は provider の login flow で認証する（client-side PKCE）
+4. 認証に成功すると overlay は閉じられ、chat にアクセスできる
+5. 認証済み user の identity は user context として flow に渡される
+6. sign out 用に header に logout button が表示される（locale picker の横）
+
+### provider セットアップ
+
+各 provider は `answers.json` または QA ベースの対話セットアップ wizard で設定します。setup wizard は条件分岐を使い、選んだ provider に必要な項目だけを案内します。
+
+#### Google
+
+<Steps>
+
+1. **OAuth credentials** を [Google Cloud Console](https://console.cloud.google.com/apis/credentials) で作成する
+
+   - 新しい OAuth 2.0 Client ID を作成する
+   - application type を "Web application" にする
+   - "Authorized JavaScript origins" に WebChat domain を追加する
+   - "Authorized redirect URIs" に `https://your-domain.com/webchat/auth/callback` を追加する
+
+2. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "google",
+       "oauth_client_id": "123456789.apps.googleusercontent.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+3. **setup と起動を行う**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Microsoft (Entra ID)
+
+<Steps>
+
+1. **application を登録する** in [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps)
+
+   - "App registrations" で新しい application を登録する
+   - redirect URI を `https://your-domain.com/webchat/auth/callback` に設定する（type: SPA）
+   - "Authentication" で implicit grant 用の "Access tokens" と "ID tokens" を有効にする
+   - Application (client) ID と Directory (tenant) ID を控える
+
+2. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "microsoft",
+       "oauth_client_id": "your-application-client-id",
+       "oauth_authority": "https://login.microsoftonline.com/your-tenant-id/v2.0",
+       "oauth_scopes": "openid profile email User.Read"
+     }
+   }
+   ```
+
+3. **setup と起動を行う**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### GitHub
+
+<Steps>
+
+1. **OAuth App** を [GitHub Developer Settings](https://github.com/settings/developers) で作成する
+
+   - "OAuth Apps" に移動して新しい application を作成する
+   - "Authorization callback URL" を `https://your-domain.com/webchat/auth/callback` に設定する
+   - Client ID を控える
+
+2. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "github",
+       "oauth_client_id": "your-github-client-id",
+       "oauth_scopes": "read:user user:email"
+     }
+   }
+   ```
+
+3. **setup と起動を行う**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Custom OIDC Provider
+
+<Steps>
+
+1. **client を登録する** with your OIDC provider
+
+   - redirect URI を `https://your-domain.com/webchat/auth/callback` に設定する
+   - provider が PKCE をサポートしていることを確認する
+   - client ID と issuer/authority URL を控える
+
+2. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "oidc",
+       "oauth_client_id": "your-client-id",
+       "oauth_authority": "https://your-oidc-provider.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+   `oauth_authority` は `/.well-known/openid-configuration` が利用可能な issuer URL を指している必要があります。
+
+3. **setup と起動を行う**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+### OAuth 付き Widget 設定
+
+server 側で OAuth が有効なら、widget は login overlay を自動表示します。追加の client-side 設定は不要です。認証済み user の identity は user context 経由で flow から利用できます:
+
+```javascript
+GreenticWebChat.init({
+  directLine: {
+    domain: 'https://your-domain.com/webchat'
+  },
+  tenant: 'demo',
+  team: 'default'
+  // OAuth login overlay is shown automatically when oauth_enabled is true
+});
+```
+
+認証後、header には locale picker の横に logout button が表示されます。クリックすると session がクリアされ、login overlay に戻ります。
+
+### QA Wizard による対話セットアップ
+
+`answers.json` を手で書く代わりに、条件分岐つきで provider 固有の設定を案内する対話 setup wizard を使えます:
+
+```bash
+gtc setup ./my-bundle
+```
+
+wizard は `oauth_enabled` が `true` に設定されていることを検出すると、選択した `oauth_provider` に必要な追加質問だけを表示するため、使う identity provider に関係する field だけが見えます。
+
+## セキュリティ
+
+<Aside type="caution">
+本番環境では、無許可の埋め込みを防ぐために必ず `allowed_origins` を設定してください。
+</Aside>
+
+### Token Security
+
+- token は短寿命です（デフォルト 1 時間）
+- token は conversation 単位に scope されます
+- refresh token は client に公開されません
+
+### OAuth/OIDC Security
+
+OAuth が有効な場合:
+
+- authentication には PKCE flow を使うため、frontend で client secret は不要です
+- token は chat access を許可する前に server 側で検証されます
+- login overlay は認証成功まで chat interaction をすべてブロックします
+- session logout では client の token を削除し、server-side session も無効化します
+
+### CORS 設定
+
+```json
+{
+  "messaging-webchat": {
+    "allowed_origins": [
+      "https://www.example.com",
+      "https://app.example.com"
+    ]
+  }
+}
+```
+
+## トラブルシューティング
+
+### Widget が読み込まれない
+
+1. console で JavaScript error を確認する
+2. script URL が正しいことを確認する
+3. CORS 設定を確認する
+
+### 接続に失敗する
+
+1. Direct Line endpoint にアクセスできることを確認する
+2. WebSocket support を確認する
+3. firewall 設定を確認する
+
+### メッセージを送信できない
+
+1. conversation が有効であることを確認する
+2. token が期限切れでないことを確認する
+3. browser console の error を確認する
+
+## 次のステップ
+
+- [Adaptive Cards](/ja/components/cards2pack/) - rich card を作成する
+- [Theming Guide](/ja/reference/webchat-theming/) - 高度なカスタマイズ
+- [Flows Guide](/ja/concepts/flows/) - conversation flow を構築する

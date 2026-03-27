@@ -1,0 +1,276 @@
+---
+title: gtc wizard
+description: 使用 wizard 命令创建新的 Greentic bundles
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概述
+
+`gtc wizard` 命令根据 wizard answers 创建新的 Greentic bundles。它会搭建完整的 bundle 结构，包括配置文件、provider 设置和 app 模板。
+
+## 用法
+
+```bash
+gtc wizard [OPTIONS]
+```
+
+## 选项
+
+| 选项 | 说明 |
+|--------|-------------|
+| `--answers <FILE \| URL>` | wizard answers 文件的路径或 URL（JSON 或 YAML）。支持本地路径以及远程 `http://` / `https://` URL。 |
+| `--dry-run` | 预览将生成的文件而不写入 |
+| `--output <DIR>` | 输出目录（默认：当前目录） |
+| `--template <NAME>` | 使用指定模板 |
+| `-v, --verbose` | 启用详细输出 |
+
+## Wizard Answers 文件
+
+### JSON 格式
+
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0",
+    "description": "Customer support digital worker"
+  },
+  "providers": {
+    "messaging": ["telegram", "slack"],
+    "events": ["webhook", "timer"]
+  },
+  "apps": [
+    {
+      "name": "support-bot",
+      "template": "customer-service"
+    }
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [
+        {
+          "id": "default",
+          "channels": ["telegram", "slack"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### YAML 格式
+
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+  description: Customer support digital worker
+
+providers:
+  messaging:
+    - telegram
+    - slack
+  events:
+    - webhook
+    - timer
+
+apps:
+  - name: support-bot
+    template: customer-service
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - telegram
+          - slack
+```
+
+## 生成的结构
+
+运行 wizard 会生成：
+
+```
+my-digital-worker/
+├── greentic.demo.yaml          # Main configuration
+├── providers/
+│   ├── messaging/
+│   │   ├── messaging-telegram.gtpack
+│   │   └── messaging-slack.gtpack
+│   └── events/
+│       ├── events-webhook.gtpack
+│       └── events-timer.gtpack
+├── apps/
+│   └── support-bot/
+│       ├── app.yaml
+│       └── flows/
+│           └── on_message.ygtc
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## 示例
+
+### 基本用法
+
+```bash
+# Interactive mode
+gtc wizard
+
+# With answers file
+gtc wizard --answers wizard-answers.yaml
+```
+
+### 预览模式
+
+```bash
+# See what would be generated
+gtc wizard --answers wizard-answers.yaml --dry-run
+```
+
+### 远程 Answers 文件
+
+`--answers` 标志支持 `http://` 和 `https://` URL，因此可以轻松地将共享 answers 文档存放在集中位置，并在 CI/CD 流水线中引用它们。
+
+```bash
+# Fetch answers from a remote URL
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
+
+# Combine with dry-run to preview before generating
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
+```
+
+<Aside type="tip">
+远程 URL 支持在 CI/CD 流水线中很有用，因为 wizard answers 可以存储在共享仓库或制品服务器中，并在构建时拉取。
+</Aside>
+
+### 自定义输出目录
+
+```bash
+gtc wizard --answers wizard-answers.yaml --output ./my-project
+```
+
+### 使用模板
+
+```bash
+# List available templates
+gtc wizard --list-templates
+
+# Use specific template
+gtc wizard --template customer-service --answers answers.yaml
+```
+
+## 可用模板
+
+| 模板 | 说明 |
+|----------|-------------|
+| `minimal` | 只有一个 provider 的最简 bundle |
+| `customer-service` | 带升级处理的 FAQ bot |
+| `helpdesk` | 带工单集成的 IT 支持 |
+| `multi-channel` | 多个消息渠道 |
+
+## 工作流
+
+<Steps>
+
+1. **创建 answers 文件**
+
+   用 JSON 或 YAML 定义你的项目配置。
+
+2. **运行 wizard**
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+3. **检查生成的文件**
+
+   检查生成的 bundle 结构。
+
+4. **配置 providers**
+
+   ```bash
+   gtc setup ./my-digital-worker
+   ```
+
+5. **启动 runtime**
+
+   ```bash
+   gtc start ./my-digital-worker
+   ```
+
+</Steps>
+
+## 自定义生成的 Flows
+
+wizard 会生成基础 flow 模板。生成后你可以继续自定义：
+
+```yaml title="apps/support-bot/flows/on_message.ygtc"
+name: on_message
+version: "1.0"
+description: Handle incoming messages
+
+nodes:
+  # Add your custom nodes here
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Analyze: {{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{analysis_result}}"
+
+triggers:
+  - type: message
+    target: analyze
+```
+
+<Aside type="tip">
+先使用 `--dry-run` 预览将生成的结构，再决定是否写入磁盘。
+</Aside>
+
+## 故障排查
+
+### 无效的 Answers 文件
+
+```
+Error: Failed to parse answers file
+```
+
+确保你的 JSON/YAML 有效。可以使用 linter 检查语法。
+
+### 缺少必填字段
+
+```
+Error: Missing required field: project.name
+```
+
+检查 answers 文件中是否包含所有必填字段。
+
+### 找不到模板
+
+```
+Error: Template 'unknown' not found
+```
+
+使用 `gtc wizard --list-templates` 查看可用模板。
+
+## 下一步
+
+- [gtc setup](/zh/cli/setup/) - 配置 providers
+- [gtc start](/zh/cli/start/) - 运行 runtime
+- [Quick Start](/zh/getting-started/quick-start/) - 完整工作流

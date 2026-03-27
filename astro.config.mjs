@@ -9,6 +9,33 @@ export default defineConfig({
 		starlight({
 			title: 'Greentic Docs',
 			description: 'Documentation for the Greentic Platform - WASM-component-based, multi-tenant platform for AI-driven digital workers',
+			defaultLocale: 'root',
+			locales: {
+				root: {
+					label: 'English',
+					lang: 'en',
+				},
+				id: {
+					label: 'Bahasa Indonesia',
+					lang: 'id',
+				},
+				ja: {
+					label: '日本語',
+					lang: 'ja',
+				},
+				zh: {
+					label: '中文',
+					lang: 'zh',
+				},
+				es: {
+					label: 'Español',
+					lang: 'es',
+				},
+				de: {
+					label: 'Deutsch',
+					lang: 'de',
+				},
+			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/greenticai' }],
 			head: [
 				{

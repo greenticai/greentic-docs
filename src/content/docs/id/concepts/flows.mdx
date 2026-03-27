@@ -1,0 +1,338 @@
+---
+title: Flows
+description: Memahami definisi flow di Greentic
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+## Apa Itu Flow?
+
+**Flow** adalah graf orkestrasi yang didefinisikan dalam YAML dan menjelaskan bagaimana pesan dan data bergerak melalui digital worker Anda. Flow disimpan dalam file `.ygtc` dan mendefinisikan:
+
+- **Nodes** - Langkah pemrosesan individual (komponen WASM)
+- **Edges** - Koneksi antar node
+- **Triggers** - Apa yang memulai flow
+- **Conditions** - Logika percabangan
+
+## Struktur Dasar Flow
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+# Define the nodes (processing steps)
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! How can I help you today?"
+
+# Define what triggers this flow
+triggers:
+  - type: message
+    pattern: "hello|hi|hey"
+    target: greet
+```
+
+## Komponen Flow
+
+### Nodes
+
+Node adalah building block dari sebuah flow. Setiap node merepresentasikan komponen WASM yang memproses data:
+
+```yaml
+nodes:
+  - id: unique_node_id
+    type: node_type           # Component type
+    config:                   # Component-specific configuration
+      key: value
+    next: next_node_id        # Optional: next node to execute
+```
+
+#### Jenis Node Umum
+
+| Type | Purpose |
+|------|---------|
+| `reply` | Mengirim pesan kembali ke pengguna |
+| `llm` | Memanggil LLM (OpenAI, dll.) |
+| `template` | Merender template Handlebars |
+| `script` | Mengeksekusi script Rhai |
+| `branch` | Percabangan kondisional |
+| `http` | Membuat request HTTP |
+| `state` | Mengelola state session |
+
+### Edges
+
+Edge menghubungkan node satu sama lain. Edge dapat bersifat implisit (melalui `next`) atau eksplisit:
+
+```yaml
+nodes:
+  - id: start
+    type: template
+    config:
+      template: "Processing your request..."
+    next: process
+
+  - id: process
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "{{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{llm_response}}"
+```
+
+### Triggers
+
+Trigger mendefinisikan apa yang memulai flow:
+
+```yaml
+triggers:
+  # Message pattern trigger
+  - type: message
+    pattern: "order|purchase|buy"
+    target: handle_order
+
+  # Default trigger (catch-all)
+  - type: default
+    target: fallback_handler
+
+  # Event trigger
+  - type: event
+    event_type: "user.created"
+    target: welcome_user
+```
+
+## Percabangan Kondisional
+
+Gunakan node `branch` untuk logika kondisional:
+
+```yaml
+nodes:
+  - id: check_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent == 'greeting'"
+          next: greet_user
+        - expression: "intent == 'help'"
+          next: show_help
+        - expression: "intent == 'order'"
+          next: process_order
+      default: fallback
+
+  - id: greet_user
+    type: reply
+    config:
+      message: "Hello! Nice to meet you!"
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's what I can help you with..."
+
+  - id: fallback
+    type: reply
+    config:
+      message: "I'm not sure I understand. Can you rephrase?"
+```
+
+## Bekerja dengan State
+
+Flow dapat membaca dan menulis state session:
+
+```yaml
+nodes:
+  - id: save_name
+    type: state
+    config:
+      action: set
+      key: "user_name"
+      value: "{{extracted_name}}"
+    next: confirm
+
+  - id: get_name
+    type: state
+    config:
+      action: get
+      key: "user_name"
+      output: "stored_name"
+    next: greet_by_name
+```
+
+## Integrasi LLM
+
+Integrasikan LLM untuk respons berbasis AI:
+
+```yaml
+nodes:
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        You are a helpful customer service agent.
+        Extract the user's intent and any relevant entities.
+      prompt: "User message: {{message}}"
+      output_format: json
+    next: process_result
+```
+
+## Rendering Template
+
+Gunakan template Handlebars untuk konten dinamis:
+
+```yaml
+nodes:
+  - id: format_response
+    type: template
+    config:
+      template: |
+        Hi {{user_name}}!
+
+        Here's your order summary:
+        {{#each items}}
+        - {{name}}: ${{price}}
+        {{/each}}
+
+        Total: ${{total}}
+    next: send_response
+```
+
+## Validasi Flow
+
+Validasi flow Anda sebelum deployment:
+
+```bash
+greentic-flow doctor ./flows/
+
+# Or with the GTC CLI
+gtc flow validate ./flows/hello.ygtc
+```
+
+<Aside type="tip">
+Gunakan `greentic-flow doctor` untuk menangkap masalah seperti:
+- Referensi node yang hilang
+- Jenis node yang tidak valid
+- Dependensi sirkular
+- Pelanggaran skema
+</Aside>
+
+## Praktik Terbaik
+
+1. **Jaga flow tetap fokus** - Satu flow per intent pengguna atau workflow
+2. **Gunakan ID yang bermakna** - ID node harus menjelaskan tujuannya
+3. **Dokumentasikan dengan komentar** - Tambahkan deskripsi pada flow yang kompleks
+4. **Uji secara bertahap** - Validasi setelah setiap perubahan
+5. **Versikan flow Anda** - Gunakan semantic versioning
+
+## Contoh: Flow Layanan Pelanggan Lengkap
+
+```yaml title="flows/customer_service.ygtc"
+name: customer_service
+version: "1.0"
+description: Handle customer inquiries with AI assistance
+
+nodes:
+  # Analyze the incoming message
+  - id: analyze_intent
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        Classify the customer's intent into one of:
+        - greeting
+        - order_status
+        - product_question
+        - complaint
+        - other
+
+        Respond with JSON: {"intent": "...", "confidence": 0.0-1.0}
+      prompt: "{{message}}"
+      output_format: json
+    next: route_intent
+
+  # Route based on intent
+  - id: route_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent.intent == 'greeting'"
+          next: handle_greeting
+        - expression: "intent.intent == 'order_status'"
+          next: handle_order_status
+        - expression: "intent.intent == 'complaint'"
+          next: handle_complaint
+      default: handle_general
+
+  # Handle greeting
+  - id: handle_greeting
+    type: reply
+    config:
+      message: "Hello! Welcome to our support. How can I help you today?"
+
+  # Handle order status
+  - id: handle_order_status
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/orders/{{order_id}}"
+    next: format_order_response
+
+  - id: format_order_response
+    type: template
+    config:
+      template: |
+        Your order #{{order_id}} is currently: {{status}}
+        Expected delivery: {{delivery_date}}
+    next: send_order_response
+
+  - id: send_order_response
+    type: reply
+    config:
+      message: "{{formatted_response}}"
+
+  # Handle complaints with escalation
+  - id: handle_complaint
+    type: reply
+    config:
+      message: "I'm sorry to hear that. Let me connect you with a specialist who can help resolve this."
+    next: escalate_to_human
+
+  - id: escalate_to_human
+    type: event
+    config:
+      event_type: "escalation.requested"
+      payload:
+        reason: "complaint"
+        conversation_id: "{{session_id}}"
+
+  # General handler
+  - id: handle_general
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: "You are a helpful customer service agent. Be friendly and concise."
+      prompt: "{{message}}"
+    next: send_general_response
+
+  - id: send_general_response
+    type: reply
+    config:
+      message: "{{llm_response}}"
+
+triggers:
+  - type: message
+    target: analyze_intent
+```
+
+## Langkah Berikutnya
+
+- [Packs](/id/concepts/packs/) - Kemas flow Anda untuk deployment
+- [Components](/id/concepts/components/) - Buat jenis node kustom
+- [Flow Schema Reference](/id/reference/flow-schema/) - Skema YAML lengkap

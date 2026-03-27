@@ -1,0 +1,349 @@
+---
+title: gtc start
+description: Greentic runtime server を起動する
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概要
+
+`gtc start` コマンドは Greentic runtime server を起動します。HTTP server、NATS bus、flow executor を含む必要なすべてのサービスを開始します。
+
+## 使い方
+
+```bash
+gtc start [OPTIONS] <BUNDLE_PATH>
+```
+
+## オプション
+
+| Option | 説明 | Default |
+|--------|-------------|---------|
+| `--host <HOST>` | bind address | `0.0.0.0` |
+| `--port <PORT>` | HTTP port | `8080` |
+| `--cloudflared <on/off>` | Cloudflare tunnel を有効にする | `on` |
+| `--ngrok <on/off>` | ngrok tunnel を有効にする | `off` |
+| `--nats <on/off>` | 組み込み NATS を有効にする | `on` |
+| `--skip-setup` | provider の setup flows をスキップする | `false` |
+| `--force-setup` | setup flows を強制的に再実行する | `false` |
+| `-v, --verbose` | verbose/debug logging を有効にする | `false` |
+| `-q, --quiet` | 最小限の出力にする | `false` |
+
+## 基本的な使い方
+
+### デフォルト設定で起動する
+
+```bash
+gtc start ./my-bundle
+```
+
+これにより次が起動します:
+- `0.0.0.0:8080` 上の HTTP server
+- 組み込み NATS server
+- Cloudflared tunnel（利用可能な場合）
+
+### 開発用に起動する
+
+```bash
+# Use ngrok instead of cloudflared
+gtc start ./my-bundle --cloudflared off --ngrok on
+
+# With verbose logging
+gtc start ./my-bundle --verbose
+
+# Skip setup (if already configured)
+gtc start ./my-bundle --skip-setup
+```
+
+### 本番用に起動する
+
+```bash
+# No tunnels, external NATS
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Custom port
+gtc start ./my-bundle --port 3000 --cloudflared off
+```
+
+## Tunnel の設定
+
+### Cloudflared（デフォルト）
+
+Cloudflared は Cloudflare の network への安全な tunnel を作成します:
+
+```bash
+gtc start ./my-bundle --cloudflared on
+
+# Output:
+# Cloudflare tunnel started: https://random-words.trycloudflare.com
+# Webhook URLs will use: https://random-words.trycloudflare.com
+```
+
+<Aside type="note">
+永続的な tunnel を設定しない限り、Cloudflared の URL は再起動のたびに変わります。
+</Aside>
+
+### ngrok
+
+開発中に安定した URL が必要な場合は ngrok を使います:
+
+```bash
+gtc start ./my-bundle --ngrok on
+
+# Output:
+# ngrok tunnel started: https://abc123.ngrok-free.app
+# Webhook URLs will use: https://abc123.ngrok-free.app
+```
+
+### Tunnel を使わない
+
+公開ドメインを使う本番環境では:
+
+```bash
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Make sure your server is publicly accessible
+# and update provider webhooks with your domain
+```
+
+## NATS の設定
+
+### 組み込み NATS（デフォルト）
+
+```bash
+gtc start ./my-bundle --nats on
+
+# Starts embedded NATS on localhost:4222
+```
+
+### 外部 NATS
+
+```bash
+# Disable embedded, use external
+gtc start ./my-bundle --nats off
+
+# Set NATS URL via environment
+GREENTIC_NATS_URL=nats://nats.example.com:4222 gtc start ./my-bundle --nats off
+```
+
+## Setup Flow の挙動
+
+### 通常の挙動
+
+デフォルトでは、providers がまだ設定されていない場合に `gtc start` は setup flows を実行します:
+
+```bash
+gtc start ./my-bundle
+# Runs setup flows for unconfigured providers
+```
+
+### Setup をスキップする
+
+既存の設定を使って setup flows を完全にスキップします:
+
+```bash
+gtc start ./my-bundle --skip-setup
+```
+
+### Setup を強制する
+
+すべての setup flows を強制的に再実行します（URL 変更後に便利です）:
+
+```bash
+gtc start ./my-bundle --force-setup
+```
+
+## Runtime endpoints
+
+実行中、server は次を公開します:
+
+| Endpoint | 用途 |
+|----------|---------|
+| `GET /health` | ヘルスチェック |
+| `GET /ready` | readiness probe |
+| `POST /webhook/{provider}/{tenant}/{team}` | provider webhooks |
+| `GET /api/v1/sessions` | session 管理 |
+| `POST /api/v1/messages` | メッセージ送信 |
+| `GET /auth/config` | OAuth 設定 endpoint |
+| `POST /oauth/token-exchange` | server-side OIDC token exchange proxy |
+
+### ヘルスチェックの例
+
+```bash
+curl http://localhost:8080/health
+# {"status": "healthy"}
+```
+
+### OAuth サポート
+
+runtime は、ユーザー認証を必要とする messaging providers（WebChat や Teams など）との OAuth/OIDC 統合のために 2 つの endpoints を公開します。
+
+#### `GET /auth/config`
+
+secrets store から OAuth 設定を読み込み、client に返します。clients はこの endpoint を使って、認可フローを開始するために必要な identity provider の設定を取得します。
+
+```bash
+curl http://localhost:8080/auth/config
+# {
+#   "authority": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+#   "client_id": "your-client-id",
+#   "redirect_uri": "https://your-public-url/auth/callback",
+#   "scope": "openid profile"
+# }
+```
+
+#### `POST /oauth/token-exchange`
+
+OIDC の authorization code exchange を行う server-side token exchange proxy です。この endpoint により、frontend から直接 identity provider の token endpoint を呼び出す際に発生する browser の CORS 制約を回避して、clients が authorization code を tokens に交換できます。
+
+```bash
+curl -X POST http://localhost:8080/oauth/token-exchange \
+  -H "Content-Type: application/json" \
+  -d '{"code": "authorization_code_here", "redirect_uri": "https://your-public-url/auth/callback"}'
+```
+
+<Aside type="tip">
+この token exchange proxy により、browser が identity provider の token endpoint に直接接続する必要がなくなり、多くの identity providers が適用する CORS ポリシーによる失敗を避けられます。
+</Aside>
+
+### Static Routes
+
+Static routes（ヘルスチェックや OAuth endpoints など）は、明示的な public base URL がなくても設定できます。これにより、tunnel や公開 URL が確立される前でも、server の起動直後からこれらの endpoints を利用できます。
+
+<Aside type="note">
+provider の webhook endpoints には、外部サービスが server に到達できるよう public base URL が引き続き必要です。Static routes はローカル専用で、tunnel の可用性には依存しません。
+</Aside>
+
+## ログ
+
+### ログレベル
+
+```bash
+# Debug (most verbose)
+GREENTIC_LOG_LEVEL=debug gtc start ./my-bundle
+
+# Info (default)
+GREENTIC_LOG_LEVEL=info gtc start ./my-bundle
+
+# Warning
+GREENTIC_LOG_LEVEL=warn gtc start ./my-bundle
+```
+
+### Verbose モード
+
+```bash
+gtc start ./my-bundle --verbose
+
+# Equivalent to GREENTIC_LOG_LEVEL=debug
+```
+
+### ログ形式
+
+```bash
+# JSON format (for production)
+GREENTIC_LOG_FORMAT=json gtc start ./my-bundle
+
+# Pretty format (for development, default)
+GREENTIC_LOG_FORMAT=pretty gtc start ./my-bundle
+```
+
+## シグナル
+
+| Signal | 挙動 |
+|--------|----------|
+| `SIGTERM` | graceful shutdown |
+| `SIGINT` (Ctrl+C) | graceful shutdown |
+| `SIGHUP` | 設定を再読み込みする |
+
+## 環境変数
+
+| Variable | 説明 |
+|----------|-------------|
+| `GREENTIC_HOST` | bind address |
+| `GREENTIC_PORT` | HTTP port |
+| `GREENTIC_LOG_LEVEL` | ログの詳細度 |
+| `GREENTIC_LOG_FORMAT` | ログ形式（json/pretty） |
+| `GREENTIC_NATS_URL` | 外部 NATS URL |
+| `GREENTIC_REDIS_URL` | sessions 用の Redis URL |
+
+## トラブルシューティング
+
+### Port がすでに使われている
+
+```
+Error: Address already in use (os error 48)
+```
+
+別の process が port 8080 を使用しています。停止するか、別の port を使ってください:
+
+```bash
+gtc start ./my-bundle --port 3000
+```
+
+### NATS 接続に失敗した
+
+```
+Error: Failed to connect to NATS
+```
+
+外部 NATS を使っている場合は、実行中でアクセス可能か確認してください。そうでない場合は、組み込み版を有効にします:
+
+```bash
+gtc start ./my-bundle --nats on
+```
+
+### Tunnel の起動に失敗した
+
+```
+Error: Failed to start cloudflared tunnel
+```
+
+cloudflared をインストールするか、代わりに ngrok を使ってください:
+
+```bash
+# Install cloudflared
+brew install cloudflared
+
+# Or use ngrok
+gtc start ./my-bundle --cloudflared off --ngrok on
+```
+
+### Provider の setup に失敗した
+
+```
+Error: Setup flow failed for messaging-telegram
+```
+
+回答ファイル内の認証情報を確認し、公開 URL にアクセスできることを確認してください:
+
+```bash
+# Re-run setup
+gtc start ./my-bundle --force-setup --verbose
+```
+
+## Docker デプロイ
+
+```dockerfile title="Dockerfile"
+FROM rust:1.90 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/gtc /usr/local/bin/
+COPY my-bundle /app/bundle
+WORKDIR /app
+EXPOSE 8080
+CMD ["gtc", "start", "/app/bundle", "--cloudflared", "off"]
+```
+
+```bash
+docker build -t my-worker .
+docker run -p 8080:8080 my-worker
+```
+
+## 次のステップ
+
+- [Building Packs](/ja/cli/building-packs/) - packs を作成して管理する
+- [Configuration Reference](/ja/reference/configuration/) - 完全な設定オプション
+- [Troubleshooting Guide](/ja/reference/troubleshooting/) - よくある問題

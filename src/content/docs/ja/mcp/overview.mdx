@@ -1,0 +1,143 @@
+---
+title: MCP 概要
+description: Greentic における Model Context Protocol integration
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## はじめに
+
+**MCP (Model Context Protocol)** は、AI model を external tool や data source に接続するための標準です。Greentic では次の用途で MCP を実装しています。
+
+- sandboxed な WASM environment での tool execution
+- 安全な external API access
+- database query
+- file system operation
+
+## 主な機能
+
+<CardGrid>
+  <Card title="WASM Sandboxing" icon="puzzle">
+    MCP ツールは security のために分離された WebAssembly environment で実行されます。
+  </Card>
+  <Card title="Tool Discovery" icon="magnifier">
+    自動的なツール登録と capability advertisement を提供します。
+  </Card>
+  <Card title="Type Safety" icon="approve-check">
+    WIT interface により type-safe な tool invocation を実現します。
+  </Card>
+  <Card title="Observability" icon="seti:pulse">
+    tool execution のための tracing と logging を標準で備えています。
+  </Card>
+</CardGrid>
+
+## アーキテクチャ
+
+```
+LLM (with tool use)
+       │
+       ▼ Tool Call Request
+┌─────────────────────────────────┐
+│       greentic-mcp              │
+│   (MCP Executor / WASI Bridge)  │
+└─────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────┐
+│    WASM Tool Component          │
+│   (Sandboxed execution)         │
+└─────────────────────────────────┘
+       │
+       ▼ Tool Result
+Back to LLM
+```
+
+## Flow における MCP
+
+### Tool Definition
+
+```yaml title="tools/database-query.yaml"
+name: database_query
+description: Query the customer database
+parameters:
+  - name: query
+    type: string
+    description: SQL query to execute
+    required: true
+  - name: limit
+    type: integer
+    description: Maximum rows to return
+    default: 10
+returns:
+  type: array
+  items:
+    type: object
+```
+
+### Flow でツールを使う
+
+```yaml
+- id: query_orders
+  type: mcp-tool
+  config:
+    tool: "database_query"
+    parameters:
+      query: "SELECT * FROM orders WHERE customer_id = '{{customer_id}}'"
+      limit: 5
+  output: orders_result
+  next: process_orders
+```
+
+### LLM と組み合わせる
+
+```yaml
+- id: agent_step
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant with database access."
+    tools:
+      - database_query
+      - send_email
+      - create_ticket
+    tool_choice: "auto"
+  next: handle_response
+```
+
+## 利用可能なツール
+
+Greentic には、いくつかの built-in MCP tool が用意されています。
+
+| Tool | Description |
+|------|-------------|
+| `http_request` | HTTP request を実行する |
+| `database_query` | database を query する |
+| `file_read` | file を読み取る（sandboxed） |
+| `file_write` | file に書き込む（sandboxed） |
+| `send_email` | email を送信する |
+| `create_ticket` | support ticket を作成する |
+
+## セキュリティ
+
+### WASM Sandboxing
+
+すべての MCP tool は WASM sandbox で実行されます。
+- 直接の filesystem access は不可
+- 明示的に許可されない限り network access は不可
+- memory isolation
+- CPU time limit
+
+### Capability Model
+
+ツールは必要な capability を宣言します。
+
+```yaml
+capabilities:
+  - network:outbound  # Can make outbound requests
+  - filesystem:read   # Can read files in sandbox
+```
+
+## 次のステップ
+
+- [Creating MCP Tools](/ja/mcp/creating-tools/)
+- [LLM OpenAI Component](/ja/components/llm-openai/)

@@ -1,0 +1,263 @@
+---
+title: Ringkasan Provider Messaging
+description: Hubungkan digital worker Anda ke platform messaging
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Pendahuluan
+
+Greentic mendukung beberapa platform messaging melalui **Messaging Providers**. Setiap provider adalah pack komponen WASM yang menangani:
+
+- **Ingress** - Menerima pesan dari platform
+- **Egress** - Mengirim pesan ke platform
+- **Operations** - Fitur spesifik platform (tombol, card, thread)
+
+## Provider yang Tersedia
+
+<CardGrid>
+  <LinkCard
+    title="Slack"
+    href="/id/providers/messaging/slack/"
+    description="Terhubung ke workspace Slack dengan dukungan app penuh"
+  />
+  <LinkCard
+    title="Microsoft Teams"
+    href="/id/providers/messaging/teams/"
+    description="Integrasikan dengan channel dan chat Microsoft Teams"
+  />
+  <LinkCard
+    title="Telegram"
+    href="/id/providers/messaging/telegram/"
+    description="Bangun bot Telegram dengan tombol dan inline keyboard"
+  />
+  <LinkCard
+    title="WhatsApp"
+    href="/id/providers/messaging/whatsapp/"
+    description="Terhubung ke WhatsApp Business API"
+  />
+  <LinkCard
+    title="WebChat"
+    href="/id/providers/messaging/webchat/"
+    description="Sematkan widget chat di situs web Anda"
+  />
+  <LinkCard
+    title="Webex"
+    href="/id/providers/messaging/webex/"
+    description="Integrasikan dengan Cisco Webex Teams"
+  />
+  <LinkCard
+    title="Email"
+    href="/id/providers/messaging/email/"
+    description="Kirim dan terima email sebagai pesan"
+  />
+</CardGrid>
+
+## Arsitektur
+
+```
+External Platform (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────────────────────────────┐
+│           Ingress Component             │
+│   (Parse platform-specific format)      │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.ingress.{tenant}... │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                  │
+│      (Process with your flows)          │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.egress.{tenant}...  │
+└─────────────────────────────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────────────────────────────┐
+│           Egress Component              │
+│     (Format for platform API)           │
+└─────────────────────────────────────────┘
+    │
+    ▼ API Call
+External Platform
+```
+
+## Normalisasi Pesan
+
+Semua provider menormalisasi pesan ke format umum:
+
+```rust
+pub struct NormalizedMessage {
+    pub id: String,
+    pub channel_id: String,
+    pub sender_id: String,
+    pub sender_name: Option<String>,
+    pub content: String,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+    pub attachments: Vec<Attachment>,
+    pub metadata: Option<Value>,
+}
+```
+
+Ini memungkinkan flow Anda bekerja di berbagai platform messaging tanpa modifikasi.
+
+## Konfigurasi Provider
+
+### Di Bundle
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+  messaging-slack:
+    pack: "providers/messaging/messaging-slack.gtpack"
+    setup_flow: "setup_default"
+```
+
+### Setup Answers
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHI..."
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "xoxb-xxx-xxx",
+    "slack_app_id": "A07XXX"
+  }
+}
+```
+
+## Subject NATS
+
+Pesan mengalir melalui NATS dengan subject berskala tenant:
+
+| Subject | Arah |
+|---------|------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | Masuk |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | Keluar |
+
+## Fitur Umum
+
+### Pesan Teks
+
+Semua provider mendukung pesan teks dasar:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Konten Kaya
+
+Sebagian besar provider mendukung konten kaya:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+```
+
+### Tombol/Aksi
+
+Elemen interaktif (bergantung pada provider):
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - label: "Get Help"
+        action: "help"
+      - label: "Contact Support"
+        action: "support"
+```
+
+### Lampiran
+
+Dukungan file dan media:
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - type: file
+        url: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Flow Multi-Channel
+
+Tulis flow yang bekerja lintas channel:
+
+```yaml title="flows/on_message.ygtc"
+name: universal_handler
+version: "1.0"
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      # Works on any platform
+      message: "Hello! I'm your assistant."
+    next: ask_intent
+
+  - id: ask_intent
+    type: reply
+    config:
+      message: "How can I help you today?"
+      # Buttons render differently per platform
+      buttons:
+        - label: "Get Started"
+          action: "start"
+        - label: "Help"
+          action: "help"
+
+triggers:
+  - type: message
+    pattern: "hello|hi"
+    target: greet
+```
+
+## Perbandingan Provider
+
+| Fitur | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Email |
+|-------|-------|-------|----------|----------|---------|-------|-------|
+| Teks | Ya | Ya | Ya | Ya | Ya | Ya | Ya |
+| Rich Card | Ya | Ya | Sebagian | Ya | Ya | Ya | Tidak |
+| Tombol | Ya | Ya | Ya | Ya | Ya | Ya | Tidak |
+| File | Ya | Ya | Ya | Ya | Ya | Ya | Ya |
+| Thread | Ya | Ya | Ya | Tidak | Tidak | Ya | Ya |
+| Reaksi | Ya | Ya | Tidak | Ya | Tidak | Tidak | Tidak |
+
+## Langkah Berikutnya
+
+Pilih provider untuk mulai:
+
+- [Telegram](/id/providers/messaging/telegram/) - Setup paling mudah, bagus untuk pengujian
+- [Slack](/id/providers/messaging/slack/) - Integrasi workspace yang lengkap
+- [WebChat](/id/providers/messaging/webchat/) - Sematkan di situs web Anda

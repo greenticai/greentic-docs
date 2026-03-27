@@ -1,0 +1,667 @@
+---
+title: WebChat
+description: 在你的网站中嵌入聊天组件
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+WebChat provider 让你能够将聊天组件直接嵌入网站中。它支持：
+
+- 实时消息
+- Adaptive Cards
+- 文件上传
+- 自定义主题
+- 移动端响应式
+- OAuth/OIDC 身份验证（Google、Microsoft Entra ID、GitHub、自定义 OIDC）
+- 内置语言选择器
+
+## 架构
+
+```
+User's Browser
+    │
+    ▼ WebSocket
+┌─────────────────────────────────────────┐
+│          WebChat Widget (React)         │
+│     (greentic-webchat component)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ Direct Line Protocol
+┌─────────────────────────────────────────┐
+│        Direct Line Server               │
+│   (greentic-messaging-providers)        │
+└─────────────────────────────────────────┘
+    │
+    ▼ NATS
+┌─────────────────────────────────────────┐
+│          Greentic Runner                │
+└─────────────────────────────────────────┘
+```
+
+## 设置
+
+<Steps>
+
+1. **配置 Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "allowed_origins": ["https://yoursite.com"],
+       "session_timeout": 1800
+     }
+   }
+   ```
+
+2. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **启动运行时**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+4. **嵌入到网站中**
+
+   将 widget 添加到你的 HTML：
+
+   ```html
+   <script src="https://your-domain.com/webchat/widget.js"></script>
+   <script>
+     GreenticWebChat.init({
+       directLine: {
+         domain: 'https://your-domain.com/webchat',
+         webSocket: true
+       },
+       tenant: 'demo',
+       team: 'default',
+       theme: {
+         primaryColor: '#0078D4'
+       }
+     });
+   </script>
+   ```
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | Direct Line 的基础 URL |
+| `allowed_origins` | 否 | CORS 允许的来源 |
+| `session_timeout` | 否 | session 超时时间（秒，默认：1800） |
+| `token_expiry` | 否 | token 过期时间（秒，默认：3600） |
+| `oauth_enabled` | 否 | 为 WebChat 启用 OAuth/OIDC 登录（默认：false） |
+| `oauth_provider` | 否 | OAuth provider：`google`、`microsoft`、`github` 或 `oidc` |
+| `oauth_client_id` | 否 | OAuth client ID（当 `oauth_enabled` 为 true 时必填） |
+| `oauth_authority` | 否 | OIDC authority/issuer URL（`microsoft` 和 `oidc` 必填） |
+| `oauth_scopes` | 否 | 要请求的 OAuth scopes（默认值因 provider 而异） |
+
+## Widget 配置
+
+### 基础设置
+
+```html
+<script src="https://your-domain.com/webchat/widget.js"></script>
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### 主题设置
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    theme: {
+      primaryColor: '#0078D4',
+      backgroundColor: '#f5f5f5',
+      bubbleBackground: '#ffffff',
+      bubbleFromUserBackground: '#0078D4',
+      bubbleTextColor: '#333333',
+      bubbleFromUserTextColor: '#ffffff',
+      sendBoxBackground: '#ffffff',
+      sendBoxTextColor: '#333333'
+    }
+  });
+</script>
+```
+
+### 携带用户信息
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    user: {
+      id: 'user-123',
+      name: 'John Doe',
+      email: 'john@example.com'
+    }
+  });
+</script>
+```
+
+### 初始最小化
+
+```html
+<script>
+  GreenticWebChat.init({
+    directLine: {
+      domain: 'https://your-domain.com/webchat'
+    },
+    tenant: 'demo',
+    team: 'default',
+    startMinimized: true,
+    showToggleButton: true
+  });
+</script>
+```
+
+## 功能
+
+### 文本消息
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Adaptive Cards
+
+WebChat 完整支持 Adaptive Card：
+
+```yaml
+- id: welcome_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "I'm your virtual assistant. How can I help?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Contact Support"
+              data:
+                action: "support"
+```
+
+### Quick Replies（Suggested Actions）
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - "Check Order Status"
+      - "Talk to Support"
+      - "View FAQs"
+```
+
+### 文件上传
+
+启用文件上传：
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  uploadEnabled: true,
+  uploadAccept: '.pdf,.doc,.docx,.png,.jpg',
+  uploadMaxSize: 10485760  // 10MB
+});
+```
+
+在 flow 中处理上传：
+
+```yaml
+- id: handle_upload
+  type: branch
+  config:
+    conditions:
+      - expression: "attachments.length > 0"
+        next: process_file
+      default: normal_message
+
+- id: process_file
+  type: reply
+  config:
+    message: "Thanks! I've received your file: {{attachments[0].name}}"
+```
+
+### 输入中指示器
+
+```yaml
+- id: thinking
+  type: reply
+  config:
+    typing: true
+    typing_duration: 2000  # milliseconds
+  next: actual_reply
+
+- id: actual_reply
+  type: reply
+  config:
+    message: "Here's what I found..."
+```
+
+## API 集成
+
+### JavaScript API
+
+```javascript
+// Get chat instance
+const chat = GreenticWebChat.getInstance();
+
+// Send message programmatically
+chat.sendMessage('Hello from JS!');
+
+// Minimize/maximize
+chat.minimize();
+chat.maximize();
+
+// Clear conversation
+chat.clear();
+
+// End conversation
+chat.end();
+
+// Listen for events
+chat.on('message', (event) => {
+  console.log('New message:', event.text);
+});
+
+chat.on('conversationStarted', () => {
+  console.log('Conversation started');
+});
+```
+
+### REST API
+
+Direct Line REST API 端点：
+
+```bash
+# Start conversation
+POST /webchat/v3/directline/conversations
+Authorization: Bearer <token>
+
+# Send message
+POST /webchat/v3/directline/conversations/{conversationId}/activities
+Content-Type: application/json
+
+{
+  "type": "message",
+  "text": "Hello!"
+}
+
+# Get messages
+GET /webchat/v3/directline/conversations/{conversationId}/activities
+```
+
+## 自定义
+
+### 自定义 CSS
+
+```html
+<style>
+  .greentic-webchat {
+    --primary-color: #0078D4;
+    --background-color: #ffffff;
+    --text-color: #333333;
+    --border-radius: 8px;
+    --font-family: 'Segoe UI', sans-serif;
+  }
+
+  .greentic-webchat .message-bubble {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .greentic-webchat .send-button {
+    background-color: var(--primary-color);
+  }
+</style>
+```
+
+### 自定义头像
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  botAvatar: 'https://example.com/bot-avatar.png',
+  userAvatar: 'https://example.com/user-avatar.png',
+  showAvatars: true
+});
+```
+
+### 自定义页头
+
+页头区域可以显示标题、副标题和关闭按钮。启用语言选择器时，它会显示在页头中。启用 OAuth 时，页头中还会在语言选择器旁边渲染一个退出登录按钮。
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  header: {
+    title: 'Support Chat',
+    subtitle: 'We usually reply within minutes',
+    showCloseButton: true
+  }
+});
+```
+
+## 多语言支持
+
+WebChat GUI 内置语言选择器，允许用户在运行时切换语言。语言选择器显示在聊天页头中，用户无需刷新页面即可选择偏好的语言。
+
+```javascript
+GreenticWebChat.init({
+  // ... other config
+  locale: 'es-ES',
+  showLocalePicker: true,
+  availableLocales: ['en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP'],
+  strings: {
+    'placeholder': 'Escribe un mensaje...',
+    'send': 'Enviar',
+    'connecting': 'Conectando...',
+    'reconnecting': 'Reconectando...'
+  }
+});
+```
+
+启用 `showLocalePicker` 后，页头中会在关闭按钮旁边显示语言选择器（如果启用了 OAuth，还会显示退出登录按钮）。切换语言后，所有 UI 文案都会更新，并通知 flow，使响应能够适配所选语言。
+
+## OAuth/OIDC 身份验证
+
+WebChat 支持可选的 OAuth/OIDC 身份验证，可要求用户登录后才能访问聊天。启用后，在聊天界面可用之前会先显示登录覆盖层。该实现为了安全性使用客户端 PKCE（Proof Key for Code Exchange）流程。
+
+<Aside type="tip">
+OAuth 身份验证完全是可选的。如果未配置，WebChat 会像之前的版本一样在无登录要求的情况下运行。
+</Aside>
+
+### 支持的 Providers
+
+| Provider | `oauth_provider` 值 | 说明 |
+|----------|----------------------|------|
+| Google | `google` | 基于 Google Identity Services 的 Google OAuth 2.0 |
+| Microsoft (Entra ID) | `microsoft` | Azure AD / Entra ID，需要 `oauth_authority` |
+| GitHub | `github` | GitHub OAuth Apps |
+| Custom OIDC | `oidc` | 任何兼容 OpenID Connect 的 provider，需要 `oauth_authority` |
+
+### 工作方式
+
+1. 用户打开 WebChat widget
+2. 显示登录覆盖层，并为已配置的 provider 显示登录按钮
+3. 用户通过该 provider 的登录流程完成认证（客户端 PKCE）
+4. 认证成功后，覆盖层被关闭，聊天界面可访问
+5. 已认证用户的身份会作为用户上下文传递给 flow
+6. 页头中会出现退出登录按钮（位于语言选择器旁边）
+
+### Provider 设置
+
+每个 provider 都可以通过 `answers.json` 文件配置，也可以通过基于 QA 的交互式 setup wizard 配置。setup wizard 使用条件逻辑，只引导你填写所选 provider 真正需要的字段。
+
+#### Google
+
+<Steps>
+
+1. 在 [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 中**创建 OAuth 凭证**
+
+   - 创建新的 OAuth 2.0 Client ID
+   - 将 application type 设为 “Web application”
+   - 将你的 WebChat 域名添加到 “Authorized JavaScript origins”
+   - 将 `https://your-domain.com/webchat/auth/callback` 添加到 “Authorized redirect URIs”
+
+2. **配置 provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "google",
+       "oauth_client_id": "123456789.apps.googleusercontent.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+3. **运行 setup 并启动**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### Microsoft (Entra ID)
+
+<Steps>
+
+1. 在 [Azure Portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps) 中**注册应用**
+
+   - 在 “App registrations” 下注册一个新应用
+   - 将 redirect URI 设置为 `https://your-domain.com/webchat/auth/callback`（类型：SPA）
+   - 在 “Authentication” 下启用 implicit grant 的 “Access tokens” 和 “ID tokens”
+   - 记录你的 Application (client) ID 和 Directory (tenant) ID
+
+2. **配置 provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "microsoft",
+       "oauth_client_id": "your-application-client-id",
+       "oauth_authority": "https://login.microsoftonline.com/your-tenant-id/v2.0",
+       "oauth_scopes": "openid profile email User.Read"
+     }
+   }
+   ```
+
+3. **运行 setup 并启动**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### GitHub
+
+<Steps>
+
+1. 在 [GitHub Developer Settings](https://github.com/settings/developers) 中**创建 OAuth App**
+
+   - 前往 “OAuth Apps” 并创建一个新应用
+   - 将 “Authorization callback URL” 设置为 `https://your-domain.com/webchat/auth/callback`
+   - 记录 Client ID
+
+2. **配置 provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "github",
+       "oauth_client_id": "your-github-client-id",
+       "oauth_scopes": "read:user user:email"
+     }
+   }
+   ```
+
+3. **运行 setup 并启动**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+#### 自定义 OIDC Provider
+
+<Steps>
+
+1. 向你的 OIDC provider **注册 client**
+
+   - 将 redirect URI 设置为 `https://your-domain.com/webchat/auth/callback`
+   - 确保你的 provider 支持 PKCE
+   - 记录 client ID 以及 issuer/authority URL
+
+2. **配置 provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webchat": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.com",
+       "oauth_enabled": true,
+       "oauth_provider": "oidc",
+       "oauth_client_id": "your-client-id",
+       "oauth_authority": "https://your-oidc-provider.com",
+       "oauth_scopes": "openid profile email"
+     }
+   }
+   ```
+
+   `oauth_authority` 必须指向 issuer URL，并且该地址下可以访问 `/.well-known/openid-configuration`。
+
+3. **运行 setup 并启动**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+### 启用 OAuth 的 Widget 配置
+
+当服务端启用 OAuth 后，widget 会自动显示登录覆盖层。不需要额外的客户端配置。已认证用户的身份可通过用户上下文在 flows 中获取：
+
+```javascript
+GreenticWebChat.init({
+  directLine: {
+    domain: 'https://your-domain.com/webchat'
+  },
+  tenant: 'demo',
+  team: 'default'
+  // OAuth login overlay is shown automatically when oauth_enabled is true
+});
+```
+
+认证完成后，页头会在语言选择器旁显示退出登录按钮。点击后会清除 session，并将用户带回登录覆盖层。
+
+### 通过 QA Wizard 进行交互式设置
+
+你也可以不用手写 `answers.json`，而是使用交互式 setup wizard。它会借助条件逻辑引导你完成 provider 专属配置：
+
+```bash
+gtc setup ./my-bundle
+```
+
+wizard 会在 `oauth_enabled` 设为 `true` 时检测这一点，并仅针对所选 `oauth_provider` 显示后续问题，因此你只会看到与所选身份 provider 相关的字段。
+
+## 安全
+
+<Aside type="caution">
+在生产环境中始终配置 `allowed_origins`，以防止未授权嵌入。
+</Aside>
+
+### Token 安全
+
+- Token 生命周期较短（默认 1 小时）
+- Token 的作用域限定在会话内
+- Refresh token 不会暴露给客户端
+
+### OAuth/OIDC 安全
+
+启用 OAuth 时：
+
+- 身份验证使用 PKCE 流程，因此前端不需要 client secret
+- 在授予聊天访问权限之前，会在服务端校验 token
+- 登录覆盖层会阻止所有聊天交互，直到认证成功
+- 退出登录会清除客户端 token，并使服务端 session 失效
+
+### CORS 配置
+
+```json
+{
+  "messaging-webchat": {
+    "allowed_origins": [
+      "https://www.example.com",
+      "https://app.example.com"
+    ]
+  }
+}
+```
+
+## 故障排查
+
+### Widget 未加载
+
+1. 检查控制台中的 JavaScript 错误
+2. 确认 script URL 正确
+3. 检查 CORS 配置
+
+### 连接失败
+
+1. 确认 Direct Line 端点可访问
+2. 检查 WebSocket 支持
+3. 查看防火墙设置
+
+### 消息无法发送
+
+1. 检查会话是否处于活动状态
+2. 确认 token 未过期
+3. 查看浏览器控制台错误
+
+## 下一步
+
+- [Adaptive Cards](/zh/components/cards2pack/) - 创建富卡片
+- [Theming Guide](/zh/reference/webchat-theming/) - 高级自定义
+- [Flows Guide](/zh/concepts/flows/) - 构建对话 flows

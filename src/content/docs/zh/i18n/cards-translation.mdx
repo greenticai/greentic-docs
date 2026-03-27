@@ -1,0 +1,235 @@
+---
+title: Cards 翻译
+description: 使用 i18n 翻译 Adaptive Cards
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概述
+
+Greentic 支持将 Adaptive Cards 翻译成多种语言。你可以选择：
+- **单条命令：** `generate --auto-translate`（提取 + 翻译 + 构建）
+- **分步执行：** extract → translate → build
+
+## 快速开始（单条命令）
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./my-pack \
+  --name my-pack \
+  --auto-translate \
+  --langs fr,de,ja
+```
+
+完成。该 pack 包含 `assets/i18n/en.json`、`fr.json`、`de.json`、`ja.json`。
+
+## 分步工作流
+
+<Steps>
+
+1. **创建卡片**
+
+   ```json title="cards/welcome.json"
+   {
+     "type": "AdaptiveCard",
+     "version": "1.4",
+     "body": [
+       { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+       { "type": "TextBlock", "text": "How can I help you today?" }
+     ],
+     "actions": [
+       { "type": "Action.Submit", "title": "Get Help" },
+       { "type": "Action.Submit", "title": "Contact Support" }
+     ]
+   }
+   ```
+
+2. **提取可翻译字符串**
+
+   ```bash
+   greentic-cards2pack extract-i18n \
+     --input ./cards \
+     --output i18n/en.json
+   ```
+
+   输出：
+
+   ```json title="i18n/en.json"
+   {
+     "card.welcome.body_0.text": "Welcome!",
+     "card.welcome.body_1.text": "How can I help you today?",
+     "card.welcome.actions_0.title": "Get Help",
+     "card.welcome.actions_1.title": "Contact Support"
+   }
+   ```
+
+3. **使用 greentic-i18n-translator 翻译**
+
+   ```bash
+   greentic-i18n-translator translate \
+     --langs fr,ja \
+     --en i18n/en.json
+   ```
+
+   这会在同一目录中创建 `i18n/fr.json` 和 `i18n/ja.json`。
+
+   <Aside type="note">
+   `greentic-i18n-translator` 使用 Codex CLI 进行翻译。可通过 `cargo install greentic-i18n-translator` 安装。
+   </Aside>
+
+4. **生成 pack**
+
+   ```bash
+   greentic-cards2pack generate \
+     --cards ./cards \
+     --out ./my-pack \
+     --name my-pack
+   ```
+
+</Steps>
+
+## 键格式
+
+提取出的键遵循以下模式：
+
+```
+{prefix}.{cardId}.{json_path}.{field}
+```
+
+| 部分 | 来源 | 示例 |
+|------|--------|---------|
+| `prefix` | `--prefix` 标志（默认：`card`） | `card` |
+| `cardId` | `greentic.cardId` 字段或文件名 | `welcome` |
+| `json_path` | 在卡片结构中的位置 | `body_0`, `actions_1` |
+| `field` | 字段名 | `text`, `title`, `label` |
+
+示例：
+- `card.welcome.body_0.text` → 第一个 TextBlock 的 text
+- `card.welcome.actions_0.title` → 第一个 action 的 title
+- `card.form.body_1.placeholder` → 第二个 body 元素的 placeholder
+- `card.form.body_0_choices_2.title` → 第三个选项的 title
+
+## Glossary
+
+在各个翻译中保持品牌名和技术术语一致：
+
+```json title="glossary.json"
+{
+  "Greentic": "Greentic",
+  "Dashboard": "Dashboard",
+  "CLI": "CLI"
+}
+```
+
+可用于任一方式：
+
+```bash
+# One command
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de \
+  --glossary glossary.json
+
+# Step by step
+greentic-i18n-translator translate \
+  --langs fr,de \
+  --en i18n/en.json \
+  --glossary glossary.json
+```
+
+## 会提取哪些内容
+
+| 字段 | 来源元素 |
+|-------|--------------|
+| `text` | TextBlock、RichTextBlock |
+| `title` | Actions、toggle、fact 标题 |
+| `label` | Input 标签 |
+| `placeholder` | Input 占位文本 |
+| `errorMessage` | 验证消息 |
+| `altText` | 图片 alt 文本 |
+| `fallbackText` | 回退内容 |
+| `value` | Fact 值 |
+
+**会自动跳过：**
+- 空字符串
+- 纯 Handlebars 模板：`{{variable}}`
+- 变量引用：`${var}`
+- 已存在的 i18n 模式：`$t(key)`（除非使用 `--include-existing`）
+
+## 运行时翻译
+
+### 配置 locale
+
+```yaml title="greentic.demo.yaml"
+i18n:
+  default_locale: "en"
+  locales:
+    en: "assets/i18n/en.json"
+    fr: "assets/i18n/fr.json"
+    ja: "assets/i18n/ja.json"
+```
+
+### 在 flow 中设置 locale
+
+```yaml
+- id: set_language
+  type: state
+  config:
+    key: "locale"
+    value: "fr"
+  next: show_welcome
+
+- id: show_welcome
+  type: adaptive-card
+  config:
+    card: "cards/welcome"
+    # Card text automatically resolved based on session locale
+```
+
+## 错误处理
+
+翻译失败**不会导致致命错误**。如果 `greentic-i18n-translator` 在某种语言上失败：
+- pack 仍会成功构建
+- `.cards2pack/manifest.json` 中会出现警告
+- 始终会创建英文 bundle（`en.json`）
+
+检查警告：
+
+```bash
+cat my-pack/.cards2pack/manifest.json | jq '.warnings[] | select(.kind == "translation")'
+```
+
+## 故障排查
+
+### 找不到 translator
+
+```
+auto-translation failed: failed to execute greentic-i18n-translator
+```
+
+安装：`cargo install greentic-i18n-translator`
+
+或者设置自定义路径：`export GREENTIC_I18N_TRANSLATOR_BIN=/path/to/translator`
+
+### 运行时缺少翻译
+
+如果目标语言 bundle 中缺少某个键，运行时会回退到英文源文本。
+
+### 占位符在翻译中丢失
+
+确保保留 Handlebars 占位符：
+
+```json
+// Correct
+{ "card.welcome.body_0.text": "Bonjour, {{name}} !" }
+
+// Wrong — placeholder lost
+{ "card.welcome.body_0.text": "Bonjour, nom !" }
+```
+
+## 下一步
+
+- [cards2pack CLI 参考](/zh/components/cards2pack/)
+- [I18nId 规范](/zh/i18n/i18nid-spec/)
+- [i18n 概览](/zh/i18n/overview/)

@@ -1,13 +1,13 @@
 ---
 title: Script (Rhai)
-description: Rhai scripting component for custom logic
+description: カスタムロジックのための Rhai scripting component
 ---
 
-## Overview
+## 概要
 
-The **Script** component enables custom logic using the Rhai scripting language, a simple yet powerful embedded scripting language for Rust.
+**Script** component は、Rust 向けのシンプルながら強力な埋め込み scripting language である Rhai を使ってカスタムロジックを実装できるようにします。
 
-## Basic Usage
+## 基本的な使い方
 
 ```yaml
 - id: calculate
@@ -22,9 +22,9 @@ The **Script** component enables custom logic using the Rhai scripting language,
   output: calculated_total
 ```
 
-## Rhai Syntax
+## Rhai の構文
 
-### Variables
+### 変数
 
 ```js
 let x = 42;
@@ -33,7 +33,7 @@ let items = [1, 2, 3];
 let user = #{ name: "Bob", age: 30 };
 ```
 
-### Functions
+### 関数
 
 ```js
 fn greet(name) {
@@ -43,7 +43,7 @@ fn greet(name) {
 let message = greet("World");
 ```
 
-### Control Flow
+### 制御フロー
 
 ```js
 if x > 10 {
@@ -64,7 +64,7 @@ while condition {
 }
 ```
 
-### Working with Objects
+### オブジェクトの操作
 
 ```js
 let user = #{
@@ -76,9 +76,9 @@ let name = user.name;
 user.age = 25;
 ```
 
-## Flow Integration
+## Flow との統合
 
-### Access Context
+### Context にアクセスする
 
 ```yaml
 - id: process
@@ -100,7 +100,7 @@ user.age = 25;
       }
 ```
 
-### Conditional Logic
+### 条件付きロジック
 
 ```yaml
 - id: validate
@@ -125,7 +125,7 @@ user.age = 25;
     default: show_error
 ```
 
-### Data Transformation
+### データ変換
 
 ```yaml
 - id: transform
@@ -146,9 +146,9 @@ user.age = 25;
       transformed
 ```
 
-## Built-in Functions
+## 組み込み関数
 
-### String Functions
+### 文字列関数
 
 ```js
 let s = "Hello World";
@@ -162,7 +162,7 @@ s.trim()          // Remove whitespace
 s.sub_string(0,5) // "Hello"
 ```
 
-### Array Functions
+### 配列関数
 
 ```js
 let arr = [1, 2, 3, 4, 5];
@@ -176,7 +176,7 @@ arr.map(|x| x * 2)     // [2, 4, 6, 8, 10]
 arr.reduce(|a, b| a + b, 0)  // 15
 ```
 
-### Object Functions
+### オブジェクト関数
 
 ```js
 let obj = #{ a: 1, b: 2 };
@@ -186,7 +186,7 @@ obj.values()      // [1, 2]
 obj.contains("a") // true
 ```
 
-## Error Handling
+## エラーハンドリング
 
 ```js
 try {
@@ -198,7 +198,7 @@ try {
 }
 ```
 
-## Example: Order Processing
+## 例: 注文処理
 
 ```yaml
 - id: process_order
@@ -238,7 +238,7 @@ try {
       }
 ```
 
-## Next Steps
+## 次のステップ
 
-- [Templates Component](/components/templates/)
-- [LLM OpenAI](/components/llm-openai/)
+- [Templates Component](/ja/components/templates/)
+- [LLM OpenAI](/ja/components/llm-openai/)

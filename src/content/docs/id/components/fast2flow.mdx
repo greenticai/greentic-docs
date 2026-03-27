@@ -1,0 +1,411 @@
+---
+title: fast2flow
+description: Ekstensi routing intent dan dispatch flow berperforma tinggi
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Gambaran Umum
+
+**fast2flow** adalah ekstensi routing berperforma tinggi yang merutekan pesan masuk ke flow yang sesuai menggunakan penilaian deterministik berbasis token (BM25) dengan fallback LLM opsional.
+
+Konsep inti: Pengguna mengirim pesan seperti "refund please" → fast2flow memeriksa indeks khusus tenant → mengembalikan direktif routing (`Dispatch`, `Respond`, `Deny`, atau `Continue`).
+
+**Prinsip utama:**
+- **Deterministik lebih dulu** — Penilaian BM25 berbasis token untuk routing yang dapat diprediksi dan dijelaskan
+- **Fail-open** — Error, timeout, atau indeks yang hilang menghasilkan direktif `Continue`
+- **Dibatasi waktu** — Penegakan hard timeout melalui `time_budget_ms`
+- **Berbasis kebijakan** — Perilaku runtime berubah tanpa perubahan kode
+
+## Arsitektur
+
+```
+Incoming Message
+    │
+    ▼
+┌──────────────────────────────────────────────────┐
+│                fast2flow Pipeline                 │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │  1. Hook Filter                            │  │
+│  │  Allow/deny lists, respond rules, policy   │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  2. Index Lookup                           │  │
+│  │  Load TF-IDF index for tenant scope        │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  3. Deterministic Strategy (BM25)          │  │
+│  │  Token scoring with title boosting (2x)    │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  4. Confidence Gate                        │  │
+│  │  min_confidence threshold check            │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  5. LLM Fallback (optional)                │  │
+│  │  OpenAI or Ollama for ambiguous cases      │  │
+│  └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
+    │
+    ▼
+Routing Directive (Dispatch / Respond / Deny / Continue)
+```
+
+## Direktif Routing
+
+Setiap keputusan routing menghasilkan satu dari empat direktif:
+
+| Direktif | Tujuan | Field |
+|-----------|--------|-------|
+| `dispatch` | Rute ke flow tertentu | `target`, `confidence`, `reason` |
+| `respond` | Kembalikan respons langsung | `message` |
+| `deny` | Blokir permintaan | `reason` |
+| `continue` | Tidak ada keputusan, biarkan pemanggil menanganinya | — |
+
+```json
+// Dispatch to a flow
+{"type": "dispatch", "target": "support-pack:refund_request", "confidence": 0.92, "reason": "BM25 match"}
+
+// Auto-respond without routing
+{"type": "respond", "message": "Use the self-service refund form at /refund."}
+
+// Block the request
+{"type": "deny", "reason": "Denied by scope policy"}
+
+// Pass through (fail-open default)
+{"type": "continue"}
+```
+
+## Instalasi
+
+fast2flow didistribusikan sebagai artifact `.gtpack` melalui GHCR:
+
+```bash
+# Pull from GHCR
+oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:latest
+
+# Or reference a specific version
+oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:v0.4.6
+```
+
+Pack ini mendaftarkan hook `post_ingress` yang mencegat pesan sebelum mencapai flow mana pun.
+
+## Komponen WASM
+
+fast2flow menyertakan tiga komponen WASM (menargetkan `wasm32-wasip2`):
+
+| Komponen | Tujuan | Operasi |
+|-----------|--------|---------|
+| **Indexer** | Membangun indeks TF-IDF yang dapat dicari dari metadata flow | `build`, `update` |
+| **Matcher** | Pencocokan intent cepat berbasis BM25 terhadap indeks | `match` |
+| **Router** | Mengorkestrasi pipeline routing lengkap | `route` |
+
+Komponen ini dikoordinasikan oleh tiga flow yang didefinisikan di pack:
+
+```yaml
+# flows/index.ygtc  — Runs at deploy time to build indexes
+# flows/match.ygtc  — Runtime BM25 intent matching
+# flows/route.ygtc  — Full routing pipeline with LLM fallback
+```
+
+## Alur Kerja Bundle
+
+fast2flow mengindeks flow dari file `.ygtc` di bundle Anda. Indexer memindai direktori bundle, mengekstrak metadata (title, description, tags), dan membangun indeks TF-IDF dengan penilaian BM25.
+
+### Struktur Bundle
+
+```
+my-bundle/
+├── packs/
+│   ├── support-pack/
+│   │   └── flows/
+│   │       ├── refund.ygtc
+│   │       ├── shipping.ygtc
+│   │       └── faq.ygtc
+│   └── hr-pack/
+│       └── flows/
+│           ├── leave.ygtc
+│           └── booking.ygtc
+```
+
+### Definisi Flow (`.ygtc`)
+
+Setiap file flow menyediakan metadata yang digunakan untuk pencocokan intent:
+
+```yaml title="refund.ygtc"
+id: refund_request
+title: Process Refund Request
+description: Handle customer refund requests for orders and payments
+type: messaging
+tags:
+  - refund
+  - payment
+  - billing
+  - return
+start: collect_info
+
+nodes:
+  collect_info:
+    templating.handlebars:
+      text: "Please provide your order number for the refund."
+    routing:
+      - out: true
+```
+
+<Aside type="tip">
+Kata pada title mendapat boost TF-IDF 2x, jadi pilih title yang deskriptif untuk akurasi routing yang lebih baik.
+</Aside>
+
+### Membangun Indeks
+
+Gunakan CLI untuk membangun indeks dari bundle Anda:
+
+```bash
+greentic-fast2flow bundle index \
+  --bundle ./my-bundle \
+  --output ./state/indexes \
+  --tenant demo \
+  --team default \
+  --verbose
+```
+
+Perintah ini menghasilkan:
+- `index.json` — Indeks TF-IDF dengan frekuensi istilah dan frekuensi dokumen
+- `intents.md` — Dokumentasi intent yang mudah dibaca manusia
+
+### Memvalidasi Bundle
+
+```bash
+greentic-fast2flow bundle validate --bundle ./my-bundle
+```
+
+## Konfigurasi Kebijakan
+
+Kebijakan mengendalikan perilaku routing saat runtime tanpa perubahan kode. Kebijakan ini berupa file JSON yang dimuat dari `/mnt/registry/fast2flow-policy.json` atau path kustom.
+
+### Struktur Kebijakan
+
+```json title="fast2flow-policy.json"
+{
+  "stage_order": ["scope", "channel", "provider"],
+  "default": {
+    "min_confidence": 0.5,
+    "llm_min_confidence": 0.5,
+    "candidate_limit": 20
+  },
+  "scope_overrides": [],
+  "channel_overrides": [],
+  "provider_overrides": []
+}
+```
+
+### Aturan Kebijakan
+
+Semua field aturan bersifat opsional, hanya field yang ditentukan yang akan diterapkan:
+
+| Field | Jenis | Deskripsi |
+|-------|------|-----------|
+| `min_confidence` | `f32` | Skor BM25 minimum untuk dispatch (0.0–1.0) |
+| `llm_min_confidence` | `f32` | Confidence LLM minimum untuk dispatch (0.0–1.0) |
+| `candidate_limit` | `usize` | Jumlah kandidat maksimum yang dievaluasi |
+| `allow_channels` | `string[]` | Daftar kanal yang diizinkan (null = izinkan semua) |
+| `deny_channels` | `string[]` | Daftar kanal yang ditolak |
+| `allow_providers` | `string[]` | Daftar provider yang diizinkan (null = izinkan semua) |
+| `deny_providers` | `string[]` | Daftar provider yang ditolak |
+| `allow_scopes` | `string[]` | Daftar scope yang diizinkan (null = izinkan semua) |
+| `deny_scopes` | `string[]` | Daftar scope yang ditolak |
+| `respond_rules` | `object[]` | Aturan respons otomatis (pencocokan keyword) |
+
+### Contoh Override
+
+Override diterapkan sesuai urutan stage (scope → channel → provider) dengan pengurutan prioritas di dalam tiap stage.
+
+**Override scope** — confidence lebih ketat untuk tenant VIP:
+
+```json
+{
+  "id": "vip-tenant",
+  "priority": 10,
+  "scope": "tenant-vip",
+  "rules": {
+    "min_confidence": 0.8,
+    "candidate_limit": 10
+  }
+}
+```
+
+**Override channel** — respons otomatis di kanal email:
+
+```json
+{
+  "id": "email-autorespond",
+  "priority": 20,
+  "channel": "email",
+  "rules": {
+    "respond_rules": [
+      {
+        "needle": "refund",
+        "message": "Refund requests via email take 3–5 business days. Use chat for instant support.",
+        "mode": "contains"
+      }
+    ]
+  }
+}
+```
+
+**Override provider** — batasi ke provider tertentu:
+
+```json
+{
+  "id": "slack-only",
+  "priority": 30,
+  "provider": "slack",
+  "rules": {
+    "deny_providers": ["telegram"]
+  }
+}
+```
+
+### Aturan Respons
+
+Aturan respons otomatis mencocokkan teks sebelum pipeline routing berjalan:
+
+```json
+{
+  "needle": "business hours",
+  "message": "Our business hours are Mon–Fri 9AM–5PM UTC.",
+  "mode": "contains"
+}
+```
+
+Mode yang didukung: `exact`, `contains` (default), `regex`.
+
+### CLI Manajemen Kebijakan
+
+```bash
+# Print default policy
+greentic-fast2flow policy print-default
+
+# Validate a policy file
+greentic-fast2flow policy validate --file ./my-policy.json
+```
+
+## Fallback LLM
+
+Ketika strategi BM25 deterministik menghasilkan skor confidence rendah, fast2flow dapat menggunakan fallback ke LLM untuk klasifikasi.
+
+| Provider | Variabel Lingkungan |
+|----------|---------------------|
+| **OpenAI** | `FAST2FLOW_OPENAI_API_KEY_PATH`, `FAST2FLOW_OPENAI_MODEL_PATH` |
+| **Ollama** | `FAST2FLOW_OLLAMA_ENDPOINT_PATH`, `FAST2FLOW_OLLAMA_MODEL_PATH` |
+| **Disabled** | `FAST2FLOW_LLM_PROVIDER=disabled` (default) |
+
+```bash
+# Enable OpenAI fallback
+FAST2FLOW_LLM_PROVIDER=openai \
+FAST2FLOW_OPENAI_API_KEY_PATH=/run/secrets/openai-key \
+greentic-fast2flow-routing-host < request.json
+```
+
+<Aside type="caution">
+Provider LLM hanya tersedia di binary host native. Runtime komponen WASM memerlukan `FAST2FLOW_LLM_PROVIDER=disabled`.
+</Aside>
+
+## Referensi CLI
+
+### Perintah Bundle
+
+```bash
+# Build TF-IDF index from bundle
+greentic-fast2flow bundle index \
+  --bundle ./my-bundle \
+  --output ./indexes \
+  --tenant demo \
+  --team default \
+  --generate-docs \
+  --verbose
+
+# Validate bundle has indexable flows
+greentic-fast2flow bundle validate --bundle ./my-bundle
+```
+
+### Perintah Index
+
+```bash
+# Build index from flow definitions JSON
+greentic-fast2flow index build \
+  --scope tenant-a \
+  --flows flows.json \
+  --output /tmp/indexes
+
+# Inspect a built index
+greentic-fast2flow index inspect \
+  --scope tenant-a \
+  --input /tmp/indexes
+```
+
+### Perintah Route
+
+```bash
+# Simulate a routing decision
+greentic-fast2flow route simulate \
+  --scope tenant-a \
+  --text "I need a refund" \
+  --indexes-path /tmp/indexes
+```
+
+### Perintah Policy
+
+```bash
+# Print default policy template
+greentic-fast2flow policy print-default
+
+# Validate policy file
+greentic-fast2flow policy validate --file policy.json
+```
+
+## Variabel Lingkungan
+
+| Variabel | Default | Deskripsi |
+|----------|---------|-----------|
+| `FAST2FLOW_LLM_PROVIDER` | `disabled` | Provider LLM: `disabled`, `openai`, `ollama` |
+| `FAST2FLOW_POLICY_PATH` | `/mnt/registry/fast2flow-policy.json` | Path file kebijakan |
+| `FAST2FLOW_TRACE_POLICY` | — | Set ke `1` untuk mengeluarkan jejak kebijakan ke stderr |
+| `FAST2FLOW_MIN_CONFIDENCE` | `0.5` | Ambang confidence minimum default |
+| `FAST2FLOW_LLM_MIN_CONFIDENCE` | `0.5` | Confidence minimum LLM default |
+| `FAST2FLOW_CANDIDATE_LIMIT` | `20` | Maksimum kandidat default |
+
+## Performa
+
+fast2flow dioptimalkan untuk routing latensi rendah:
+
+| Tahap | Latensi Tipikal |
+|-------|-----------------|
+| Hook filter (allow/deny) | < 0.1ms |
+| BM25 index lookup | < 1ms |
+| Resolusi kebijakan | < 0.1ms |
+| Fallback LLM (jika aktif) | 200–500ms |
+
+<Aside type="tip">
+Mulailah dengan routing BM25 deterministik. Aktifkan fallback LLM hanya jika flow Anda memiliki intent yang tumpang tindih dan tidak dapat dibedakan oleh BM25.
+</Aside>
+
+## Praktik Terbaik
+
+1. **Tulis title yang deskriptif** — Kata pada title mendapat boost TF-IDF 2x untuk skor yang lebih baik
+2. **Gunakan tag yang spesifik** — Tag adalah sinyal utama untuk pencocokan BM25
+3. **Tetapkan ambang yang tepat** — Mulai dari `min_confidence: 0.5` lalu sesuaikan naik
+4. **Gunakan kebijakan untuk override** — Ubah perilaku per scope/channel/provider tanpa redeploy
+5. **Pantau tingkat Continue** — Output `Continue` yang tinggi menunjukkan celah pada cakupan flow Anda
+6. **Pertahankan LLM sebagai fallback** — Routing deterministik lebih cepat dan lebih dapat diprediksi
+
+## Langkah Berikutnya
+
+- [Panduan Flows](/id/concepts/flows/) — Pelajari definisi flow `.ygtc`
+- [Panduan Packs](/id/concepts/packs/) — Pahami distribusi `.gtpack`
+- [Referensi Control Chains](/id/reference/control-chains/) — Registrasi hook dan kebijakan

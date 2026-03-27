@@ -1,0 +1,162 @@
+---
+title: Resumen de Providers de Eventos
+description: Maneja eventos y triggers en tu trabajador digital
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Introducción
+
+Los **Providers de Eventos** permiten que tu trabajador digital responda a triggers externos más allá de la mensajería. Se encargan de:
+
+- Webhooks de servicios externos
+- Tareas programadas (timers/cron)
+- Notificaciones por correo electrónico
+- Notificaciones por SMS
+
+## Providers disponibles
+
+<CardGrid>
+  <LinkCard
+    title="Webhook"
+    href="/es/providers/events/webhook/"
+    description="Recibir webhooks HTTP de servicios externos"
+  />
+  <LinkCard
+    title="Timer"
+    href="/es/providers/events/timer/"
+    description="Programar tareas con expresiones cron"
+  />
+  <LinkCard
+    title="Correo electrónico (SendGrid)"
+    href="/es/providers/events/email-sendgrid/"
+    description="Enviar correos electrónicos transaccionales mediante SendGrid"
+  />
+  <LinkCard
+    title="SMS (Twilio)"
+    href="/es/providers/events/sms-twilio/"
+    description="Enviar mensajes SMS mediante Twilio"
+  />
+</CardGrid>
+
+## Arquitectura
+
+```
+External Service / Timer
+    │
+    ▼ HTTP / Schedule
+┌─────────────────────────────────────────┐
+│           Events Ingress                │
+│     (Process incoming event)            │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Event
+┌─────────────────────────────────────────┐
+│              NATS Bus                   │
+│    greentic.events.{env}.{tenant}.{type}│
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                 │
+│      (Process with event flows)         │
+└─────────────────────────────────────────┘
+```
+
+## Normalización de eventos
+
+Todos los eventos se normalizan a un formato común:
+
+```rust
+pub struct Event {
+    pub id: String,
+    pub event_type: String,
+    pub source: String,
+    pub timestamp: u64,
+    pub payload: Value,
+    pub metadata: Option<Value>,
+}
+```
+
+## Configuración
+
+### En el bundle
+
+```yaml title="greentic.demo.yaml"
+providers:
+  events-webhook:
+    pack: "providers/events/events-webhook.gtpack"
+
+  events-timer:
+    pack: "providers/events/events-timer.gtpack"
+```
+
+### Event flows
+
+```yaml title="flows/on_event.ygtc"
+name: handle_event
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        // Process the event
+        let payload = event.payload;
+        process_payload(payload)
+    next: respond
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+## Subjects de NATS
+
+Los eventos fluyen a través de NATS:
+
+| Subject | Propósito |
+|---------|---------|
+| `greentic.events.{env}.{tenant}.{type}` | Notificaciones de eventos |
+| `greentic.events.{env}.{tenant}.{type}.result` | Resultados del procesamiento de eventos |
+
+## Patrones comunes
+
+### Notificaciones impulsadas por eventos
+
+```yaml
+nodes:
+  - id: on_order
+    type: branch
+    config:
+      conditions:
+        - expression: "event.event_type == 'order.created'"
+          next: send_confirmation
+        - expression: "event.event_type == 'order.shipped'"
+          next: send_tracking
+```
+
+### Tareas programadas
+
+```yaml
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_email
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"  # 9 AM daily
+    target: daily_report
+```
+
+## Próximos pasos
+
+- [Provider de Webhook](/es/providers/events/webhook/)
+- [Provider Timer](/es/providers/events/timer/)
+- [Guía de Flows](/es/concepts/flows/)

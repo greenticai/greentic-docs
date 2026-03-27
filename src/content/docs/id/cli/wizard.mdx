@@ -1,0 +1,278 @@
+---
+title: gtc wizard
+description: Buat bundle Greentic baru dengan perintah wizard
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Gambaran Umum
+
+Perintah `gtc wizard` membuat bundle Greentic baru dari jawaban wizard. Perintah ini menghasilkan struktur bundle lengkap termasuk file konfigurasi, setup provider, dan template app.
+
+## Penggunaan
+
+```bash
+gtc wizard [OPTIONS]
+```
+
+## Opsi
+
+| Opsi | Deskripsi |
+|--------|-----------|
+| `--answers <FILE \| URL>` | Path atau URL ke file jawaban wizard (JSON atau YAML). Mendukung path lokal dan URL remote `http://` / `https://`. |
+| `--dry-run` | Pratinjau file yang dihasilkan tanpa menulis |
+| `--output <DIR>` | Direktori output (default: direktori saat ini) |
+| `--template <NAME>` | Gunakan template tertentu |
+| `-v, --verbose` | Aktifkan output verbose |
+
+## File Jawaban Wizard
+
+### Format JSON
+
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0",
+    "description": "Customer support digital worker"
+  },
+  "providers": {
+    "messaging": ["telegram", "slack"],
+    "events": ["webhook", "timer"]
+  },
+  "apps": [
+    {
+      "name": "support-bot",
+      "template": "customer-service"
+    }
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [
+        {
+          "id": "default",
+          "channels": ["telegram", "slack"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Format YAML
+
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+  description: Customer support digital worker
+
+providers:
+  messaging:
+    - telegram
+    - slack
+  events:
+    - webhook
+    - timer
+
+apps:
+  - name: support-bot
+    template: customer-service
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - telegram
+          - slack
+```
+
+## Struktur yang Dihasilkan
+
+Menjalankan wizard akan menghasilkan:
+
+```
+my-digital-worker/
+├── greentic.demo.yaml          # Main configuration
+├── providers/
+│   ├── messaging/
+│   │   ├── messaging-telegram.gtpack
+│   │   └── messaging-slack.gtpack
+│   └── events/
+│       ├── events-webhook.gtpack
+│       └── events-timer.gtpack
+├── apps/
+│   └── support-bot/
+│       ├── app.yaml
+│       └── flows/
+│           └── on_message.ygtc
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## Contoh
+
+### Penggunaan Dasar
+
+```bash
+# Interactive mode
+gtc wizard
+
+# With answers file
+gtc wizard --answers wizard-answers.yaml
+```
+
+### Mode Pratinjau
+
+```bash
+# See what would be generated
+gtc wizard --answers wizard-answers.yaml --dry-run
+```
+
+### File Jawaban Remote
+
+Flag `--answers` menerima URL `http://` dan `https://`, sehingga mudah untuk
+menyimpan dokumen jawaban bersama di lokasi terpusat dan mereferensikannya dari pipeline CI/CD.
+
+```bash
+# Fetch answers from a remote URL
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
+
+# Combine with dry-run to preview before generating
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
+```
+
+<Aside type="tip">
+Dukungan URL remote berguna di pipeline CI/CD ketika jawaban wizard disimpan di repository bersama
+atau artifact server dan diambil saat build.
+</Aside>
+
+### Direktori Output Kustom
+
+```bash
+gtc wizard --answers wizard-answers.yaml --output ./my-project
+```
+
+### Menggunakan Template
+
+```bash
+# List available templates
+gtc wizard --list-templates
+
+# Use specific template
+gtc wizard --template customer-service --answers answers.yaml
+```
+
+## Template yang Tersedia
+
+| Template | Deskripsi |
+|----------|-----------|
+| `minimal` | Bundle minimum dengan satu provider |
+| `customer-service` | Bot FAQ dengan eskalasi |
+| `helpdesk` | Dukungan IT dengan integrasi tiket |
+| `multi-channel` | Banyak kanal messaging |
+
+## Alur Kerja
+
+<Steps>
+
+1. **Buat file jawaban**
+
+   Definisikan konfigurasi proyek Anda dalam JSON atau YAML.
+
+2. **Jalankan wizard**
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+3. **Tinjau file yang dihasilkan**
+
+   Periksa struktur bundle yang dihasilkan.
+
+4. **Konfigurasikan provider**
+
+   ```bash
+   gtc setup ./my-digital-worker
+   ```
+
+5. **Jalankan runtime**
+
+   ```bash
+   gtc start ./my-digital-worker
+   ```
+
+</Steps>
+
+## Menyesuaikan Flow yang Dihasilkan
+
+Wizard menghasilkan template flow dasar. Sesuaikan setelah flow dihasilkan:
+
+```yaml title="apps/support-bot/flows/on_message.ygtc"
+name: on_message
+version: "1.0"
+description: Handle incoming messages
+
+nodes:
+  # Add your custom nodes here
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Analyze: {{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{analysis_result}}"
+
+triggers:
+  - type: message
+    target: analyze
+```
+
+<Aside type="tip">
+Gunakan `--dry-run` terlebih dahulu untuk meninjau struktur yang dihasilkan sebelum menulis ke disk.
+</Aside>
+
+## Pemecahan Masalah
+
+### File Jawaban Tidak Valid
+
+```
+Error: Failed to parse answers file
+```
+
+Pastikan JSON/YAML Anda valid. Gunakan linter untuk memeriksa sintaks.
+
+### Field Wajib Hilang
+
+```
+Error: Missing required field: project.name
+```
+
+Periksa bahwa semua field wajib ada di file jawaban Anda.
+
+### Template Tidak Ditemukan
+
+```
+Error: Template 'unknown' not found
+```
+
+Gunakan `gtc wizard --list-templates` untuk melihat template yang tersedia.
+
+## Langkah Berikutnya
+
+- [gtc setup](/id/cli/setup/) - Konfigurasikan provider
+- [gtc start](/id/cli/start/) - Jalankan runtime
+- [Quick Start](/id/getting-started/quick-start/) - Alur kerja lengkap

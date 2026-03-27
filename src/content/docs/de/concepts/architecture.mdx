@@ -1,0 +1,200 @@
+---
+title: Architekturüberblick
+description: Verstehen Sie die Architektur der Greentic-Plattform
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Architektur auf hoher Ebene
+
+Greentic folgt einer geschichteten Architektur mit klarer Trennung der Zuständigkeiten:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Messaging Channels                    │
+│         (Slack, Teams, Telegram, WhatsApp, WebChat)     │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Gateway (HTTP/NATS)                    │
+│                 Public Endpoint Router                   │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    greentic-runner                       │
+│           (Production Runtime Host)                      │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │              Flow Executor                       │    │
+│  │         (Wasmtime Component Model)              │    │
+│  └─────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           Session Manager                        │    │
+│  │         (Memory / Redis)                         │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    WASM Components                       │
+│    (Flows, Providers, MCP Tools, Custom Components)     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Kernkomponenten
+
+<CardGrid>
+  <Card title="greentic-runner" icon="rocket">
+    Die zentrale Produktions-Runtime, die Flows hostet und ausführt, Sessions verwaltet und alle Plattformdienste koordiniert.
+  </Card>
+  <Card title="greentic-flow" icon="random">
+    Flow-Schemadefinition, Intermediate Representation (IR), Loader und Validator für `.ygtc`-Dateien.
+  </Card>
+  <Card title="greentic-pack" icon="puzzle">
+    Pack-Builder-CLI zum Erstellen signierter `.gtpack`-Archive mit Flows, Komponenten und Assets.
+  </Card>
+  <Card title="greentic-component" icon="setting">
+    CLI zum Erstellen von Komponenten und Runtime-Hilfsprogramme zum Bauen von WASM-Komponenten.
+  </Card>
+</CardGrid>
+
+## Runtime-Stack
+
+| Ebene | Technologie | Zweck |
+|-------|------------|-------|
+| **WASM Runtime** | Wasmtime v41 | Ausführung des Component Model |
+| **Async Runtime** | Tokio v1 | Asynchrone I/O, Task-Scheduling |
+| **HTTP Server** | Axum v0.8 | REST-API, Webhooks |
+| **Message Bus** | NATS | Ereignisverteilung, Pub/Sub |
+| **Session Store** | Memory/Redis | Persistenz des Flow-Zustands |
+| **Secrets** | AWS/Azure/GCP/Vault | Verwaltung von Anmeldedaten |
+
+## Datenfluss
+
+### Eingehender Nachrichtenfluss
+
+```
+1. External Message (e.g., Slack)
+   │
+2. Webhook Handler (Provider Ingress)
+   │
+3. NATS: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+   │
+4. Flow Router (tenant/team resolution)
+   │
+5. Flow Executor (WASM component execution)
+   │
+6. Session State Update
+   │
+7. Reply/Action Nodes
+   │
+8. NATS: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+   │
+9. Provider Egress → External Service
+```
+
+### Pack-Ladefluss
+
+```
+1. Bundle Configuration (greentic.demo.yaml)
+   │
+2. Pack Resolver (local/OCI registry)
+   │
+3. Signature Verification (ed25519-dalek)
+   │
+4. CBOR Metadata Parsing
+   │
+5. WASM Component Instantiation
+   │
+6. WIT Interface Binding
+   │
+7. Runtime Registration
+```
+
+## Multi-Tenancy-Modell
+
+Greentic implementiert Tenant-Isolation auf jeder Ebene:
+
+```
+Tenant
+  └── Environment (prod, staging, dev)
+        └── Team
+              └── Channel (messaging provider instance)
+                    └── Session (user conversation state)
+```
+
+### TenantCtx
+
+Die `TenantCtx`-Struktur fließt durch alle Operationen:
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+## WIT-Schnittstellenarchitektur
+
+Greentic verwendet die Spezifikation **WebAssembly Interface Types (WIT)** zur Definition von Komponentenschnittstellen:
+
+```wit
+// greentic-interfaces/wit/component.wit
+package greentic:component;
+
+interface types {
+    record message {
+        id: string,
+        content: string,
+        sender: string,
+        timestamp: u64,
+    }
+
+    record outcome {
+        success: bool,
+        data: option<string>,
+        error: option<string>,
+    }
+}
+
+world component {
+    import types;
+    export execute: func(input: types.message) -> types.outcome;
+}
+```
+
+## Service-Abhängigkeiten
+
+```
+greentic-types  ─────────────────────────── (foundation)
+    ↑
+greentic-telemetry
+greentic-interfaces ← greentic-types
+greentic-config ← greentic-types
+    ↑
+greentic-session ← greentic-types
+greentic-state ← greentic-types + greentic-interfaces
+greentic-flow ← greentic-interfaces + greentic-types
+    ↑
+greentic-pack ← greentic-flow + greentic-types
+greentic-component ← greentic-interfaces + greentic-types
+greentic-mcp ← greentic-interfaces + greentic-types
+    ↑
+greentic-runner ← ALL of the above
+```
+
+## Observability
+
+Greentic verwendet **OpenTelemetry** für verteiltes Tracing und Metriken:
+
+- **Tracing**: OTLP-Exporter für verteilte Trace-Korrelation
+- **Metrics**: Flow-Ausführungszeiten, Nachrichtendurchsatz, Fehlerraten
+- **Logging**: Strukturiertes Logging mit Trace-Kontext
+
+## Nächste Schritte
+
+- [Flows](/de/concepts/flows/) - Lernen Sie Flow-Definitionen kennen
+- [Packs](/de/concepts/packs/) - Verstehen Sie die Pack-Struktur
+- [Komponenten](/de/concepts/components/) - Erstellen Sie benutzerdefinierte WASM-Komponenten

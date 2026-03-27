@@ -1,0 +1,119 @@
+---
+title: Webex
+description: 将你的数字员工连接到 Cisco Webex
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+Webex provider 与 Cisco Webex Teams 集成。它支持：
+
+- 私信
+- Space（房间）消息
+- Adaptive Cards
+- 文件附件
+- @mentions
+
+## 前置条件
+
+- Webex 账号
+- Webex Developer 权限
+
+## 设置
+
+<Steps>
+
+1. **创建 Webex Bot**
+
+   前往 [developer.webex.com](https://developer.webex.com)：
+   - 进入 My Webex Apps → Create a Bot
+   - 填写 bot 信息
+   - 复制 **Bot Access Token**
+
+2. **创建 Webhook**
+
+   provider 会自动创建 webhook，或者你也可以手动创建：
+   - 前往 Documentation → Webhooks API
+   - 创建指向你端点的 webhook
+
+3. **配置 Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webex": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "access_token": "your-bot-access-token"
+     }
+   }
+   ```
+
+4. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | webhook 的公网 URL |
+| `access_token` | 是 | Bot access token |
+
+## 功能
+
+### 文本消息
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Markdown
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - List item
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+```yaml
+- id: card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.2"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+```
+
+### 文件附件
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your document"
+    files:
+      - url: "https://example.com/doc.pdf"
+```
+
+## 下一步
+
+- [Slack Provider](/zh/providers/messaging/slack/)
+- [Teams Provider](/zh/providers/messaging/teams/)

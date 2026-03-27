@@ -1,0 +1,48 @@
+---
+title: Plataforma Greentic
+description: Plataforma multi-tenant basada en componentes WASM para crear trabajadores digitales impulsados por IA
+template: splash
+hero:
+  tagline: Crea y ejecuta pipelines de automatización agentic autónoma con WebAssembly
+  actions:
+    - text: Comenzar
+      link: /es/getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: Ver en GitHub
+      link: https://github.com/greenticai
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Características clave
+
+<CardGrid stagger>
+	<Card title="Componentes WASM" icon="puzzle">
+		Ejecución portable y aislada mediante WebAssembly (WASI Preview 2). Compila una vez, ejecuta en cualquier lugar.
+	</Card>
+	<Card title="Multi-Tenant" icon="setting">
+		Aislamiento de tenant incorporado con `TenantCtx` para despliegues seguros y escalables.
+	</Card>
+	<Card title="Orquestación basada en flows" icon="random">
+		Define pipelines de automatización con grafos de flow basados en YAML (archivos `.ygtc`).
+	</Card>
+	<Card title="Ecosistema de providers" icon="external">
+		Conéctate con Slack, Teams, Telegram, WhatsApp y más mediante packs de providers WASM.
+	</Card>
+</CardGrid>
+
+## Aspectos destacados de la arquitectura
+
+- **Flows** - Grafos de orquestación definidos en YAML con nodos de componentes WASM
+- **Packs** - Archivos `.gtpack` firmados que contienen flows, componentes y assets
+- **Components** - Bloques de construcción WASM portables que implementan la interfaz WIT de Greentic
+- **Providers** - Componentes WASM que conectan servicios externos (mensajería, eventos, secretos)
+
+## Enlaces rápidos
+
+- [Guía de inicio rápido](/es/getting-started/quick-start/) - Ponte en marcha en minutos
+- [Conceptos fundamentales](/es/concepts/architecture/) - Comprende la arquitectura de la plataforma
+- [Referencia de GTC CLI](/es/cli/overview/) - Domina las herramientas de línea de comandos
+- [Providers de mensajería](/es/providers/messaging/overview/) - Conecta tus canales de mensajería

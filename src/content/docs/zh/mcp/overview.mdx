@@ -1,0 +1,143 @@
+---
+title: MCP 概览
+description: Greentic 中的 Model Context Protocol 集成
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 简介
+
+**MCP (Model Context Protocol)** 是一个将 AI 模型连接到外部工具和数据源的标准。Greentic 对 MCP 的实现支持：
+
+- 在沙箱化 WASM 环境中执行 tool
+- 安全访问外部 API
+- 数据库查询
+- 文件系统操作
+
+## 关键特性
+
+<CardGrid>
+  <Card title="WASM Sandboxing" icon="puzzle">
+    MCP tools 在隔离的 WebAssembly 环境中运行，以保障安全。
+  </Card>
+  <Card title="Tool Discovery" icon="magnifier">
+    自动完成 tool 注册和能力声明。
+  </Card>
+  <Card title="Type Safety" icon="approve-check">
+    WIT interfaces 确保类型安全的 tool 调用。
+  </Card>
+  <Card title="Observability" icon="seti:pulse">
+    内置 tracing 和 logging，用于观察 tool 执行情况。
+  </Card>
+</CardGrid>
+
+## 架构
+
+```
+LLM (with tool use)
+       │
+       ▼ Tool Call Request
+┌─────────────────────────────────┐
+│       greentic-mcp              │
+│   (MCP Executor / WASI Bridge)  │
+└─────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────┐
+│    WASM Tool Component          │
+│   (Sandboxed execution)         │
+└─────────────────────────────────┘
+       │
+       ▼ Tool Result
+Back to LLM
+```
+
+## Flow 中的 MCP
+
+### Tool 定义
+
+```yaml title="tools/database-query.yaml"
+name: database_query
+description: Query the customer database
+parameters:
+  - name: query
+    type: string
+    description: SQL query to execute
+    required: true
+  - name: limit
+    type: integer
+    description: Maximum rows to return
+    default: 10
+returns:
+  type: array
+  items:
+    type: object
+```
+
+### 在 Flow 中使用 Tools
+
+```yaml
+- id: query_orders
+  type: mcp-tool
+  config:
+    tool: "database_query"
+    parameters:
+      query: "SELECT * FROM orders WHERE customer_id = '{{customer_id}}'"
+      limit: 5
+  output: orders_result
+  next: process_orders
+```
+
+### 与 LLM 配合
+
+```yaml
+- id: agent_step
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant with database access."
+    tools:
+      - database_query
+      - send_email
+      - create_ticket
+    tool_choice: "auto"
+  next: handle_response
+```
+
+## 可用 Tools
+
+Greentic 提供了多个内置 MCP tools：
+
+| Tool | 描述 |
+|------|-------------|
+| `http_request` | 发起 HTTP 请求 |
+| `database_query` | 查询数据库 |
+| `file_read` | 读取文件（沙箱内） |
+| `file_write` | 写入文件（沙箱内） |
+| `send_email` | 发送邮件 |
+| `create_ticket` | 创建支持工单 |
+
+## 安全性
+
+### WASM Sandboxing
+
+所有 MCP tools 都在 WASM 沙箱中运行：
+- 不能直接访问文件系统
+- 除非显式授予，否则不能访问网络
+- 内存隔离
+- CPU 时间限制
+
+### Capability Model
+
+tools 需要声明所需能力：
+
+```yaml
+capabilities:
+  - network:outbound  # Can make outbound requests
+  - filesystem:read   # Can read files in sandbox
+```
+
+## 下一步
+
+- [创建 MCP Tools](/zh/mcp/creating-tools/)
+- [LLM OpenAI Component](/zh/components/llm-openai/)

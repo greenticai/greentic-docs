@@ -1,0 +1,119 @@
+---
+title: Webex
+description: Hubungkan digital worker Anda ke Cisco Webex
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider Webex terintegrasi dengan Cisco Webex Teams. Provider ini mendukung:
+
+- Direct message
+- Pesan space (room)
+- Adaptive Cards
+- Lampiran file
+- @mention
+
+## Prasyarat
+
+- Akun Webex
+- Akses Webex Developer
+
+## Penyiapan
+
+<Steps>
+
+1. **Buat Webex Bot**
+
+   Buka [developer.webex.com](https://developer.webex.com):
+   - Navigasikan ke My Webex Apps → Create a Bot
+   - Isi detail bot
+   - Salin **Bot Access Token**
+
+2. **Buat Webhook**
+
+   Provider akan membuat webhook secara otomatis, atau buat secara manual:
+   - Buka Documentation → Webhooks API
+   - Buat webhook yang mengarah ke endpoint Anda
+
+3. **Konfigurasikan Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webex": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "access_token": "your-bot-access-token"
+     }
+   }
+   ```
+
+4. **Jalankan Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|--------|----------|-------------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL publik untuk webhook |
+| `access_token` | Ya | Bot access token |
+
+## Fitur
+
+### Pesan Teks
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Markdown
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - List item
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+```yaml
+- id: card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.2"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+```
+
+### Lampiran File
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your document"
+    files:
+      - url: "https://example.com/doc.pdf"
+```
+
+## Langkah Selanjutnya
+
+- [Slack Provider](/id/providers/messaging/slack/)
+- [Teams Provider](/id/providers/messaging/teams/)
