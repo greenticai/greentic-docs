@@ -1,0 +1,136 @@
+---
+title: Ringkasan i18n
+description: Dukungan internasionalisasi di Greentic
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Pendahuluan
+
+Greentic menyediakan dukungan internasionalisasi (i18n) yang komprehensif melalui library **greentic-i18n**. Library ini memungkinkan:
+
+- Identifier string yang deterministik
+- Pengambilan pesan berbasis locale
+- Penerjemahan Adaptive Card
+- Pergantian bahasa saat runtime
+
+## Fitur Utama
+
+<CardGrid>
+  <Card title="Deterministic IDs" icon="puzzle">
+    Spesifikasi I18nId v1 menggunakan hashing BLAKE3 untuk identifier yang konsisten dan tahan benturan.
+  </Card>
+  <Card title="Multi-Format" icon="document">
+    Dukungan untuk format terjemahan JSON, YAML, PO, dan XLIFF.
+  </Card>
+  <Card title="Cards Integration" icon="setting">
+    Dukungan bawaan untuk menerjemahkan Adaptive Cards.
+  </Card>
+  <Card title="Runtime Switching" icon="random">
+    Ubah bahasa per session tanpa restart.
+  </Card>
+</CardGrid>
+
+## Cara Kerjanya
+
+```
+Source String: "Hello, World!"
+       │
+       ▼
+┌─────────────────────────────────┐
+│     BLAKE3 Hash Function        │
+│  blake3(normalize(string))      │
+└─────────────────────────────────┘
+       │
+       ▼
+I18nId: "i18n:v1:abc123def456"
+       │
+       ▼
+┌─────────────────────────────────┐
+│      Translation Lookup         │
+│   locale_map[id] → "Halo!"     │
+└─────────────────────────────────┘
+```
+
+## Quick Start
+
+### 1. Ekstrak String
+
+Untuk Adaptive Cards:
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+```
+
+### 2. Terjemahkan
+
+Menggunakan `greentic-i18n-translator` (didukung oleh Codex CLI):
+
+```bash
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+Atau lakukan auto-translate saat generate pack:
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de,ja
+```
+
+### 3. Muat di Runtime
+
+```yaml
+i18n:
+  default_locale: "en"
+  locales:
+    en: "translations/en.json"
+    id: "translations/id.json"
+    ja: "translations/ja.json"
+```
+
+### 4. Gunakan di Flows
+
+```yaml
+- id: greet
+  type: reply
+  config:
+    message_key: "i18n:v1:abc123"  # Resolved based on session locale
+```
+
+## Resolusi Locale
+
+Locale di-resolve dengan urutan berikut:
+
+1. Locale level session (ditetapkan per pengguna)
+2. Default level team
+3. Default level tenant
+4. Default global
+
+```yaml
+# Set session locale
+- id: set_language
+  type: state
+  config:
+    action: set
+    key: "locale"
+    value: "id"  # Indonesian
+```
+
+## Bahasa yang Didukung
+
+Bahasa apa pun didukung. Konfigurasi yang umum:
+
+| Locale | Language |
+|--------|----------|
+| `en` | Inggris |
+| `id` | Indonesia |
+| `ja` | Jepang |
+| `zh` | Tionghoa |
+| `es` | Spanyol |
+| `de` | Jerman |
+
+## Langkah Berikutnya
+
+- [I18nId Specification](/id/i18n/i18nid-spec/)
+- [Cards Translation](/id/i18n/cards-translation/)

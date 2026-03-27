@@ -1,0 +1,162 @@
+---
+title: Events Providers 概要
+description: digital worker で event と trigger を処理する
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## はじめに
+
+**Events Providers** を使うと、digital worker は messaging 以外の external trigger にも応答できるようになります。扱えるものは次のとおりです。
+
+- external service からの webhook
+- scheduled task（timer/cron）
+- email notification
+- SMS notification
+
+## 利用可能な provider
+
+<CardGrid>
+  <LinkCard
+    title="Webhook"
+    href="/ja/providers/events/webhook/"
+    description="external service から HTTP webhook を受け取る"
+  />
+  <LinkCard
+    title="Timer"
+    href="/ja/providers/events/timer/"
+    description="cron expression で task をスケジュールする"
+  />
+  <LinkCard
+    title="Email (SendGrid)"
+    href="/ja/providers/events/email-sendgrid/"
+    description="SendGrid 経由で transactional email を送信する"
+  />
+  <LinkCard
+    title="SMS (Twilio)"
+    href="/ja/providers/events/sms-twilio/"
+    description="Twilio 経由で SMS message を送信する"
+  />
+</CardGrid>
+
+## アーキテクチャ
+
+```
+External Service / Timer
+    │
+    ▼ HTTP / Schedule
+┌─────────────────────────────────────────┐
+│           Events Ingress                │
+│     (Process incoming event)            │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Event
+┌─────────────────────────────────────────┐
+│              NATS Bus                   │
+│    greentic.events.{env}.{tenant}.{type}│
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                 │
+│      (Process with event flows)         │
+└─────────────────────────────────────────┘
+```
+
+## Event の正規化
+
+すべての event は共通フォーマットに正規化されます。
+
+```rust
+pub struct Event {
+    pub id: String,
+    pub event_type: String,
+    pub source: String,
+    pub timestamp: u64,
+    pub payload: Value,
+    pub metadata: Option<Value>,
+}
+```
+
+## 設定
+
+### bundle 内
+
+```yaml title="greentic.demo.yaml"
+providers:
+  events-webhook:
+    pack: "providers/events/events-webhook.gtpack"
+
+  events-timer:
+    pack: "providers/events/events-timer.gtpack"
+```
+
+### Event Flows
+
+```yaml title="flows/on_event.ygtc"
+name: handle_event
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        // Process the event
+        let payload = event.payload;
+        process_payload(payload)
+    next: respond
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+## NATS Subject
+
+event は NATS を通って流れます。
+
+| Subject | Purpose |
+|---------|---------|
+| `greentic.events.{env}.{tenant}.{type}` | event notification |
+| `greentic.events.{env}.{tenant}.{type}.result` | event processing result |
+
+## よくあるパターン
+
+### Event-Driven Notification
+
+```yaml
+nodes:
+  - id: on_order
+    type: branch
+    config:
+      conditions:
+        - expression: "event.event_type == 'order.created'"
+          next: send_confirmation
+        - expression: "event.event_type == 'order.shipped'"
+          next: send_tracking
+```
+
+### Scheduled Tasks
+
+```yaml
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_email
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"  # 9 AM daily
+    target: daily_report
+```
+
+## 次のステップ
+
+- [Webhook Provider](/ja/providers/events/webhook/)
+- [Timer Provider](/ja/providers/events/timer/)
+- [Flows Guide](/ja/concepts/flows/)

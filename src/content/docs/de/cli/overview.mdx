@@ -1,0 +1,181 @@
+---
+title: GTC CLI Überblick
+description: Kommandozeilenschnittstelle für die Greentic-Plattform
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Einführung
+
+Die **GTC CLI** (`gtc`) ist die primäre Kommandozeilenschnittstelle für die Greentic-Plattform. Sie stellt Befehle bereit für:
+
+- Das Erstellen und Verwalten von Bundles
+- Das Einrichten von Providern
+- Das Ausführen des Runtime-Servers
+- Das Bauen und Validieren von Packs/Flows
+
+## Installation
+
+<Tabs>
+<TabItem label="Cargo">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="From Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+</Tabs>
+
+Installation überprüfen:
+
+```bash
+gtc --version
+```
+
+## CLI-Architektur
+
+Die `gtc`-Binärdatei setzt Unterbefehle aus mehreren Repositories zusammen:
+
+| Befehl | Source Repo | Zweck |
+|---------|-------------|---------|
+| `gtc wizard` | `greentic-dev` | Assistent zur Bundle-Erstellung |
+| `gtc setup` | `greentic-setup` | Provider-Einrichtung/-Konfiguration |
+| `gtc start` | `greentic-start` | Runtime-Server |
+| `gtc pack` | `greentic-pack` | Pack-Build |
+| `gtc flow` | `greentic-flow` | Flow-Validierung |
+
+## Befehlsreferenz
+
+### Globale Optionen
+
+```bash
+gtc [OPTIONS] <COMMAND>
+
+Options:
+  -v, --verbose     Enable verbose output
+  -q, --quiet       Suppress non-essential output
+  --config <PATH>   Path to config file
+  -h, --help        Print help
+  -V, --version     Print version
+```
+
+### Befehle
+
+| Befehl | Beschreibung |
+|---------|-------------|
+| `wizard` | Ein neues Bundle aus Assistentenantworten erstellen |
+| `setup` | Provider in einem Bundle konfigurieren |
+| `start` | Den Runtime-Server starten |
+| `pack` | Pack-Verwaltung (build, verify, publish) |
+| `flow` | Flow-Verwaltung (validate, doctor) |
+
+## Häufige Workflows
+
+### Ein neues Projekt erstellen und ausführen
+
+```bash
+# 1. Create bundle from wizard
+gtc wizard --answers wizard-answers.yaml
+
+# 2. Setup providers (interactive)
+gtc setup ./my-bundle
+
+# 3. Start the runtime
+gtc start ./my-bundle
+```
+
+### Entwicklungs-Workflow
+
+```bash
+# Validate flows
+gtc flow doctor ./my-bundle/apps/my-app/flows/
+
+# Build a pack
+gtc pack build ./my-pack/
+
+# Start with verbose logging
+gtc start ./my-bundle --verbose
+
+# Start with ngrok tunnel
+gtc start ./my-bundle --ngrok on
+```
+
+### Produktions-Deployment
+
+```bash
+# Setup with answers file (non-interactive)
+gtc setup --answers production-answers.json ./my-bundle
+
+# Start without tunnels
+gtc start ./my-bundle --cloudflared off --ngrok off
+```
+
+## Konfigurationsdatei
+
+GTC kann eine Konfigurationsdatei (`greentic.toml`) verwenden:
+
+```toml title="greentic.toml"
+[runtime]
+host = "0.0.0.0"
+port = 8080
+
+[nats]
+enabled = true
+url = "nats://localhost:4222"
+
+[logging]
+level = "info"
+format = "json"
+
+[telemetry]
+enabled = true
+otlp_endpoint = "http://localhost:4317"
+```
+
+## Umgebungsvariablen
+
+| Variable | Beschreibung | Standard |
+|----------|-------------|---------|
+| `GREENTIC_LOG_LEVEL` | Log-Ausführlichkeit | `info` |
+| `GREENTIC_CONFIG` | Pfad zur Konfigurationsdatei | `greentic.toml` |
+| `GREENTIC_NATS_URL` | NATS-Server-URL | `nats://localhost:4222` |
+| `GREENTIC_REDIS_URL` | Redis-URL | `redis://localhost:6379` |
+
+## Exit-Codes
+
+| Code | Bedeutung |
+|------|---------|
+| `0` | Erfolg |
+| `1` | Allgemeiner Fehler |
+| `2` | Konfigurationsfehler |
+| `3` | Runtime-Fehler |
+| `4` | Validierungsfehler |
+
+## Hilfe erhalten
+
+```bash
+# General help
+gtc --help
+
+# Command-specific help
+gtc wizard --help
+gtc setup --help
+gtc start --help
+```
+
+## Nächste Schritte
+
+- [gtc wizard](/de/cli/wizard/) - Bundle-Erstellung
+- [gtc setup](/de/cli/setup/) - Provider-Einrichtung
+- [gtc start](/de/cli/start/) - Runtime-Server
+- [Packs erstellen](/de/cli/building-packs/) - Pack-Verwaltung

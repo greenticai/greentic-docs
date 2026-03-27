@@ -1,0 +1,264 @@
+---
+title: Messaging Providers 概要
+description: digital worker を messaging platform に接続する
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## はじめに
+
+Greentic は **Messaging Providers** を通じて複数の messaging platform をサポートします。各 provider は次を処理する WASM component pack です:
+
+- **Ingress** - platform からメッセージを受信する
+- **Egress** - platform へメッセージを送信する
+- **Operations** - platform 固有の機能（button、card、thread）
+
+## 利用可能な provider
+
+<CardGrid>
+  <LinkCard
+    title="Slack"
+    href="/ja/providers/messaging/slack/"
+    description="Slack workspace に接続し、完全な app support を提供する"
+  />
+  <LinkCard
+    title="Microsoft Teams"
+    href="/ja/providers/messaging/teams/"
+    description="Microsoft Teams の channel と chat に統合する"
+  />
+  <LinkCard
+    title="Telegram"
+    href="/ja/providers/messaging/telegram/"
+    description="button と inline keyboard を備えた Telegram bot を構築する"
+  />
+  <LinkCard
+    title="WhatsApp"
+    href="/ja/providers/messaging/whatsapp/"
+    description="WhatsApp Business API に接続する"
+  />
+  <LinkCard
+    title="WebChat"
+    href="/ja/providers/messaging/webchat/"
+    description="website に chat widget を埋め込む"
+  />
+  <LinkCard
+    title="Webex"
+    href="/ja/providers/messaging/webex/"
+    description="Cisco Webex Teams に統合する"
+  />
+  <LinkCard
+    title="Email"
+    href="/ja/providers/messaging/email/"
+    description="メッセージとして email を送受信する"
+  />
+</CardGrid>
+
+## アーキテクチャ
+
+```
+External Platform (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────────────────────────────┐
+│           Ingress Component             │
+│   (Parse platform-specific format)      │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.ingress.{tenant}... │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                  │
+│      (Process with your flows)          │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.egress.{tenant}...  │
+└─────────────────────────────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────────────────────────────┐
+│           Egress Component              │
+│     (Format for platform API)           │
+└─────────────────────────────────────────┘
+    │
+    ▼ API Call
+External Platform
+```
+
+## メッセージの正規化
+
+すべての provider はメッセージを共通フォーマットに正規化します:
+
+```rust
+pub struct NormalizedMessage {
+    pub id: String,
+    pub channel_id: String,
+    pub sender_id: String,
+    pub sender_name: Option<String>,
+    pub content: String,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+    pub attachments: Vec<Attachment>,
+    pub metadata: Option<Value>,
+}
+```
+
+これにより、flow は修正なしでどの messaging platform 上でも動作できます。
+
+## provider 設定
+
+### bundle 内
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+  messaging-slack:
+    pack: "providers/messaging/messaging-slack.gtpack"
+    setup_flow: "setup_default"
+```
+
+### Setup Answers
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHI..."
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "xoxb-xxx-xxx",
+    "slack_app_id": "A07XXX"
+  }
+}
+```
+
+## NATS Subjects
+
+メッセージは tenant 単位の subject で NATS を流れます:
+
+| Subject | Direction |
+|---------|-----------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | 受信 |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | 送信 |
+
+## 共通機能
+
+### テキストメッセージ
+
+すべての provider は基本的な text message をサポートします:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Rich Content
+
+ほとんどの provider は rich content をサポートします:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+```
+
+### Buttons/Actions
+
+interactive 要素（provider 依存）:
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - label: "Get Help"
+        action: "help"
+      - label: "Contact Support"
+        action: "support"
+```
+
+### 添付ファイル
+
+ファイルと media をサポートします:
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - type: file
+        url: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## マルチチャネル flow
+
+複数チャネルで動く flow を書けます:
+
+```yaml title="flows/on_message.ygtc"
+name: universal_handler
+version: "1.0"
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      # Works on any platform
+      message: "Hello! I'm your assistant."
+    next: ask_intent
+
+  - id: ask_intent
+    type: reply
+    config:
+      message: "How can I help you today?"
+      # Buttons render differently per platform
+      buttons:
+        - label: "Get Started"
+          action: "start"
+        - label: "Help"
+          action: "help"
+
+triggers:
+  - type: message
+    pattern: "hello|hi"
+    target: greet
+```
+
+## Provider 比較
+
+| Feature | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Email |
+|---------|-------|-------|----------|----------|---------|-------|-------|
+| Text | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Rich Cards | Yes | Yes | Partial | Yes | Yes | Yes | No |
+| Buttons | Yes | Yes | Yes | Yes | Yes | Yes | No |
+| Files | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Threads | Yes | Yes | Yes | No | No | Yes | Yes |
+| Reactions | Yes | Yes | No | Yes | No | No | No |
+
+## 次のステップ
+
+使い始める provider を選んでください:
+
+- [Telegram](/ja/providers/messaging/telegram/) - セットアップが最も簡単で、テストにも向いている
+- [Slack](/ja/providers/messaging/slack/) - フル機能の workspace integration
+- [WebChat](/ja/providers/messaging/webchat/) - website に埋め込む
+```

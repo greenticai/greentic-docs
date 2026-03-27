@@ -1,0 +1,272 @@
+---
+title: MCP ツールの作成
+description: Greentic 向けのカスタム MCP ツールを構築する
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+カスタム MCP ツールを作成して、external integration、custom logic、data access により digital worker の機能を拡張できます。
+
+## ツールを作成する
+
+<Steps>
+
+1. **WIT Interface を定義する**
+
+   ```wit title="wit/tool.wit"
+   package greentic:my-tool;
+
+   interface tool {
+       record input {
+           query: string,
+           options: option<string>,
+       }
+
+       record output {
+           success: bool,
+           data: option<string>,
+           error: option<string>,
+       }
+
+       execute: func(input: input) -> output;
+   }
+
+   world my-tool {
+       export tool;
+   }
+   ```
+
+2. **Rust で実装する**
+
+   ```rust title="src/lib.rs"
+   use wit_bindgen::generate;
+
+   generate!({
+       world: "my-tool",
+       path: "wit",
+   });
+
+   struct MyTool;
+
+   impl tool::Guest for MyTool {
+       fn execute(input: tool::Input) -> tool::Output {
+           // Your tool logic here
+           let result = process_query(&input.query);
+
+           tool::Output {
+               success: true,
+               data: Some(result),
+               error: None,
+           }
+       }
+   }
+
+   fn process_query(query: &str) -> String {
+       format!("Processed: {}", query)
+   }
+
+   export!(MyTool);
+   ```
+
+3. **WASM Component をビルドする**
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   ```
+
+4. **ツール manifest を作成する**
+
+   ```yaml title="tool.yaml"
+   name: my_tool
+   version: "1.0.0"
+   description: My custom MCP tool
+
+   parameters:
+     - name: query
+       type: string
+       description: The query to process
+       required: true
+     - name: options
+       type: string
+       description: Optional configuration
+       required: false
+
+   returns:
+     type: object
+     properties:
+       success:
+         type: boolean
+       data:
+         type: string
+       error:
+         type: string
+
+   capabilities:
+     - network:outbound
+   ```
+
+5. **ツールを登録する**
+
+   ```yaml title="greentic.demo.yaml"
+   mcp:
+     tools:
+       - name: my_tool
+         component: "tools/my-tool.wasm"
+         manifest: "tools/my-tool.yaml"
+   ```
+
+</Steps>
+
+## ツール例
+
+### HTTP Request Tool
+
+```rust
+impl tool::Guest for HttpTool {
+    fn execute(input: tool::Input) -> tool::Output {
+        let url = &input.url;
+        let method = input.method.unwrap_or("GET".to_string());
+
+        match http_request(&method, url, input.body.as_deref()) {
+            Ok(response) => tool::Output {
+                success: true,
+                data: Some(response),
+                error: None,
+            },
+            Err(e) => tool::Output {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            },
+        }
+    }
+}
+```
+
+### Database Query Tool
+
+```rust
+impl tool::Guest for DbTool {
+    fn execute(input: tool::Input) -> tool::Output {
+        // Get connection string from secrets
+        let conn_str = get_secret("database_url")?;
+
+        // Execute query (pseudo-code)
+        let results = db_query(&conn_str, &input.query)?;
+
+        tool::Output {
+            success: true,
+            data: Some(serde_json::to_string(&results)?),
+            error: None,
+        }
+    }
+}
+```
+
+### Email Tool
+
+```rust
+impl tool::Guest for EmailTool {
+    fn execute(input: tool::Input) -> tool::Output {
+        let api_key = get_secret("sendgrid_api_key")?;
+
+        let result = send_email(
+            &api_key,
+            &input.to,
+            &input.subject,
+            &input.body,
+        );
+
+        match result {
+            Ok(_) => tool::Output {
+                success: true,
+                data: Some("Email sent".to_string()),
+                error: None,
+            },
+            Err(e) => tool::Output {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            },
+        }
+    }
+}
+```
+
+## Flow でツールを使う
+
+### 直接呼び出す
+
+```yaml
+- id: call_tool
+  type: mcp-tool
+  config:
+    tool: "my_tool"
+    parameters:
+      query: "{{user_query}}"
+  output: tool_result
+```
+
+### LLM Agent と組み合わせる
+
+```yaml
+- id: agent
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: |
+      You are an assistant with access to tools.
+      Use tools when needed to help the user.
+    tools:
+      - my_tool
+      - http_request
+      - send_email
+    tool_choice: "auto"
+```
+
+## ツールをテストする
+
+### Unit Test
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_execute() {
+        let input = tool::Input {
+            query: "test".to_string(),
+            options: None,
+        };
+
+        let output = MyTool::execute(input);
+
+        assert!(output.success);
+        assert!(output.data.is_some());
+    }
+}
+```
+
+### Integration Test
+
+```bash
+# Test with sample input
+echo '{"query": "test"}' | greentic-mcp test ./my-tool.wasm
+```
+
+## ベストプラクティス
+
+1. **すべてのエラーを処理する** - panic せず、常に output に error を返す
+2. **入力を検証する** - 処理前に parameter を確認する
+3. **secrets を使う** - credential をハードコードしない
+4. **logging を追加する** - debugging を容易にする
+5. **十分に文書化する** - manifest に明確な説明を書く
+6. **edge case をテストする** - 空入力や大きな data などを扱う
+
+## 次のステップ
+
+- [MCP Overview](/ja/mcp/overview/)
+- [Components Guide](/ja/concepts/components/)

@@ -1,0 +1,342 @@
+---
+title: Komponenten
+description: WASM-Komponenten für Greentic bauen
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Was ist eine Komponente?
+
+Eine **Komponente** ist ein portabler WebAssembly-(WASM-)Baustein, der die Greentic-WIT-Schnittstelle implementiert. Komponenten sind:
+
+- **Isoliert** - Werden in einer isolierten WASM-Umgebung ausgeführt
+- **Portabel** - Laufen auf jeder Plattform mit Wasmtime
+- **Komponierbar** - Lassen sich kombinieren, um komplexe Workflows zu erstellen
+- **Sprachunabhängig** - Können in Rust, Go oder jeder WASM-kompatiblen Sprache geschrieben werden
+
+## Komponententypen
+
+| Typ | Zweck | Beispiel |
+|------|------|---------|
+| **Node** | Verarbeitungsschritt im Flow | LLM-Aufrufer, Template-Renderer |
+| **Provider** | Brücke zu externen Diensten | Telegram, Slack, SendGrid |
+| **Tool** | MCP-Tool-Implementierung | Datenbankabfrage, API-Aufruf |
+| **Operator** | Nachrichtentransformation | Button-Verarbeitung, Card-Rendering |
+
+## Eine Komponente erstellen
+
+### Projekt-Setup
+
+Verwenden Sie die CLI zum Erstellen von Komponenten:
+
+```bash
+# Create new component project
+greentic-component new my-processor
+
+cd my-processor
+```
+
+Dies erzeugt:
+
+```
+my-processor/
+├── Cargo.toml
+├── src/
+│   └── lib.rs
+├── wit/
+│   └── component.wit
+└── build.sh
+```
+
+### Cargo.toml
+
+```toml title="Cargo.toml"
+[package]
+name = "my-processor"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.53"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+```
+
+### WIT-Schnittstelle
+
+Definieren Sie die Schnittstelle Ihrer Komponente:
+
+```wit title="wit/component.wit"
+package greentic:my-processor;
+
+interface types {
+    record input {
+        message: string,
+        context: option<string>,
+    }
+
+    record output {
+        result: string,
+        success: bool,
+    }
+}
+
+world processor {
+    import types;
+
+    export process: func(input: types.input) -> types.output;
+}
+```
+
+### Implementierung
+
+```rust title="src/lib.rs"
+use wit_bindgen::generate;
+
+generate!({
+    world: "processor",
+    path: "wit",
+});
+
+struct MyProcessor;
+
+impl Guest for MyProcessor {
+    fn process(input: Input) -> Output {
+        // Your processing logic here
+        let result = format!("Processed: {}", input.message);
+
+        Output {
+            result,
+            success: true,
+        }
+    }
+}
+
+export!(MyProcessor);
+```
+
+### Bauen
+
+```bash
+# Build for WASM target
+cargo build --target wasm32-wasip2 --release
+
+# Output: target/wasm32-wasip2/release/my_processor.wasm
+```
+
+## Erweiterte Komponentenmuster
+
+### Asynchrone Operationen
+
+Komponenten können asynchrone Operationen über WASI-Schnittstellen ausführen:
+
+```rust
+use wit_bindgen::generate;
+
+generate!({
+    world: "async-processor",
+    path: "wit",
+    async: true,
+});
+
+impl Guest for AsyncProcessor {
+    async fn process(input: Input) -> Output {
+        // Async HTTP call
+        let response = http_fetch(&input.url).await;
+
+        Output {
+            result: response.body,
+            success: response.status == 200,
+        }
+    }
+}
+```
+
+### Zustandsverwaltung
+
+Greifen Sie innerhalb von Komponenten auf den Session-Zustand zu:
+
+```rust
+impl Guest for StatefulProcessor {
+    fn process(input: Input, state: &mut State) -> Output {
+        // Read from state
+        let counter = state.get("counter").unwrap_or(0);
+
+        // Update state
+        state.set("counter", counter + 1);
+
+        Output {
+            result: format!("Processed {} times", counter + 1),
+            success: true,
+        }
+    }
+}
+```
+
+### Fehlerbehandlung
+
+Verwenden Sie den Typ `Result` für die Fehlerbehandlung:
+
+```rust
+impl Guest for SafeProcessor {
+    fn process(input: Input) -> Result<Output, Error> {
+        if input.message.is_empty() {
+            return Err(Error::InvalidInput("Message cannot be empty".into()));
+        }
+
+        Ok(Output {
+            result: process_message(&input.message)?,
+            success: true,
+        })
+    }
+}
+```
+
+## Integrierte Komponenten
+
+Greentic stellt mehrere integrierte Komponenten bereit:
+
+### component-llm-openai
+
+OpenAI-kompatible LLMs aufrufen:
+
+```yaml
+- id: analyze
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant."
+    prompt: "{{message}}"
+```
+
+### component-templates
+
+Handlebars-Templates rendern:
+
+```yaml
+- id: format
+  type: template
+  config:
+    template: "Hello, {{name}}! Your order #{{order_id}} is ready."
+```
+
+### component-script-rhai
+
+Rhai-Skripte ausführen:
+
+```yaml
+- id: calculate
+  type: script
+  config:
+    script: |
+      let total = 0;
+      for item in items {
+        total += item.price * item.quantity;
+      }
+      total
+```
+
+### component-adaptive-card
+
+Adaptive Cards rendern und validieren:
+
+```yaml
+- id: show_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+    data:
+      user_name: "{{user_name}}"
+```
+
+## Komponenten testen
+
+### Unit-Tests
+
+```rust title="src/lib.rs"
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process() {
+        let input = Input {
+            message: "Hello".into(),
+            context: None,
+        };
+
+        let output = MyProcessor::process(input);
+
+        assert!(output.success);
+        assert!(output.result.contains("Processed"));
+    }
+}
+```
+
+### Integrationstests
+
+```bash
+# Run with test harness
+greentic-component test ./my-processor
+
+# Test with sample input
+echo '{"message": "test"}' | greentic-component run ./my-processor.wasm
+```
+
+## Best Practices für Komponenten
+
+<Aside type="tip">
+Befolgen Sie diese Richtlinien für produktionsreife Komponenten:
+</Aside>
+
+1. **Komponenten fokussiert halten** - Eine einzige Verantwortung
+2. **Alle Fehler behandeln** - Niemals in Produktion `panic` auslösen
+3. **Abhängigkeiten minimieren** - Kleinere WASM-Binärdateien
+4. **Starke Typen verwenden** - WIT für Typsicherheit nutzen
+5. **Schnittstellen dokumentieren** - Klare WIT-Definitionen
+6. **Gründlich testen** - Unit- und Integrationstests
+7. **Größe optimieren** - LTO und Größenoptimierung verwenden
+
+## Komponenten debuggen
+
+### WASM-Inspektion
+
+```bash
+# Inspect component exports
+wasm-tools component wit ./my-processor.wasm
+
+# Validate component
+wasm-tools validate ./my-processor.wasm
+```
+
+### Logging
+
+Verwenden Sie die WASI-Logging-Schnittstelle:
+
+```rust
+use greentic_interfaces::log;
+
+impl Guest for DebugProcessor {
+    fn process(input: Input) -> Output {
+        log::debug(&format!("Processing: {:?}", input));
+
+        // ... processing ...
+
+        log::info("Processing complete");
+        output
+    }
+}
+```
+
+## Nächste Schritte
+
+- [Provider](/de/concepts/providers/) - Provider-Komponenten erstellen
+- [MCP-Tools](/de/mcp/creating-tools/) - MCP-Tool-Komponenten erstellen
+- [WIT-Schnittstellenreferenz](/de/reference/wit-interfaces/) - Vollständige WIT-Spezifikation

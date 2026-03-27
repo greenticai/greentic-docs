@@ -1,0 +1,362 @@
+---
+title: Packs
+description: 理解 Greentic packs：用于分发 flows、components 和 assets 的可移植签名归档
+---
+
+import { Aside, Card, CardGrid, FileTree, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+**Pack**（`.gtpack`）是一个已签名、自包含的归档，打包了将某项能力部署到 Greentic 平台所需的一切内容，包括 flows、WASM components、assets 和元数据。Packs 是 Greentic 中主要的分发与部署单元。
+
+## 为什么使用 Packs？
+
+Greentic 围绕 **动态扩展模型** 设计：凡是不属于平台核心的内容，都会以 pack 的形式交付。这意味着无需重新编译或重新部署核心运行时，就可以扩展平台能力。
+
+<CardGrid>
+  <Card title="Portable" icon="rocket">
+    将完整功能以单个 `.gtpack` 文件交付。部署时无需解析依赖，所有内容都已打包。
+  </Card>
+  <Card title="Secure" icon="approve-check">
+    每个 pack 都会进行内容哈希（BLAKE3）和签名（Ed25519）。运行时在加载前会验证完整性和真实性。
+  </Card>
+  <Card title="Versioned" icon="list-format">
+    使用语义化版本跟踪兼容性。依赖约束在 manifest 中声明，并在构建时解析。
+  </Card>
+  <Card title="Sandboxed" icon="setting">
+    Pack 内的 WASM components 在沙箱化的 WASI Preview 2 环境中执行，并且只授予显式能力。
+  </Card>
+</CardGrid>
+
+## Pack 结构
+
+`.gtpack` 文件是一个结构化归档，包含以下布局：
+
+<FileTree>
+- my-feature.gtpack
+  - manifest.cbor Pack metadata (name, version, capabilities, signatures)
+  - flows/
+    - main.ygtc Primary orchestration flow
+    - helpers.ygtc Reusable sub-flow
+    - setup.ygtc Provisioning / setup flow
+  - components/
+    - processor.wasm WASM component (wasm32-wasip2)
+  - assets/
+    - templates/
+      - welcome.hbs Handlebars template
+    - cards/
+      - greeting.json Adaptive Card definition
+    - i18n/
+      - en.json Localization strings
+      - id.json
+  - sbom.json Software Bill of Materials
+  - signature.sig Ed25519 signature over the content hash
+</FileTree>
+
+| 条目 | 格式 | 用途 |
+|-------|--------|---------|
+| `manifest.cbor` | CBOR | Pack 标识、能力、依赖图，以及 flow/component/asset 索引 |
+| `flows/*.ygtc` | YAML | 定义执行逻辑的编排图 |
+| `components/*.wasm` | WASM (wasm32-wasip2) | 可移植、沙箱化的代码模块 |
+| `assets/` | Any | 模板、卡片、i18n 包、图片和其他静态资源 |
+| `sbom.json` | SPDX/CycloneDX | 用于供应链审计的软件物料清单 |
+| `signature.sig` | Ed25519 | 对 BLAKE3 内容哈希的加密签名 |
+
+## Pack 类型
+
+Greentic 使用基于 **capability** 的类型系统对 packs 进行分类。manifest 中的 capability ID 决定了运行时如何处理该 pack。
+
+### Provider Packs
+
+Provider packs 将外部服务（消息平台、事件源、secret 存储）桥接到 Greentic 运行时。每个 provider pack 通常包含 ingress、egress 和 operator WASM components，以及 setup/verification flows。
+
+```toml title="pack.toml — Telegram messaging provider"
+[pack]
+name = "messaging-telegram"
+version = "0.4.6"
+description = "Telegram messaging provider for Greentic"
+authors = ["Greentic <team@greentic.ai>"]
+
+[capabilities]
+id = "greentic.cap.messaging.provider.v1"
+provides = ["telegram"]
+
+[flows]
+setup_default = "flows/setup.ygtc"
+verify_webhooks = "flows/verify.ygtc"
+
+[components]
+ingress = "components/messaging-ingress-telegram.wasm"
+egress = "components/messaging-provider-telegram.wasm"
+operator = "components/telegram.wasm"
+
+[secrets]
+required = ["telegram_bot_token"]
+optional = ["public_base_url"]
+```
+
+<Aside>
+Provider packs 遵循命名约定：消息 provider 使用 `messaging-{platform}`，事件 provider 使用 `events-{source}`。
+</Aside>
+
+### Application Packs
+
+Application packs 包含业务逻辑，也就是实际处理消息、处理事件并编排行动的“数字员工”。
+
+```toml title="pack.toml — Customer service application"
+[pack]
+name = "customer-service"
+version = "1.0.0"
+description = "AI-powered customer service digital worker"
+authors = ["Your Team <team@example.com>"]
+
+[capabilities]
+id = "greentic.cap.app.v1"
+provides = ["customer-service"]
+
+[dependencies]
+greentic-templates = "^0.4"
+greentic-llm-openai = "^0.4"
+
+[flows]
+on_message = "flows/on_message.ygtc"
+on_escalation = "flows/escalation.ygtc"
+
+[components]
+classifier = "components/intent-classifier.wasm"
+
+[assets]
+cards = "assets/cards/"
+templates = "assets/templates/"
+i18n = "assets/i18n/"
+```
+
+### Component Packs
+
+Component packs 提供可复用的 WASM 构建单元，供其他 packs 依赖。它们不包含 flows，只包含 components 及其配置。
+
+```toml title="pack.toml — OpenAI LLM component"
+[pack]
+name = "llm-openai"
+version = "0.4.6"
+description = "OpenAI-compatible LLM component for Greentic"
+
+[capabilities]
+id = "greentic.cap.component.v1"
+provides = ["llm"]
+
+[components]
+llm = "components/llm-openai.wasm"
+
+[config]
+default_model = "gpt-4"
+max_tokens = 4096
+```
+
+## 创建一个 Pack
+
+<Steps>
+1. **设置目录结构**
+
+   ```bash
+   mkdir -p my-pack/{flows,components,assets}
+   ```
+
+2. **编写 manifest**
+
+   在 pack 目录根部创建一个 `pack.toml`（或 `pack.yaml`）：
+
+   ```toml title="my-pack/pack.toml"
+   [pack]
+   name = "my-feature"
+   version = "1.0.0"
+   description = "A feature pack for handling customer inquiries"
+   authors = ["Your Name <you@example.com>"]
+
+   [capabilities]
+   id = "greentic.cap.app.v1"
+   provides = ["customer-service"]
+
+   [dependencies]
+   greentic-templates = "^0.4"
+
+   [flows]
+   main = "flows/main.ygtc"
+   setup = "flows/setup.ygtc"
+
+   [components]
+   processor = "components/processor.wasm"
+
+   [assets]
+   templates = "assets/templates/"
+   cards = "assets/cards/"
+   ```
+
+3. **添加 flows**
+
+   在 `flows/` 下以 `.ygtc`（YAML）格式编写编排 flows。完整 schema 请参阅 [Flows 指南](/zh/concepts/flows/)。
+
+4. **添加 WASM components**
+
+   将你的 components 编译为 `wasm32-wasip2` 目标，并把 `.wasm` 文件放入 `components/`：
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   cp target/wasm32-wasip2/release/processor.wasm my-pack/components/
+   ```
+
+5. **构建 pack**
+
+   ```bash
+   # Using the pack builder CLI
+   greentic-pack build ./my-pack
+
+   # Or with the GTC CLI
+   gtc pack build ./my-pack
+
+   # Output: my-feature-1.0.0.gtpack
+   ```
+
+6. **为 pack 签名**
+
+   ```bash
+   # Generate a signing key pair (one-time)
+   greentic-pack keygen --output my-key.pem
+
+   # Sign the pack
+   greentic-pack sign my-feature-1.0.0.gtpack --key my-key.pem
+
+   # Verify the signature
+   greentic-pack verify my-feature-1.0.0.gtpack --pubkey my-key.pub
+   ```
+</Steps>
+
+## 使用 Packs
+
+### 在 Bundle 中
+
+在 bundle 配置中引用 packs 以进行部署：
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+apps:
+  customer-service:
+    pack: "apps/customer-service.gtpack"
+    default_flow: "on_message"
+```
+
+### 从 OCI Registry 安装
+
+Packs 通过容器 registry 以 OCI artifact 的形式分发（例如 GHCR）：
+
+```bash
+# Pull a pack from the registry
+gtc pack pull ghcr.io/greentic/messaging-telegram:0.4.6
+
+# Or reference directly in your bundle config
+providers:
+  messaging-telegram:
+    pack: "oci://ghcr.io/greentic/messaging-telegram:0.4.6"
+```
+
+## Pack 校验
+
+<Aside type="caution">
+在部署前始终校验 packs。无效的 flows 或缺失的 components 会导致运行时失败。
+</Aside>
+
+```bash
+# Validate pack structure and manifest
+greentic-pack validate ./my-pack.gtpack
+
+# Validate all flows within the pack
+greentic-flow doctor --pack ./my-pack.gtpack
+
+# Full verification (signature + content integrity + flow validation)
+greentic-pack verify --full ./my-pack.gtpack
+```
+
+## Pack 元数据（CBOR）
+
+`manifest.cbor` 文件是机器可读的 pack 描述符，使用 [CBOR](https://cbor.io/) 编码以实现紧凑的二进制序列化。它包含 flows、components 和 assets 的完整索引，以及 capability 声明和依赖约束。
+
+```rust title="Manifest structure (Rust representation)"
+struct PackManifest {
+    name: String,
+    version: String,
+    description: String,
+    authors: Vec<String>,
+    capabilities: Capabilities,
+    flows: HashMap<String, FlowEntry>,
+    components: HashMap<String, ComponentEntry>,
+    assets: HashMap<String, AssetEntry>,
+    dependencies: HashMap<String, VersionReq>,
+    config: HashMap<String, ConfigValue>,
+    signatures: Vec<Signature>,
+}
+```
+
+## 安全模型
+
+Greentic packs 实施分层安全模型，覆盖内容完整性、真实性与 capability 沙箱隔离。
+
+### 内容哈希
+
+Pack 中的每个文件都会分别使用 [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) 计算哈希。整体 pack 哈希是一个 Merkle 风格摘要：
+
+```text
+pack-hash = blake3(
+    manifest_hash ||
+    flows_hash ||
+    components_hash ||
+    assets_hash
+)
+```
+
+这可以确保任何修改，即使只改动单个字节，也会在加载时被检测出来。
+
+### 签名验证
+
+Packs 使用 [Ed25519](https://ed25519.cr.yp.to/) 密钥进行签名。运行时会在加载任何 pack 之前自动验证签名：
+
+```bash
+# Manual verification
+greentic-pack verify my-pack.gtpack --pubkey trusted-keys/publisher.pub
+```
+
+### 受信任发布者
+
+配置运行时可接受哪些签名密钥：
+
+```toml title="greentic.toml"
+[security]
+trusted_publishers = [
+    "greentic-official.pub",
+    "my-org.pub",
+]
+reject_unsigned = true
+```
+
+<Aside type="danger">
+在生产环境中将 `reject_unsigned = false` 是强烈不建议的。未签名的 packs 会绕过所有真实性检查。
+</Aside>
+
+## 最佳实践
+
+1. **使用语义化版本** — 使用 [semver](https://semver.org/) 以便使用方声明兼容版本范围
+2. **一个 pack 只做一件事** — 让 packs 聚焦于单一功能或 provider
+3. **声明所有依赖** — 列出 pack 所需的每一项 capability
+4. **包含 SBOM** — 支持下游安全审计与许可证合规
+5. **为每个发布签名** — 生产环境中绝不部署未签名 packs
+6. **发布前先校验** — 在 CI 流水线中运行 `greentic-pack verify --full`
+7. **统一使用 capability ID** — 遵循 `greentic.cap.{category}.v{N}` 命名约定
+
+## 下一步
+
+- [Components](/zh/concepts/components/) — 学习如何为 packs 构建 WASM components
+- [Building Packs](/zh/cli/building-packs/) — pack 管理的 CLI 命令
+- [Pack Format Reference](/zh/reference/pack-format/) — 完整 `.gtpack` 规范
+- [Flows](/zh/concepts/flows/) — 为你的 packs 编写编排 flows

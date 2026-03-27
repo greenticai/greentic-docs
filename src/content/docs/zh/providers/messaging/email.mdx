@@ -1,0 +1,145 @@
+---
+title: Email
+description: 以消息形式发送和接收邮件
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+Email messaging provider 让你的数字员工可以通过邮件进行通信。它支持：
+
+- 发送邮件
+- 接收邮件（通过 webhook）
+- HTML 格式
+- 附件
+
+## 设置
+
+<Steps>
+
+1. **配置 SMTP 设置**
+
+   ```json title="answers.json"
+   {
+     "messaging-email": {
+       "enabled": true,
+       "smtp_host": "smtp.example.com",
+       "smtp_port": 587,
+       "smtp_user": "your-email@example.com",
+       "smtp_password": "your-password",
+       "from_address": "support@example.com",
+       "from_name": "Support Bot"
+     }
+   }
+   ```
+
+2. **配置入站邮件（可选）**
+
+   若要接收邮件，请通过你的邮件 provider 设置 webhook：
+   - SendGrid Inbound Parse
+   - Mailgun Routes
+   - AWS SES
+
+3. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `smtp_host` | 是 | SMTP 服务器主机名 |
+| `smtp_port` | 是 | SMTP 端口（通常为 587 或 465） |
+| `smtp_user` | 是 | SMTP 用户名 |
+| `smtp_password` | 是 | SMTP 密码 |
+| `from_address` | 是 | 默认发件地址 |
+| `from_name` | 否 | 发件地址的显示名称 |
+| `webhook_url` | 否 | 入站 webhook 端点 |
+
+## 功能
+
+### 发送纯文本
+
+```yaml
+- id: send_email
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Your Support Request"
+    message: "Thank you for contacting us. We'll get back to you shortly."
+```
+
+### 发送 HTML
+
+```yaml
+- id: send_html_email
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Welcome!"
+    html: |
+      <html>
+        <body>
+          <h1>Welcome to Our Service!</h1>
+          <p>Thank you for signing up.</p>
+          <a href="https://example.com/start">Get Started</a>
+        </body>
+      </html>
+```
+
+### 携带附件
+
+```yaml
+- id: send_with_attachment
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Your Report"
+    message: "Please find your report attached."
+    attachments:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+```
+
+### CC 和 BCC
+
+```yaml
+- id: send_copy
+  type: reply
+  config:
+    to: "{{user_email}}"
+    cc: "manager@example.com"
+    bcc: "archive@example.com"
+    subject: "Support Update"
+    message: "Your ticket has been resolved."
+```
+
+## 处理入站邮件
+
+```yaml title="flows/on_email.ygtc"
+name: handle_email
+version: "1.0"
+
+nodes:
+  - id: process
+    type: reply
+    config:
+      to: "{{from_address}}"
+      subject: "Re: {{subject}}"
+      message: "Thank you for your email. We've received your message."
+
+triggers:
+  - type: email
+    target: process
+```
+
+## 下一步
+
+- [SendGrid Events Provider](/zh/providers/events/email-sendgrid/)
+- [Flows 指南](/zh/concepts/flows/)

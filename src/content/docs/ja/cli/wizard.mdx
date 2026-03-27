@@ -1,0 +1,239 @@
+---
+title: gtc wizard
+description: wizard コマンドで新しい Greentic bundles を作成する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+`gtc wizard` コマンドは、wizard の回答から新しい Greentic bundles を作成します。設定ファイル、provider のセットアップ、app templates を含む完全な bundle 構造を scaffold します。
+
+## 使い方
+
+```bash
+gtc wizard [OPTIONS]
+```
+
+## オプション
+
+| Option | 説明 |
+|--------|-------------|
+| `--answers <FILE \| URL>` | wizard の回答ファイル（JSON または YAML）へのパスまたは URL。ローカルパスとリモートの `http://` / `https://` URLs をサポートします。 |
+| `--dry-run` | 書き込まずに生成されるファイルをプレビューする |
+| `--output <DIR>` | 出力ディレクトリ（デフォルト: current directory） |
+| `--template <NAME>` | 特定の template を使う |
+| `-v, --verbose` | 詳細出力を有効にする |
+
+## Wizard の回答ファイル
+
+### JSON 形式
+
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0",
+    "description": "Customer support digital worker"
+  },
+  "providers": {
+    "messaging": ["telegram", "slack"],
+    "events": ["webhook", "timer"]
+  },
+  "apps": [
+    {
+      "name": "support-bot",
+      "template": "customer-service"
+    }
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [
+        {
+          "id": "default",
+          "channels": ["telegram", "slack"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### YAML 形式
+
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+  description: Customer support digital worker
+
+providers:
+  messaging:
+    - telegram
+    - slack
+  events:
+    - webhook
+    - timer
+
+apps:
+  - name: support-bot
+    template: customer-service
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - telegram
+          - slack
+```
+
+## 生成される構造
+
+wizard を実行すると、次が生成されます:
+
+```
+my-digital-worker/
+├── greentic.demo.yaml          # Main configuration
+├── providers/
+│   ├── messaging/
+│   │   ├── messaging-telegram.gtpack
+│   │   └── messaging-slack.gtpack
+│   └── events/
+│       ├── events-webhook.gtpack
+│       └── events-timer.gtpack
+├── apps/
+│   └── support-bot/
+│       ├── app.yaml
+│       └── flows/
+│           └── on_message.ygtc
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## 例
+
+### 基本的な使い方
+
+```bash
+# Interactive mode
+gtc wizard
+
+# With answers file
+gtc wizard --answers wizard-answers.yaml
+```
+
+### プレビューモード
+
+```bash
+# See what would be generated
+gtc wizard --answers wizard-answers.yaml --dry-run
+```
+
+### リモート回答ファイル
+
+`--answers` フラグは `http://` と `https://` URLs を受け付けるため、共有の回答ドキュメントを中央の場所に保存し、CI/CD パイプラインから参照しやすくなります。
+
+```bash
+# Fetch answers from a remote URL
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
+
+# Combine with dry-run to preview before generating
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
+```
+
+<Aside type="tip">
+リモート URL のサポートは、wizard の回答を共有リポジトリや artifact server に保存し、build 時に取得する CI/CD パイプラインで役立ちます。
+</Aside>
+
+### カスタム出力ディレクトリ
+
+```bash
+gtc wizard --answers wizard-answers.yaml --output ./my-project
+```
+
+### Templates を使う
+
+```bash
+# List available templates
+gtc wizard --list-templates
+
+# Use specific template
+gtc wizard --template customer-service --answers answers.yaml
+```
+
+## 利用可能な Templates
+
+| Template | 説明 |
+|----------|-------------|
+| `minimal` | 1 つの provider を持つ最小構成の bundle |
+| `customer-service` | エスカレーション付き FAQ bot |
+| `helpdesk` | チケット連携付き IT サポート |
+| `multi-channel` | 複数の messaging channels |
+
+## ワークフロー
+
+<Steps>
+
+1. **回答ファイルを作成する**
+
+   JSON または YAML でプロジェクト設定を定義します。
+
+2. **wizard を実行する**
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+3. **生成されたファイルを確認する**
+
+   生成された bundle 構造を確認します。
+
+4. **providers を設定する**
+
+   ```bash
+   gtc setup ./my-digital-worker
+   ```
+
+5. **runtime を起動する**
+
+   ```bash
+   gtc start ./my-digital-worker
+   ```
+
+</Steps>
+
+## 生成された Flows のカスタマイズ
+
+wizard は基本的な flow templates を生成します。生成後に必要に応じてカスタマイズしてください:
+
+```yaml title="apps/support-bot/flows/on_message.ygtc"
+name: on_message
+version: "1.0"
+description: Handle incoming messages
+
+nodes:
+  # Add your custom nodes here
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Analyze: {{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{analysis_result}}"
+
+triggers:
+  - type: message
+```

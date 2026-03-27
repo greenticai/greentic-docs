@@ -1,0 +1,200 @@
+---
+title: アーキテクチャ概要
+description: Greentic platform のアーキテクチャを理解する
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 高レベルアーキテクチャ
+
+Greentic は、責務が明確に分離されたレイヤードアーキテクチャを採用しています:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Messaging Channels                    │
+│         (Slack, Teams, Telegram, WhatsApp, WebChat)     │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Gateway (HTTP/NATS)                    │
+│                 Public Endpoint Router                   │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    greentic-runner                       │
+│           (Production Runtime Host)                      │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │              Flow Executor                       │    │
+│  │         (Wasmtime Component Model)              │    │
+│  └─────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           Session Manager                        │    │
+│  │         (Memory / Redis)                         │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    WASM Components                       │
+│    (Flows, Providers, MCP Tools, Custom Components)     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## コアコンポーネント
+
+<CardGrid>
+  <Card title="greentic-runner" icon="rocket">
+    flow をホストして実行し、session を管理し、platform のすべてのサービスを調整する主要な production runtime です。
+  </Card>
+  <Card title="greentic-flow" icon="random">
+    `.ygtc` ファイル向けの flow schema definition、intermediate representation (IR)、loader、validator です。
+  </Card>
+  <Card title="greentic-pack" icon="puzzle">
+    flow、component、asset を含む署名付き `.gtpack` archive を作成するための pack builder CLI です。
+  </Card>
+  <Card title="greentic-component" icon="setting">
+    WASM component を構築するための component authoring CLI と runtime utilities です。
+  </Card>
+</CardGrid>
+
+## Runtime Stack
+
+| Layer | Technology | 用途 |
+|-------|------------|------|
+| **WASM Runtime** | Wasmtime v41 | Component model の実行 |
+| **Async Runtime** | Tokio v1 | Async I/O、task scheduling |
+| **HTTP Server** | Axum v0.8 | REST API、webhook |
+| **Message Bus** | NATS | event distribution、pub/sub |
+| **Session Store** | Memory/Redis | flow state の永続化 |
+| **Secrets** | AWS/Azure/GCP/Vault | credential management |
+
+## データフロー
+
+### 受信メッセージフロー
+
+```
+1. External Message (e.g., Slack)
+   │
+2. Webhook Handler (Provider Ingress)
+   │
+3. NATS: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+   │
+4. Flow Router (tenant/team resolution)
+   │
+5. Flow Executor (WASM component execution)
+   │
+6. Session State Update
+   │
+7. Reply/Action Nodes
+   │
+8. NATS: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+   │
+9. Provider Egress → External Service
+```
+
+### Pack ロードフロー
+
+```
+1. Bundle Configuration (greentic.demo.yaml)
+   │
+2. Pack Resolver (local/OCI registry)
+   │
+3. Signature Verification (ed25519-dalek)
+   │
+4. CBOR Metadata Parsing
+   │
+5. WASM Component Instantiation
+   │
+6. WIT Interface Binding
+   │
+7. Runtime Registration
+```
+
+## Multi-Tenancy モデル
+
+Greentic は、あらゆるレイヤーで tenant isolation を実装しています:
+
+```
+Tenant
+  └── Environment (prod, staging, dev)
+        └── Team
+              └── Channel (messaging provider instance)
+                    └── Session (user conversation state)
+```
+
+### TenantCtx
+
+`TenantCtx` struct は、すべての操作に渡って流れます:
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+## WIT インターフェースアーキテクチャ
+
+Greentic は、component interface を定義するために **WebAssembly Interface Types (WIT)** specification を使用します:
+
+```wit
+// greentic-interfaces/wit/component.wit
+package greentic:component;
+
+interface types {
+    record message {
+        id: string,
+        content: string,
+        sender: string,
+        timestamp: u64,
+    }
+
+    record outcome {
+        success: bool,
+        data: option<string>,
+        error: option<string>,
+    }
+}
+
+world component {
+    import types;
+    export execute: func(input: types.message) -> types.outcome;
+}
+```
+
+## サービス依存関係
+
+```
+greentic-types  ─────────────────────────── (foundation)
+    ↑
+greentic-telemetry
+greentic-interfaces ← greentic-types
+greentic-config ← greentic-types
+    ↑
+greentic-session ← greentic-types
+greentic-state ← greentic-types + greentic-interfaces
+greentic-flow ← greentic-interfaces + greentic-types
+    ↑
+greentic-pack ← greentic-flow + greentic-types
+greentic-component ← greentic-interfaces + greentic-types
+greentic-mcp ← greentic-interfaces + greentic-types
+    ↑
+greentic-runner ← ALL of the above
+```
+
+## Observability
+
+Greentic は、分散 tracing と metrics のために **OpenTelemetry** を使用します:
+
+- **Tracing**: 分散 trace の相関付けを行う OTLP exporter
+- **Metrics**: flow execution time、message throughput、error rate
+- **Logging**: trace context 付きの structured logging
+
+## 次のステップ
+
+- [Flows](/ja/concepts/flows/) - flow definition について学ぶ
+- [Packs](/ja/concepts/packs/) - pack structure を理解する
+- [Components](/ja/concepts/components/) - カスタム WASM component を構築する

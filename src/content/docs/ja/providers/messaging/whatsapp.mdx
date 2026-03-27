@@ -1,0 +1,364 @@
+---
+title: WhatsApp
+description: digital worker を WhatsApp Business に接続する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+WhatsApp provider は WhatsApp Business API（Meta 経由）と統合します。次をサポートします:
+
+- テキストメッセージ
+- template message
+- interactive button
+- list message
+- media（image、document、audio、video）
+- location 共有
+
+## 前提条件
+
+- Meta Business account
+- WhatsApp Business API access
+- 認証済みの phone number
+
+## セットアップ
+
+<Steps>
+
+1. **Meta App を作成する**
+
+   [developers.facebook.com](https://developers.facebook.com) に移動します:
+   - 新しい app を作成する（Business type）
+   - WhatsApp product を追加する
+   - WhatsApp Business API をセットアップする
+
+2. **API 認証情報を取得する**
+
+   Meta app dashboard で:
+   - WhatsApp → Getting Started に移動する
+   - **Phone Number ID** をコピーする
+   - **Permanent Access Token** を生成してコピーする
+   - **Business Account ID** を控える
+
+3. **Webhook を設定する**
+
+   WhatsApp → Configuration で:
+   - Callback URL を設定する: `https://your-domain.com/webhook/whatsapp/{tenant}/{team}`
+   - Verify Token を設定する（任意の文字列）
+   - `messages` を購読する
+
+4. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "messaging-whatsapp": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "phone_number_id": "123456789012345",
+       "access_token": "EAAxxxxx...",
+       "verify_token": "your-verify-token",
+       "business_account_id": "987654321098765"
+     }
+   }
+   ```
+
+5. **setup を実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | webhook 用の公開 URL |
+| `phone_number_id` | Yes | WhatsApp phone number ID |
+| `access_token` | Yes | Permanent access token |
+| `verify_token` | Yes | webhook verification token |
+| `business_account_id` | No | WhatsApp Business Account ID |
+| `api_version` | No | Graph API version（デフォルト: v18.0） |
+
+## 機能
+
+### テキストメッセージ
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Template Messages
+
+<Aside type="caution">
+WhatsApp では conversation を開始する際に事前承認済み template が必要です。template は使用前に Meta の承認を受ける必要があります。
+</Aside>
+
+```yaml
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "order_confirmation"
+      language: "en"
+      components:
+        - type: body
+          parameters:
+            - type: text
+              text: "{{order_id}}"
+            - type: text
+              text: "{{customer_name}}"
+```
+
+### Interactive Buttons
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    interactive:
+      type: button
+      body:
+        text: "What would you like to do?"
+      action:
+        buttons:
+          - type: reply
+            reply:
+              id: "help"
+              title: "Get Help"
+          - type: reply
+            reply:
+              id: "status"
+              title: "Check Status"
+          - type: reply
+            reply:
+              id: "human"
+              title: "Talk to Human"
+```
+
+### List Messages
+
+```yaml
+- id: show_menu
+  type: reply
+  config:
+    interactive:
+      type: list
+      header:
+        type: text
+        text: "Support Menu"
+      body:
+        text: "Please select an option:"
+      action:
+        button: "View Options"
+        sections:
+          - title: "Support"
+            rows:
+              - id: "technical"
+                title: "Technical Support"
+                description: "Hardware and software issues"
+              - id: "billing"
+                title: "Billing"
+                description: "Payment and invoices"
+          - title: "Sales"
+            rows:
+              - id: "pricing"
+                title: "Pricing"
+                description: "Product pricing information"
+```
+
+### Image を送る
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    media:
+      type: image
+      link: "https://example.com/product.jpg"
+      caption: "Here's the product image"
+```
+
+### Document を送る
+
+```yaml
+- id: send_document
+  type: reply
+  config:
+    media:
+      type: document
+      link: "https://example.com/invoice.pdf"
+      filename: "invoice.pdf"
+      caption: "Your invoice is attached"
+```
+
+### Location を送る
+
+```yaml
+- id: send_location
+  type: reply
+  config:
+    location:
+      latitude: 37.7749
+      longitude: -122.4194
+      name: "Our Office"
+      address: "123 Main St, San Francisco, CA"
+```
+
+## Button Click の処理
+
+```yaml title="flows/on_button.ygtc"
+name: handle_button
+version: "1.0"
+
+nodes:
+  - id: route_button
+    type: branch
+    config:
+      conditions:
+        - expression: "button.id == 'help'"
+          next: show_help
+        - expression: "button.id == 'status'"
+          next: check_status
+        - expression: "button.id == 'human'"
+          next: escalate
+      default: unknown
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: interactive
+    target: route_button
+```
+
+## Message Templates
+
+### Template の作成
+
+1. Meta Business Suite → WhatsApp Manager → Message Templates に移動する
+2. 必要な component を含む新しい template を作成する
+3. 承認のために送信する（通常 24〜48 時間）
+
+### Template Component
+
+```yaml
+- id: send_notification
+  type: reply
+  config:
+    template:
+      name: "appointment_reminder"
+      language: "en"
+      components:
+        - type: header
+          parameters:
+            - type: image
+              image:
+                link: "https://example.com/logo.png"
+        - type: body
+          parameters:
+            - type: text
+              text: "{{customer_name}}"
+            - type: text
+              text: "{{appointment_time}}"
+        - type: button
+          sub_type: quick_reply
+          index: 0
+          parameters:
+            - type: payload
+              payload: "confirm"
+```
+
+## 24-Hour Window
+
+<Aside type="note">
+WhatsApp には 24 時間の messaging window があります。user の応答なしで 24 時間を過ぎた場合は、template message を使う必要があります。
+</Aside>
+
+### Window Status の確認
+
+```yaml
+- id: check_window
+  type: branch
+  config:
+    conditions:
+      - expression: "last_message_time + 86400 > now"
+        next: send_freeform
+      default: send_template
+
+- id: send_freeform
+  type: reply
+  config:
+    message: "Thanks for your message!"
+
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "follow_up"
+      language: "en"
+```
+
+## トラブルシューティング
+
+### Webhook Verification Failed
+
+1. `verify_token` が設定値と一致することを確認する
+2. webhook URL が公開アクセス可能であることを確認する
+3. HTTPS が正しく設定されていることを確認する
+
+### Message Not Delivered
+
+- phone number format を確認する（国コードを含める）
+- template 使用時は承認済みであることを確認する
+- 24-hour window status を確認する
+- Meta webhook log を確認する
+
+### Rate Limiting
+
+WhatsApp の rate limit は quality rating に基づきます:
+- Tier 1: 1 日あたり 1,000 message
+- Tier 2: 1 日あたり 10,000 message
+- Tier 3: 1 日あたり 100,000 message
+
+適切に処理してください:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+```
+
+## セキュリティ
+
+<Aside type="caution">
+request が Meta から送られたものであることを保証するため、webhook signature を検証してください。
+</Aside>
+
+Greentic は次を検証します:
+- X-Hub-Signature-256 header
+- app secret を使った payload hash
+
+## ベストプラクティス
+
+1. **template を適切に使う** - 汎用的で承認済みの template を作成する
+2. **24-hour window を守る** - user engagement を追跡する
+3. **opt-out を処理する** - STOP/UNSUBSCRIBE request を尊重する
+4. **メッセージは簡潔に保つ** - WhatsApp は素早いやり取り向け
+5. **rich media を使う** - image や document で UX を向上させる
+
+## 次のステップ
+
+- [Telegram Provider](/ja/providers/messaging/telegram/) - 別の messaging 手段
+- [Template Guidelines](https://developers.facebook.com/docs/whatsapp/message-templates/) - Meta の template ルール
+- [Flows Guide](/ja/concepts/flows/) - 複雑な workflow を構築する

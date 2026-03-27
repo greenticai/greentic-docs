@@ -1,0 +1,169 @@
+---
+title: Timer
+description: Programa tareas con expresiones cron
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Resumen
+
+El provider de eventos Timer permite ejecutar tareas programadas mediante expresiones cron. Úsalo para:
+
+- Informes diarios
+- Limpieza periódica
+- Notificaciones programadas
+- Sincronización regular de datos
+
+## Configuración
+
+```json title="answers.json"
+{
+  "events-timer": {
+    "enabled": true,
+    "timezone": "America/New_York"
+  }
+}
+```
+
+## Opciones de configuración
+
+| Opción | Requerido | Descripción |
+|--------|----------|-------------|
+| `enabled` | Sí | Habilitar/deshabilitar provider |
+| `timezone` | No | Zona horaria predeterminada (predeterminado: UTC) |
+
+## Definir programaciones
+
+### En un flow
+
+```yaml title="flows/scheduled_tasks.ygtc"
+name: scheduled_tasks
+version: "1.0"
+
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_report
+
+  - id: send_report
+    type: reply
+    config:
+      channel: "slack-reports"
+      message: "Daily report: {{http_response}}"
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"
+    target: daily_report
+    timezone: "America/New_York"
+```
+
+### Formato de expresión cron
+
+```
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, 0=Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+## Programaciones comunes
+
+| Programación | Expresión cron | Descripción |
+|----------|-----------------|-------------|
+| Cada minuto | `* * * * *` | Se ejecuta cada minuto |
+| Cada hora | `0 * * * *` | Se ejecuta en el minuto 0 |
+| Todos los días a las 9 AM | `0 9 * * *` | Se ejecuta todos los días a las 9:00 |
+| Lunes semanal | `0 9 * * 1` | Se ejecuta el lunes a las 9:00 |
+| Día 1 mensual | `0 0 1 * *` | Se ejecuta el día 1 del mes a medianoche |
+
+## Ejemplos
+
+### Limpieza diaria
+
+```yaml
+nodes:
+  - id: cleanup
+    type: http
+    config:
+      method: DELETE
+      url: "https://api.example.com/sessions/expired"
+
+triggers:
+  - type: timer
+    cron: "0 2 * * *"  # 2 AM daily
+    target: cleanup
+```
+
+### Resumen semanal
+
+```yaml
+nodes:
+  - id: generate_summary
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Generate weekly summary from: {{data}}"
+    next: send_summary
+
+triggers:
+  - type: timer
+    cron: "0 9 * * 1"  # Monday 9 AM
+    target: generate_summary
+```
+
+### Health check periódico
+
+```yaml
+nodes:
+  - id: health_check
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/health"
+    next: check_result
+
+  - id: check_result
+    type: branch
+    config:
+      conditions:
+        - expression: "http_response.status != 200"
+          next: alert
+      default: done
+
+  - id: alert
+    type: reply
+    config:
+      channel: "slack-alerts"
+      message: "Health check failed!"
+
+triggers:
+  - type: timer
+    cron: "*/5 * * * *"  # Every 5 minutes
+    target: health_check
+```
+
+## Manejo de zonas horarias
+
+<Aside type="note">
+Las expresiones cron se evalúan en la zona horaria configurada.
+</Aside>
+
+```yaml
+triggers:
+  - type: timer
+    cron: "0 9 * * *"
+    target: daily_task
+    timezone: "Europe/London"  # 9 AM London time
+```
+
+## Próximos pasos
+
+- [Provider de Webhook](/es/providers/events/webhook/)
+- [Guía de Flows](/es/concepts/flows/)

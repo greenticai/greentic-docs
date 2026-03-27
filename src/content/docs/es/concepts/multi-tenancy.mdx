@@ -1,0 +1,315 @@
+---
+title: Multitenencia
+description: Comprender la arquitectura multitenant en Greentic
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Resumen
+
+Greentic está diseñado desde cero para **despliegues multi-tenant**. Cada aspecto de la plataforma soporta el aislamiento de tenants, lo que permite que un solo despliegue atienda de forma segura a múltiples organizaciones.
+
+## Jerarquía de tenants
+
+```
+Workspace
+└── Tenant (organization)
+    └── Environment (prod, staging, dev)
+        └── Team (department, group)
+            └── Channel (messaging provider instance)
+                └── Session (user conversation)
+```
+
+## TenantCtx
+
+La estructura `TenantCtx` fluye a través de todas las operaciones:
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+Cada llamada a la API, ejecución de flow y acceso a datos está delimitado por un `TenantCtx`.
+
+## Configuración
+
+### Definición de tenant
+
+```yaml title="tenants/acme/tenant.gmap"
+tenant:
+  id: acme
+  name: "ACME Corporation"
+  settings:
+    timezone: "America/New_York"
+    language: "en-US"
+
+environments:
+  - id: prod
+    name: "Production"
+  - id: staging
+    name: "Staging"
+```
+
+### Definición de team
+
+```yaml title="tenants/acme/teams/support/team.gmap"
+team:
+  id: support
+  name: "Customer Support"
+  tenant_id: acme
+
+channels:
+  slack:
+    provider: messaging-slack
+    config:
+      workspace_id: "T123456"
+      channel_id: "C789012"
+
+  telegram:
+    provider: messaging-telegram
+    config:
+      chat_id: "-1001234567890"
+```
+
+### Configuración del bundle
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  acme:
+    name: "ACME Corporation"
+    teams:
+      support:
+        name: "Customer Support"
+        channels:
+          slack:
+            provider: messaging-slack
+          telegram:
+            provider: messaging-telegram
+
+      sales:
+        name: "Sales Team"
+        channels:
+          teams:
+            provider: messaging-teams
+
+  bigcorp:
+    name: "BigCorp Inc."
+    teams:
+      helpdesk:
+        channels:
+          webchat:
+            provider: messaging-webchat
+```
+
+## Aislamiento de datos
+
+### Almacenamiento de sesiones
+
+Las sesiones se aíslan por contexto de tenant:
+
+```
+sessions/
+├── acme/
+│   ├── prod/
+│   │   ├── support/
+│   │   │   ├── session_001.cbor
+│   │   │   └── session_002.cbor
+│   │   └── sales/
+│   │       └── session_003.cbor
+│   └── staging/
+│       └── support/
+│           └── session_004.cbor
+└── bigcorp/
+    └── prod/
+        └── helpdesk/
+            └── session_005.cbor
+```
+
+### Aislamiento de estado
+
+La memoria de trabajo (state) se delimita por sesión:
+
+```rust
+// State key format
+let key = format!(
+    "state:{}:{}:{}:{}",
+    tenant_ctx.tenant_id,
+    tenant_ctx.env_id,
+    tenant_ctx.team_id.unwrap_or("default"),
+    session_id
+);
+```
+
+### Aislamiento de subjects de NATS
+
+El enrutamiento de mensajes usa subjects delimitados por tenant:
+
+```
+greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+                          │      │       │      │
+                          │      │       │      └─ Channel ID (slack, telegram)
+                          │      │       └──────── Team ID
+                          │      └─────────────── Tenant ID
+                          └────────────────────── Environment (prod, staging)
+```
+
+## Aislamiento de secrets
+
+Los secrets se almacenan y recuperan con alcance de tenant:
+
+```rust
+// Secret retrieval includes tenant context
+let secret = secrets_client
+    .get_secret(&tenant_ctx, "api_key")
+    .await?;
+```
+
+### Namespacing de secrets
+
+```
+secrets/
+├── global/           # Platform-wide secrets
+│   └── signing_key
+├── acme/             # Tenant: ACME
+│   ├── slack_bot_token
+│   ├── openai_api_key
+│   └── teams/
+│       └── support/
+│           └── webhook_secret
+└── bigcorp/          # Tenant: BigCorp
+    └── telegram_bot_token
+```
+
+## Aislamiento de flows
+
+Cada tenant puede tener flows y configuraciones diferentes:
+
+```yaml title="tenants/acme/apps/support-bot/flows/on_message.ygtc"
+name: acme_support_flow
+version: "1.0"
+
+# ACME-specific support flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Welcome to ACME Support! How can I help?"
+```
+
+```yaml title="tenants/bigcorp/apps/helpdesk/flows/on_message.ygtc"
+name: bigcorp_helpdesk_flow
+version: "1.0"
+
+# BigCorp-specific helpdesk flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "BigCorp Helpdesk here. What's your issue?"
+```
+
+## Control de acceso
+
+<Aside type="caution">
+El aislamiento de tenants se aplica a nivel de runtime. Verifica siempre `TenantCtx` en los components personalizados.
+</Aside>
+
+### Acceso desde components
+
+Los components reciben `TenantCtx` y deben respetar los límites:
+
+```rust
+impl Guest for MyComponent {
+    fn process(input: Input, ctx: &TenantCtx) -> Output {
+        // Verify tenant has access to requested resource
+        if !has_permission(ctx, &input.resource_id) {
+            return Output::error("Access denied");
+        }
+
+        // Process with tenant scope
+        process_for_tenant(ctx, input)
+    }
+}
+```
+
+### Acceso a la API
+
+La API REST aplica alcance por tenant:
+
+```http
+GET /api/v1/sessions
+Authorization: Bearer <token>
+X-Tenant-ID: acme
+X-Team-ID: support
+```
+
+## Modelos de despliegue
+
+### Single-Tenant
+
+Una instancia de Greentic por tenant:
+
+```
+┌─────────────────┐
+│ Greentic (ACME) │
+└─────────────────┘
+
+┌─────────────────┐
+│ Greentic (BigCorp)│
+└─────────────────┘
+```
+
+### Multi-Tenant compartido
+
+Múltiples tenants sobre infraestructura compartida:
+
+```
+┌───────────────────────────────────┐
+│         Greentic Instance         │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │ (prod)  │  │    (prod)      ││
+│  └─────────┘  └─────────────────┘│
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │(staging)│  │   (staging)    ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+```
+
+### Híbrido
+
+Mezcla de recursos dedicados y compartidos:
+
+```
+┌───────────────────────────────────┐
+│    Shared Greentic Instance       │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │ Small   │  │   Medium        ││
+│  │ Tenants │  │   Tenants       ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+
+┌───────────────────────────────────┐
+│  Dedicated: Enterprise Tenant     │
+│  (Custom SLA, dedicated resources)│
+└───────────────────────────────────┘
+```
+
+## Buenas prácticas
+
+1. **Pasa siempre TenantCtx** - Nunca codifiques IDs de tenant de forma fija
+2. **Valida en los límites** - Verifica el acceso del tenant a nivel de API y component
+3. **Usa logging con alcance de tenant** - Incluye el ID del tenant en todas las entradas de log
+4. **Separa los secrets** - Nunca compartas secrets entre tenants
+5. **Prueba el aislamiento** - Verifica que un tenant no pueda acceder a los datos de otro
+6. **Monitorea por tenant** - Rastrea uso y errores por tenant
+
+## Siguientes pasos
+
+- [Resumen de la arquitectura](/es/concepts/architecture/)
+- [Gestión de sesiones](/es/concepts/sessions/)
+- [Referencia de configuración](/es/reference/configuration/)

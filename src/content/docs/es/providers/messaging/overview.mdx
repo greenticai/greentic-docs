@@ -1,0 +1,259 @@
+---
+title: Resumen de Providers de Mensajería
+description: Conecta tu trabajador digital a plataformas de mensajería
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Introducción
+
+Greentic soporta múltiples plataformas de mensajería mediante **Providers de Mensajería**. Cada provider es un pack de componentes WASM que se encarga de:
+
+- **Ingress** - Recibir mensajes de la plataforma
+- **Egress** - Enviar mensajes a la plataforma
+- **Operations** - Funcionalidades específicas de la plataforma (botones, cards, hilos)
+
+## Providers disponibles
+
+<CardGrid>
+  <LinkCard
+    title="Slack"
+    href="/es/providers/messaging/slack/"
+    description="Conéctate a workspaces de Slack con soporte completo para apps"
+  />
+  <LinkCard
+    title="Microsoft Teams"
+    href="/es/providers/messaging/teams/"
+    description="Integra canales y chats de Microsoft Teams"
+  />
+  <LinkCard
+    title="Telegram"
+    href="/es/providers/messaging/telegram/"
+    description="Crea bots de Telegram con botones y teclados inline"
+  />
+  <LinkCard
+    title="WhatsApp"
+    href="/es/providers/messaging/whatsapp/"
+    description="Conéctate a la WhatsApp Business API"
+  />
+  <LinkCard
+    title="WebChat"
+    href="/es/providers/messaging/webchat/"
+    description="Inserta un widget de chat en tu sitio web"
+  />
+  <LinkCard
+    title="Webex"
+    href="/es/providers/messaging/webex/"
+    description="Integra Cisco Webex Teams"
+  />
+  <LinkCard
+    title="Correo electrónico"
+    href="/es/providers/messaging/email/"
+    description="Envía y recibe correos electrónicos como mensajes"
+  />
+</CardGrid>
+
+## Arquitectura
+
+```
+External Platform (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────────────────────────────┐
+│           Ingress Component             │
+│   (Parse platform-specific format)      │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.ingress.{tenant}... │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                  │
+│      (Process with your flows)          │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│              NATS Bus                    │
+│  greentic.messaging.egress.{tenant}...  │
+└─────────────────────────────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────────────────────────────┐
+│           Egress Component              │
+│     (Format for platform API)           │
+└─────────────────────────────────────────┘
+    │
+    ▼ API Call
+External Platform
+```
+
+## Normalización de mensajes
+
+Todos los providers normalizan los mensajes a un formato común:
+
+```rust
+pub struct NormalizedMessage {
+    pub id: String,
+    pub channel_id: String,
+    pub sender_id: String,
+    pub sender_name: Option<String>,
+    pub content: String,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+    pub attachments: Vec<Attachment>,
+    pub metadata: Option<Value>,
+}
+```
+
+Esto permite que tus flows funcionen en cualquier plataforma de mensajería sin modificaciones.
+
+## Configuración del provider
+
+### En el bundle
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+  messaging-slack:
+    pack: "providers/messaging/messaging-slack.gtpack"
+    setup_flow: "setup_default"
+```
+
+### Respuestas de configuración
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHI..."
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://example.ngrok-free.app",
+    "bot_token": "xoxb-xxx-xxx",
+    "slack_app_id": "A07XXX"
+  }
+}
+```
+
+## Subjects de NATS
+
+Los mensajes fluyen por NATS con subjects con alcance por tenant:
+
+| Subject | Dirección |
+|---------|-----------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | Entrante |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | Saliente |
+
+## Funcionalidades comunes
+
+### Mensajes de texto
+
+Todos los providers soportan mensajes de texto básicos:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Contenido enriquecido
+
+La mayoría de los providers soportan contenido enriquecido:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+```
+
+### Botones/acciones
+
+Elementos interactivos (dependen del provider):
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - label: "Get Help"
+        action: "help"
+      - label: "Contact Support"
+        action: "support"
+```
+
+### Adjuntos
+
+Soporte para archivos y medios:
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - type: file
+        url: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Flows multicanal
+
+Escribe flows que funcionen en varios canales:
+
+```yaml title="flows/on_message.ygtc"
+name: universal_handler
+version: "1.0"
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      # Works on any platform
+      message: "Hello! I'm your assistant."
+    next: ask_intent
+
+  - id: ask_intent
+    type: reply
+    config:
+      message: "How can I help you today?"
+      # Buttons render differently per platform
+      buttons:
+        - label: "Get Started"
+          action: "start"
+        - label: "Help"
+          action: "help"
+
+triggers:
+  - type: message
+    pattern: "hello|hi"
+    target: greet
+```
+
+## Comparación de providers
+
+| Funcionalidad | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Correo |
+|---------|-------|-------|----------|----------|---------|-------|-------|
+| Texto | Sí | Sí | Sí | Sí | Sí | Sí | Sí |
+| Cards enriquecidas | Sí | Sí | Parcial | Sí | Sí | Sí | No |
+| Botones | Sí | Sí | Sí | Sí | Sí | Sí | No |
+| Archivos | Sí | Sí | Sí | Sí | Sí | Sí | Sí |
+| Hilos | Sí | Sí | Sí | No | No | Sí | Sí |
+| Reacciones | Sí | Sí | No | Sí | No | No | No |
+
+## Próximos pasos
+
+Elige un provider para comenzar:

@@ -1,0 +1,238 @@
+---
+title: Webhook
+description: 接收来自外部服务的 HTTP webhook
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+Webhook events provider 让你的数字员工能够接收来自 GitHub、Stripe、Shopify 等外部服务的 HTTP webhook。
+
+## 设置
+
+<Steps>
+
+1. **配置 Provider**
+
+   ```json title="answers.json"
+   {
+     "events-webhook": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app"
+     }
+   }
+   ```
+
+2. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **注册 Webhook**
+
+   在你的外部服务中使用生成的 webhook URL：
+   ```
+   https://your-domain.com/events/webhook/{tenant}/{event_type}
+   ```
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | webhook 的公网 URL |
+| `secret_header` | 否 | 用于签名校验的 header 名称 |
+| `secret_key` | 否 | 用于签名校验的密钥 |
+
+## Webhook URL 格式
+
+```
+POST https://your-domain.com/events/webhook/{tenant}/{event_type}
+```
+
+示例：
+```
+POST https://your-domain.com/events/webhook/demo/order.created
+```
+
+## 处理 Webhook
+
+### 基础处理器
+
+```yaml title="flows/on_webhook.ygtc"
+name: handle_webhook
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        let data = event.payload;
+        // Process webhook data
+        data
+    next: respond
+
+  - id: respond
+    type: http_response
+    config:
+      status: 200
+      body:
+        success: true
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+### GitHub Webhook
+
+```yaml
+nodes:
+  - id: check_event
+    type: branch
+    config:
+      conditions:
+        - expression: "headers['x-github-event'] == 'push'"
+          next: handle_push
+        - expression: "headers['x-github-event'] == 'pull_request'"
+          next: handle_pr
+      default: ignore
+
+  - id: handle_push
+    type: script
+    config:
+      script: |
+        let commits = event.payload.commits;
+        format!("Received {} commits", commits.len())
+
+triggers:
+  - type: event
+    event_type: "github"
+    target: check_event
+```
+
+### Stripe Webhook
+
+```yaml
+nodes:
+  - id: handle_stripe
+    type: branch
+    config:
+      conditions:
+        - expression: "event.payload.type == 'payment_intent.succeeded'"
+          next: payment_success
+        - expression: "event.payload.type == 'payment_intent.failed'"
+          next: payment_failed
+
+triggers:
+  - type: event
+    event_type: "stripe"
+    target: handle_stripe
+```
+
+## 签名校验
+
+<Aside type="caution">
+在生产环境中务必校验 webhook 签名，以防止未授权请求。
+</Aside>
+
+### HMAC 校验
+
+```json title="answers.json"
+{
+  "events-webhook": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "signatures": {
+      "github": {
+        "header": "X-Hub-Signature-256",
+        "algorithm": "sha256",
+        "secret": "your-github-secret"
+      },
+      "stripe": {
+        "header": "Stripe-Signature",
+        "algorithm": "stripe",
+        "secret": "whsec_xxx"
+      }
+    }
+  }
+}
+```
+
+## 响应处理
+
+### 立即响应
+
+大多数 webhook provider 都期望快速返回响应：
+
+```yaml
+- id: ack
+  type: http_response
+  config:
+    status: 200
+  next: async_process  # Process async after responding
+```
+
+### 异步处理
+
+对于耗时较长的任务，先确认接收：
+
+```yaml
+nodes:
+  - id: acknowledge
+    type: http_response
+    config:
+      status: 202
+      body:
+        message: "Processing"
+    next: process_async
+
+  - id: process_async
+    type: async
+    config:
+      flow: "process_webhook_data"
+      payload: "{{event.payload}}"
+```
+
+## 测试 Webhook
+
+### 使用 curl
+
+```bash
+curl -X POST https://your-domain.com/events/webhook/demo/test \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello from webhook"}'
+```
+
+### 使用 ngrok inspector
+
+```bash
+ngrok http 8080
+# Visit http://localhost:4040 to inspect requests
+```
+
+## 故障排查
+
+### 未收到 Webhook
+
+1. 检查 URL 是否正确
+2. 确认公网 URL 可访问
+3. 检查防火墙/安全组
+4. 查看外部服务日志
+
+### 签名校验失败
+
+1. 确认密钥一致
+2. 检查 header 名称是否正确
+3. 确保校验时使用原始请求体
+
+## 下一步
+
+- [Timer Provider](/zh/providers/events/timer/)
+- [Flows 指南](/zh/concepts/flows/)

@@ -1,0 +1,119 @@
+---
+title: Webex
+description: Verbinden Sie Ihren digitalen Worker mit Cisco Webex
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der Webex-Provider integriert sich mit Cisco Webex Teams. Er unterstützt:
+
+- Direktnachrichten
+- Space-(Room-)Nachrichten
+- Adaptive Cards
+- Datei-Anhänge
+- @mentions
+
+## Voraussetzungen
+
+- Webex-Konto
+- Webex-Developer-Zugriff
+
+## Einrichtung
+
+<Steps>
+
+1. **Einen Webex-Bot erstellen**
+
+   Gehen Sie zu [developer.webex.com](https://developer.webex.com):
+   - Navigieren Sie zu My Webex Apps → Create a Bot
+   - Füllen Sie die Bot-Details aus
+   - Kopieren Sie das **Bot Access Token**
+
+2. **Einen Webhook erstellen**
+
+   Der Provider erstellt Webhooks automatisch, alternativ manuell:
+   - Gehen Sie zu Documentation → Webhooks API
+   - Erstellen Sie einen Webhook, der auf Ihren Endpunkt zeigt
+
+3. **Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "messaging-webex": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "access_token": "your-bot-access-token"
+     }
+   }
+   ```
+
+4. **Setup ausführen**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Konfigurationsoptionen
+
+| Option | Erforderlich | Beschreibung |
+|--------|----------|-------------|
+| `enabled` | Ja | Provider aktivieren/deaktivieren |
+| `public_base_url` | Ja | Öffentliche URL für den Webhook |
+| `access_token` | Ja | Bot Access Token |
+
+## Funktionen
+
+### Textnachrichten
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Markdown
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - List item
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+```yaml
+- id: card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.2"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+```
+
+### Datei-Anhänge
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your document"
+    files:
+      - url: "https://example.com/doc.pdf"
+```
+
+## Nächste Schritte
+
+- [Slack-Provider](/de/providers/messaging/slack/)
+- [Teams-Provider](/de/providers/messaging/teams/)

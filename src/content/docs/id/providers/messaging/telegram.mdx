@@ -1,0 +1,350 @@
+---
+title: Telegram
+description: Hubungkan digital worker Anda ke Telegram
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider Telegram memungkinkan digital worker Anda berkomunikasi melalui bot Telegram. Provider ini mendukung:
+
+- Pesan teks
+- Inline keyboard (tombol)
+- Reply keyboard
+- Lampiran file
+- Media (foto, video, dokumen)
+- Chat grup
+
+## Prasyarat
+
+- Akun Telegram
+- Bot Telegram (dibuat melalui @BotFather)
+
+## Penyiapan
+
+<Steps>
+
+1. **Buat bot Telegram**
+
+   Buka Telegram dan kirim pesan ke [@BotFather](https://t.me/botfather):
+
+   ```
+   /newbot
+   ```
+
+   Ikuti petunjuknya:
+   - Masukkan nama untuk bot Anda (misalnya, "My Support Bot")
+   - Masukkan username (harus diakhiri dengan `bot`, misalnya, "my_support_bot")
+
+   BotFather akan memberikan **bot token** seperti:
+   ```
+   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   ```
+
+2. **Konfigurasikan provider**
+
+   Buat atau perbarui file jawaban Anda:
+
+   ```json title="answers.json"
+   {
+     "messaging-telegram": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+     }
+   }
+   ```
+
+3. **Jalankan setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **Mulai runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+5. **Uji bot Anda**
+
+   Buka Telegram, cari bot Anda berdasarkan username, lalu kirim pesan!
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|--------|----------|-------------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL publik untuk webhook |
+| `bot_token` | Ya | Bot token dari @BotFather |
+| `api_base_url` | Tidak | URL API Telegram (default: `https://api.telegram.org`) |
+
+## Fitur
+
+### Pesan Teks
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Pemformatan Markdown
+
+Telegram mendukung MarkdownV2:
+
+```yaml
+- id: formatted_reply
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `Code`
+      [Link](https://example.com)
+    parse_mode: MarkdownV2
+```
+
+### Inline Keyboard (Tombol)
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - row:
+          - label: "Get Help"
+            callback_data: "action:help"
+          - label: "Settings"
+            callback_data: "action:settings"
+      - row:
+          - label: "Contact Support"
+            url: "https://support.example.com"
+```
+
+### Reply Keyboard
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "Choose an option:"
+    reply_keyboard:
+      - ["Option A", "Option B"]
+      - ["Option C", "Cancel"]
+    resize_keyboard: true
+    one_time_keyboard: true
+```
+
+### Kirim Foto
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    photo:
+      url: "https://example.com/image.jpg"
+      caption: "Here's your image!"
+```
+
+### Kirim Dokumen
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    document:
+      url: "https://example.com/report.pdf"
+      filename: "report.pdf"
+      caption: "Your monthly report"
+```
+
+### Balas ke Pesan Tertentu
+
+```yaml
+- id: reply_to_message
+  type: reply
+  config:
+    message: "This is a reply to your previous message"
+    reply_to_message_id: "{{original_message_id}}"
+```
+
+## Menangani Callback Tombol
+
+Saat pengguna mengklik tombol inline keyboard, Anda menerima callback:
+
+```yaml title="flows/on_callback.ygtc"
+name: handle_callback
+version: "1.0"
+
+nodes:
+  - id: check_action
+    type: branch
+    config:
+      conditions:
+        - expression: "callback_data == 'action:help'"
+          next: show_help
+        - expression: "callback_data == 'action:settings'"
+          next: show_settings
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+  - id: show_settings
+    type: reply
+    config:
+      message: "Settings menu..."
+
+  - id: unknown_action
+    type: reply
+    config:
+      message: "Unknown action"
+
+triggers:
+  - type: callback_query
+    target: check_action
+```
+
+## Dukungan Chat Grup
+
+Provider Telegram mendukung chat grup:
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          telegram-group:
+            provider: messaging-telegram
+            config:
+              chat_id: "-1001234567890"  # Group chat ID
+```
+
+<Aside type="note">
+ID chat grup diawali dengan `-100` diikuti oleh chat ID.
+</Aside>
+
+### Mendapatkan Group Chat ID
+
+1. Tambahkan bot Anda ke grup
+2. Kirim pesan di grup
+3. Periksa payload webhook untuk `chat.id`
+
+Atau gunakan API Telegram:
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+```
+
+## Konfigurasi Webhook
+
+Alur setup secara otomatis mengonfigurasi webhook:
+
+```
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+{
+  "url": "https://your-domain.com/webhook/telegram/{tenant}/{team}",
+  "allowed_updates": ["message", "callback_query"]
+}
+```
+
+### Setup Webhook Manual
+
+Jika diperlukan, konfigurasikan secara manual:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/webhook/telegram/demo/default",
+    "allowed_updates": ["message", "callback_query"]
+  }'
+```
+
+## Troubleshooting
+
+### Bot Tidak Merespons
+
+1. **Periksa status webhook:**
+   ```bash
+   curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+   ```
+
+2. **Verifikasi URL publik dapat diakses:**
+   ```bash
+   curl https://your-domain.ngrok-free.app/health
+   ```
+
+3. **Periksa log:**
+   ```bash
+   gtc start ./my-bundle --verbose
+   ```
+
+### Registrasi Webhook Gagal
+
+```
+Error: 401 Unauthorized
+```
+
+Verifikasi bot token Anda benar dan belum kedaluwarsa.
+
+### Pesan Tidak Diterima
+
+1. Pastikan bot sudah dimulai (pengguna mengirim `/start`)
+2. Periksa apakah bot ada di grup (untuk chat grup)
+3. Verifikasi URL webhook sesuai dengan URL publik Anda
+
+### Rate Limiting
+
+Telegram memiliki batas rate:
+- 1 pesan per detik per chat
+- 30 pesan per detik secara keseluruhan
+
+Tangani rate limit dengan baik:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_429: true
+    max_retries: 3
+```
+
+## Keamanan
+
+<Aside type="caution">
+Jangan pernah mengekspos bot token Anda. Simpan di penyimpanan secret yang aman.
+</Aside>
+
+### Keamanan Webhook
+
+Telegram mengirim secret token bersama request webhook. Greentic memvalidasi ini secara otomatis.
+
+### Validasi Input
+
+Selalu validasi input pengguna:
+
+```yaml
+- id: validate
+  type: script
+  config:
+    script: |
+      if message.len() > 4096 {
+        return error("Message too long")
+      }
+      message
+```
+
+## Langkah Selanjutnya
+
+- [Slack Provider](/id/providers/messaging/slack/) - Tambahkan integrasi Slack
+- [Flows Guide](/id/concepts/flows/) - Bangun workflow yang kompleks
+- [Buttons and Cards](/id/components/adaptive-cards/) - Elemen UI yang kaya

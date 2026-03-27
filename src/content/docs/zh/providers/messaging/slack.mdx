@@ -1,0 +1,420 @@
+---
+title: Slack
+description: 将你的数字员工连接到 Slack 工作区
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+Slack provider 将你的数字员工集成到 Slack 工作区中。它支持：
+
+- 私信（DM）
+- 频道消息
+- App 提及
+- 交互组件（按钮、菜单）
+- Block Kit 富消息
+- Slash commands
+- 线程回复
+
+## 前置条件
+
+- 一个 Slack 工作区
+- 用于创建 Slack app 的管理员权限
+
+## 设置
+
+<Steps>
+
+1. **创建 Slack App**
+
+   前往 [api.slack.com/apps](https://api.slack.com/apps)，点击 “Create New App”：
+   - 选择 “From scratch”
+   - 输入 app 名称（例如 “My Support Bot”）
+   - 选择你的工作区
+
+2. **配置 Bot Token Scopes**
+
+   前往 **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**：
+
+   必需 scopes：
+   - `chat:write` - 发送消息
+   - `im:history` - 读取 DM 历史
+   - `im:write` - 打开 DM
+   - `users:read` - 读取用户信息
+
+   可选 scopes：
+   - `channels:history` - 读取频道消息
+   - `channels:read` - 列出频道
+   - `files:read` - 读取文件
+   - `files:write` - 上传文件
+
+3. **启用 Event Subscriptions**
+
+   前往 **Event Subscriptions**：
+   - 启用 Events
+   - 设置 Request URL：`https://your-domain.com/webhook/slack/{tenant}/{team}`
+
+   订阅 bot events：
+   - `message.im` - DM 消息
+   - `message.channels` - 频道消息
+   - `app_mention` - @提及
+
+4. **启用 Interactivity**
+
+   前往 **Interactivity & Shortcuts**：
+   - 启用 Interactivity
+   - 设置 Request URL：`https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
+
+5. **将 App 安装到工作区**
+
+   前往 **Install App** → **Install to Workspace**
+
+   复制 **Bot User OAuth Token**（以 `xoxb-` 开头）
+
+6. **获取 App 凭证**
+
+   在 **Basic Information** 中获取：
+   - App ID
+   - Configuration Token（用于 manifest 更新）
+
+7. **配置 Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-slack": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "api_base_url": "https://slack.com/api",
+       "bot_token": "xoxb-xxx-xxx-xxx",
+       "slack_app_id": "A07XXXXXX",
+       "slack_configuration_token": "xoxe.xoxp-xxx"
+     }
+   }
+   ```
+
+8. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | webhook 的公网 URL |
+| `bot_token` | 是 | Bot User OAuth Token（`xoxb-...`） |
+| `slack_app_id` | 是 | 来自 Basic Information 的 App ID |
+| `slack_configuration_token` | 否 | 用于自动更新 manifest |
+| `api_base_url` | 否 | Slack API URL（默认：`https://slack.com/api`） |
+
+## 功能
+
+### 文本消息
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you?"
+```
+
+### Markdown 格式
+
+Slack 使用 mrkdwn 格式：
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `code`
+      >Blockquote
+      • Bullet point
+```
+
+### Block Kit 消息
+
+使用 Slack 的 Block Kit 构建丰富布局：
+
+```yaml
+- id: rich_message
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "*Welcome!*\nHow can I assist you today?"
+      - type: divider
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Get Help"
+            action_id: "help_clicked"
+            value: "help"
+          - type: button
+            text:
+              type: plain_text
+              text: "View Status"
+            action_id: "status_clicked"
+            value: "status"
+```
+
+### 交互按钮
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    blocks:
+      - type: actions
+        elements:
+          - type: button
+            text:
+              type: plain_text
+              text: "Create Ticket"
+            style: primary
+            action_id: "create_ticket"
+          - type: button
+            text:
+              type: plain_text
+              text: "Cancel"
+            style: danger
+            action_id: "cancel"
+```
+
+### 选择菜单
+
+```yaml
+- id: select_option
+  type: reply
+  config:
+    blocks:
+      - type: section
+        text:
+          type: mrkdwn
+          text: "Select a category:"
+        accessory:
+          type: static_select
+          action_id: "category_select"
+          options:
+            - text:
+                type: plain_text
+                text: "Technical Support"
+              value: "technical"
+            - text:
+                type: plain_text
+                text: "Billing"
+              value: "billing"
+            - text:
+                type: plain_text
+                text: "General"
+              value: "general"
+```
+
+### 线程回复
+
+在线程中回复：
+
+```yaml
+- id: thread_reply
+  type: reply
+  config:
+    message: "This replies in the thread"
+    thread_ts: "{{original_message.thread_ts}}"
+```
+
+### 文件上传
+
+```yaml
+- id: upload_file
+  type: reply
+  config:
+    files:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+        title: "Monthly Report"
+```
+
+### 临时消息
+
+仅对单个用户可见的消息：
+
+```yaml
+- id: ephemeral
+  type: reply
+  config:
+    message: "Only you can see this"
+    ephemeral: true
+    user: "{{user_id}}"
+```
+
+## 处理交互
+
+### 按钮点击
+
+```yaml title="flows/on_interaction.ygtc"
+name: handle_interaction
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "action_id == 'help_clicked'"
+          next: show_help
+        - expression: "action_id == 'create_ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: block_action
+    target: route_action
+```
+
+### 选择菜单变更
+
+```yaml
+- id: handle_select
+  type: branch
+  config:
+    conditions:
+      - expression: "selected_value == 'technical'"
+        next: technical_flow
+      - expression: "selected_value == 'billing'"
+        next: billing_flow
+```
+
+## Slash Commands
+
+<Aside type="note">
+Slash commands 需要在 Slack 中额外进行 app 配置。
+</Aside>
+
+1. 前往 app 设置中的 **Slash Commands**
+2. 创建一个命令（例如 `/support`）
+3. 将 Request URL 设置为你的 webhook
+
+在 flow 中处理：
+
+```yaml title="flows/slash_command.ygtc"
+name: slash_command
+version: "1.0"
+
+nodes:
+  - id: handle_command
+    type: reply
+    config:
+      message: "Support bot at your service!"
+      response_type: in_channel  # or "ephemeral"
+
+triggers:
+  - type: slash_command
+    command: "/support"
+    target: handle_command
+```
+
+## 频道配置
+
+### 单个频道
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+```
+
+### 多个频道
+
+```yaml
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          slack-general:
+            provider: messaging-slack
+            config:
+              channel_id: "C1234567890"
+          slack-vip:
+            provider: messaging-slack
+            config:
+              channel_id: "C0987654321"
+```
+
+## 故障排查
+
+### App 未接收消息
+
+1. **验证 Event Subscriptions：**
+   - 检查 Request URL 是否正确
+   - 确认 events 已启用
+   - 确认 bot 已订阅正确的 events
+
+2. **检查 Bot 权限：**
+   - 添加 scopes 后重新安装 app
+   - 确认 bot 已加入频道
+
+3. **测试 Webhook：**
+   ```bash
+   curl https://your-domain.com/webhook/slack/demo/default
+   ```
+
+### `not_authed` 错误
+
+你的 bot token 无效或已过期。请从 OAuth & Permissions 获取新的 token。
+
+### `channel_not_found` 错误
+
+- 确认 channel ID 正确
+- 确认 bot 已被加入频道
+- 检查频道是否已归档
+
+### 速率限制
+
+Slack 的速率限制因 method 而异。请优雅处理：
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+    max_retries: 3
+```
+
+## 安全
+
+<Aside type="caution">
+校验 Slack 请求签名，以防止未授权请求。
+</Aside>
+
+Greentic 会自动校验：
+- 请求时间戳
+- 使用 signing secret 的签名
+- Token 校验
+
+## 下一步
+
+- [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - 设计富消息
+- [Teams Provider](/zh/providers/messaging/teams/) - 添加 Teams 集成

@@ -1,0 +1,253 @@
+---
+title: 安装
+description: Greentic 的详细安装说明
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 系统要求
+
+### 最低要求
+
+| 组件 | 要求 |
+|-----------|-------------|
+| OS | Linux、macOS、Windows |
+| Rust | 1.90+ |
+| Memory | 4 GB RAM |
+| Disk | 2 GB 可用空间 |
+
+### 推荐配置
+
+| 组件 | 要求 |
+|-----------|-------------|
+| Rust | 1.91（最新） |
+| Memory | 8 GB RAM |
+| CPU | 多核处理器 |
+
+## 安装 Rust
+
+如果你还没有安装 Rust：
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+设置正确的 toolchain 版本：
+
+```bash
+rustup default 1.90
+```
+
+添加用于构建 components 的 WASM target：
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+## 安装 GTC CLI
+
+<Tabs>
+<TabItem label="Cargo (Recommended)">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="From Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+
+# Add to PATH
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+<TabItem label="Pre-built Binaries">
+
+从 [GitHub Releases](https://github.com/greenticai/greentic/releases) 下载：
+
+```bash
+# macOS (Apple Silicon)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-arm64.tar.gz
+tar -xzf gtc-darwin-arm64.tar.gz
+sudo mv gtc /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-x64.tar.gz
+
+# Linux (x86_64)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-linux-x64.tar.gz
+
+# Windows
+# Download gtc-windows-x64.zip from releases
+```
+
+</TabItem>
+</Tabs>
+
+## 验证安装
+
+```bash
+gtc --version
+```
+
+预期输出：
+```
+gtc 0.4.x
+```
+
+## 可选依赖
+
+### NATS（消息总线）
+
+用于生产部署：
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name nats -p 4222:4222 nats:latest
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install nats-server
+nats-server
+```
+
+</TabItem>
+<TabItem label="Direct Download">
+
+从 [nats.io](https://nats.io/download/) 下载
+
+</TabItem>
+</Tabs>
+
+### Redis（Session 存储）
+
+用于生产环境中的 session 持久化：
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name redis -p 6379:6379 redis:alpine
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install redis
+redis-server
+```
+
+</TabItem>
+</Tabs>
+
+### Ngrok/Cloudflared（公共 URL）
+
+用于基于 webhook 的 providers（Telegram、Slack 等）：
+
+<Tabs>
+<TabItem label="Ngrok">
+
+```bash
+# Install
+brew install ngrok/ngrok/ngrok  # macOS
+# or download from https://ngrok.com/download
+
+# Configure
+ngrok config add-authtoken YOUR_TOKEN
+
+# Run
+ngrok http 8080
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+# Install
+brew install cloudflared  # macOS
+# or download from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Run
+cloudflared tunnel --url http://localhost:8080
+```
+
+</TabItem>
+</Tabs>
+
+## 开发工具
+
+### Pack Builder
+
+构建 `.gtpack` 归档：
+
+```bash
+cargo install greentic-pack
+```
+
+### Flow Validator
+
+校验 flow 定义：
+
+```bash
+cargo install greentic-flow
+```
+
+### Component Authoring
+
+创建 WASM components：
+
+```bash
+cargo install greentic-component
+```
+
+## 验证你的环境
+
+运行以下命令以确认一切正常：
+
+```bash
+# Check GTC CLI
+gtc --help
+
+# Check Rust WASM target
+rustup target list --installed | grep wasm32-wasip2
+
+# Create and run a test bundle
+gtc wizard --dry-run
+```
+
+## 故障排查
+
+### 常见问题
+
+**错误："wasm32-wasip2 target not found"**
+```bash
+rustup target add wasm32-wasip2
+```
+
+**错误："Cannot connect to NATS"**
+```bash
+# Start embedded NATS with gtc start
+gtc start ./my-bundle --nats on
+```
+
+**错误："Permission denied"**
+```bash
+# On Linux/macOS, ensure binary is executable
+chmod +x /usr/local/bin/gtc
+```
+
+## 下一步
+
+- [Quick Start](/zh/getting-started/quick-start/) - 创建你的第一个数字员工
+- [Architecture Overview](/zh/concepts/architecture/) - 了解平台架构

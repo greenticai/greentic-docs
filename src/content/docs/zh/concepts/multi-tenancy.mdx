@@ -1,0 +1,315 @@
+---
+title: Multi-Tenancy
+description: 理解 Greentic 中的多租户架构
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+Greentic 从设计之初就是为 **多租户部署** 而构建的。平台的每一个方面都支持租户隔离，使单个部署能够安全地服务多个组织。
+
+## 租户层级
+
+```
+Workspace
+└── Tenant (organization)
+    └── Environment (prod, staging, dev)
+        └── Team (department, group)
+            └── Channel (messaging provider instance)
+                └── Session (user conversation)
+```
+
+## TenantCtx
+
+`TenantCtx` 结构体会贯穿所有操作：
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+每次 API 调用、flow 执行和数据访问都限定在某个 `TenantCtx` 范围内。
+
+## 配置
+
+### 租户定义
+
+```yaml title="tenants/acme/tenant.gmap"
+tenant:
+  id: acme
+  name: "ACME Corporation"
+  settings:
+    timezone: "America/New_York"
+    language: "en-US"
+
+environments:
+  - id: prod
+    name: "Production"
+  - id: staging
+    name: "Staging"
+```
+
+### Team 定义
+
+```yaml title="tenants/acme/teams/support/team.gmap"
+team:
+  id: support
+  name: "Customer Support"
+  tenant_id: acme
+
+channels:
+  slack:
+    provider: messaging-slack
+    config:
+      workspace_id: "T123456"
+      channel_id: "C789012"
+
+  telegram:
+    provider: messaging-telegram
+    config:
+      chat_id: "-1001234567890"
+```
+
+### Bundle 配置
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  acme:
+    name: "ACME Corporation"
+    teams:
+      support:
+        name: "Customer Support"
+        channels:
+          slack:
+            provider: messaging-slack
+          telegram:
+            provider: messaging-telegram
+
+      sales:
+        name: "Sales Team"
+        channels:
+          teams:
+            provider: messaging-teams
+
+  bigcorp:
+    name: "BigCorp Inc."
+    teams:
+      helpdesk:
+        channels:
+          webchat:
+            provider: messaging-webchat
+```
+
+## 数据隔离
+
+### Session 存储
+
+Sessions 按租户上下文隔离：
+
+```
+sessions/
+├── acme/
+│   ├── prod/
+│   │   ├── support/
+│   │   │   ├── session_001.cbor
+│   │   │   └── session_002.cbor
+│   │   └── sales/
+│   │       └── session_003.cbor
+│   └── staging/
+│       └── support/
+│           └── session_004.cbor
+└── bigcorp/
+    └── prod/
+        └── helpdesk/
+            └── session_005.cbor
+```
+
+### 状态隔离
+
+工作内存（state）按每个 session 进行作用域隔离：
+
+```rust
+// State key format
+let key = format!(
+    "state:{}:{}:{}:{}",
+    tenant_ctx.tenant_id,
+    tenant_ctx.env_id,
+    tenant_ctx.team_id.unwrap_or("default"),
+    session_id
+);
+```
+
+### NATS Subject 隔离
+
+消息路由使用带租户作用域的 subjects：
+
+```
+greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+                          │      │       │      │
+                          │      │       │      └─ Channel ID (slack, telegram)
+                          │      │       └──────── Team ID
+                          │      └─────────────── Tenant ID
+                          └────────────────────── Environment (prod, staging)
+```
+
+## Secret 隔离
+
+Secrets 会按租户范围进行存储和读取：
+
+```rust
+// Secret retrieval includes tenant context
+let secret = secrets_client
+    .get_secret(&tenant_ctx, "api_key")
+    .await?;
+```
+
+### Secret 命名空间
+
+```
+secrets/
+├── global/           # Platform-wide secrets
+│   └── signing_key
+├── acme/             # Tenant: ACME
+│   ├── slack_bot_token
+│   ├── openai_api_key
+│   └── teams/
+│       └── support/
+│           └── webhook_secret
+└── bigcorp/          # Tenant: BigCorp
+    └── telegram_bot_token
+```
+
+## Flow 隔离
+
+每个租户都可以拥有不同的 flows 和配置：
+
+```yaml title="tenants/acme/apps/support-bot/flows/on_message.ygtc"
+name: acme_support_flow
+version: "1.0"
+
+# ACME-specific support flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Welcome to ACME Support! How can I help?"
+```
+
+```yaml title="tenants/bigcorp/apps/helpdesk/flows/on_message.ygtc"
+name: bigcorp_helpdesk_flow
+version: "1.0"
+
+# BigCorp-specific helpdesk flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "BigCorp Helpdesk here. What's your issue?"
+```
+
+## 访问控制
+
+<Aside type="caution">
+租户隔离是在运行时层面强制执行的。在自定义 components 中始终要验证 `TenantCtx`。
+</Aside>
+
+### Component 访问
+
+Components 会接收 `TenantCtx`，并且必须遵守边界：
+
+```rust
+impl Guest for MyComponent {
+    fn process(input: Input, ctx: &TenantCtx) -> Output {
+        // Verify tenant has access to requested resource
+        if !has_permission(ctx, &input.resource_id) {
+            return Output::error("Access denied");
+        }
+
+        // Process with tenant scope
+        process_for_tenant(ctx, input)
+    }
+}
+```
+
+### API 访问
+
+REST API 会强制执行租户作用域：
+
+```http
+GET /api/v1/sessions
+Authorization: Bearer <token>
+X-Tenant-ID: acme
+X-Team-ID: support
+```
+
+## 部署模型
+
+### 单租户
+
+每个租户一个 Greentic 实例：
+
+```
+┌─────────────────┐
+│ Greentic (ACME) │
+└─────────────────┘
+
+┌─────────────────┐
+│ Greentic (BigCorp)│
+└─────────────────┘
+```
+
+### 共享式多租户
+
+多个租户共享同一套基础设施：
+
+```
+┌───────────────────────────────────┐
+│         Greentic Instance         │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │ (prod)  │  │    (prod)      ││
+│  └─────────┘  └─────────────────┘│
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │(staging)│  │   (staging)    ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+```
+
+### 混合模式
+
+混合使用专属资源和共享资源：
+
+```
+┌───────────────────────────────────┐
+│    Shared Greentic Instance       │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │ Small   │  │   Medium        ││
+│  │ Tenants │  │   Tenants       ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+
+┌───────────────────────────────────┐
+│  Dedicated: Enterprise Tenant     │
+│  (Custom SLA, dedicated resources)│
+└───────────────────────────────────┘
+```
+
+## 最佳实践
+
+1. **始终传递 TenantCtx** - 不要硬编码 tenant ID
+2. **在边界处校验** - 在 API 和 component 层检查租户访问权限
+3. **使用带租户作用域的日志** - 所有日志项都包含 tenant ID
+4. **隔离 secrets** - 不要在租户之间共享 secrets
+5. **测试隔离性** - 验证一个租户无法访问另一个租户的数据
+6. **按租户监控** - 按租户跟踪使用情况和错误
+
+## 下一步
+
+- [Architecture Overview](/zh/concepts/architecture/)
+- [Session Management](/zh/concepts/sessions/)
+- [Configuration Reference](/zh/reference/configuration/)

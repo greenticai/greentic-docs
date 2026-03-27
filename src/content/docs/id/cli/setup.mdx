@@ -1,0 +1,299 @@
+---
+title: gtc setup
+description: Konfigurasikan provider di bundle Greentic Anda
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Gambaran Umum
+
+Perintah `gtc setup` mengonfigurasi provider di bundle Greentic Anda. Perintah ini menjalankan flow setup untuk setiap provider yang diaktifkan, mengumpulkan kredensial, dan mengonfigurasi webhook.
+
+## Penggunaan
+
+```bash
+gtc setup [OPTIONS] <BUNDLE_PATH>
+```
+
+## Opsi
+
+| Opsi | Deskripsi |
+|--------|-----------|
+| `--answers <FILE>` | Path ke file jawaban (non-interaktif) |
+| `--dry-run` | Pratinjau setup tanpa melakukan perubahan |
+| `--emit-answers <FILE>` | Hasilkan template jawaban |
+| `--advanced` | Sertakan field opsional di template jawaban |
+| `--provider <NAME>` | Setup hanya provider tertentu |
+| `--skip <NAME>` | Lewati provider tertentu |
+| `-v, --verbose` | Aktifkan output verbose |
+
+## Setup Interaktif
+
+Jalankan setup secara interaktif untuk diminta input bagi setiap provider:
+
+```bash
+gtc setup ./my-bundle
+```
+
+CLI akan meminta:
+- Kredensial provider (API key, token)
+- URL publik untuk webhook
+- Opsi konfigurasi opsional
+
+## Setup Non-Interaktif
+
+### Hasilkan Template Jawaban
+
+Pertama, hasilkan template dengan semua field yang diperlukan:
+
+```bash
+# Basic template (required fields only)
+gtc setup --dry-run --emit-answers answers.json ./my-bundle
+
+# Full template (including optional fields)
+gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
+```
+
+### Format File Jawaban
+
+<Tabs>
+<TabItem label="JSON">
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "api_base_url": "https://slack.com/api",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  },
+  "messaging-teams": {
+    "enabled": false
+  }
+}
+```
+
+</TabItem>
+<TabItem label="YAML">
+
+```yaml title="answers.yaml"
+messaging-telegram:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+
+messaging-slack:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  api_base_url: https://slack.com/api
+  bot_token: xoxb-xxx-xxx-xxx
+  slack_app_id: A07XXXXXX
+  slack_configuration_token: xoxe.xoxp-xxx
+
+messaging-teams:
+  enabled: false
+```
+
+</TabItem>
+</Tabs>
+
+### Terapkan Jawaban
+
+```bash
+gtc setup --answers answers.json ./my-bundle
+```
+
+## Konfigurasi Spesifik Provider
+
+### Telegram
+
+```json
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  }
+}
+```
+
+**Cara mendapatkan kredensial:**
+1. Kirim pesan ke [@BotFather](https://t.me/botfather) di Telegram
+2. Kirim `/newbot` dan ikuti petunjuknya
+3. Salin bot token
+
+### Slack
+
+```json
+{
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  }
+}
+```
+
+**Cara mendapatkan kredensial:**
+1. Buka [api.slack.com/apps](https://api.slack.com/apps)
+2. Buat app baru atau pilih yang sudah ada
+3. Ambil Bot Token dari OAuth & Permissions
+4. Ambil App ID dari Basic Information
+5. Ambil Configuration Token dari App Manifest
+
+### Microsoft Teams
+
+```json
+{
+  "messaging-teams": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "app_id": "your-app-id",
+    "app_password": "your-app-password",
+    "tenant_id": "your-tenant-id"
+  }
+}
+```
+
+### WhatsApp (via Meta)
+
+```json
+{
+  "messaging-whatsapp": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "phone_number_id": "123456789",
+    "access_token": "EAAxxxxx",
+    "verify_token": "your-verify-token"
+  }
+}
+```
+
+## Konfigurasi URL Publik
+
+<Aside type="caution">
+Provider berbasis webhook memerlukan URL yang dapat diakses publik. `public_base_url` akan otomatis diganti saat menggunakan ngrok atau cloudflared dengan `gtc start`.
+</Aside>
+
+### Menggunakan ngrok
+
+```bash
+# Start ngrok in separate terminal
+ngrok http 8080
+
+# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
+# Use this as public_base_url in answers
+```
+
+### Menggunakan Cloudflared
+
+```bash
+# Cloudflared generates URL automatically with gtc start
+gtc start ./my-bundle --cloudflared on
+```
+
+## Eksekusi Flow Setup
+
+Saat Anda menjalankan `gtc setup`, perintah ini:
+
+<Steps>
+
+1. **Memuat konfigurasi bundle**
+
+   Membaca `greentic.demo.yaml` untuk menemukan provider.
+
+2. **Memvalidasi jawaban**
+
+   Memeriksa bahwa semua field wajib tersedia.
+
+3. **Menjalankan flow setup**
+
+   Mengeksekusi `setup_flow` setiap provider (misalnya, registrasi webhook).
+
+4. **Menyimpan kredensial**
+
+   Menyimpan kredensial ke secrets store yang dikonfigurasi.
+
+5. **Menjalankan verifikasi**
+
+   Mengeksekusi `verify_flow` untuk memastikan setup berhasil.
+
+</Steps>
+
+## Setup Selektif
+
+### Setup Satu Provider
+
+```bash
+gtc setup --provider messaging-telegram ./my-bundle
+```
+
+### Lewati Provider Tertentu
+
+```bash
+gtc setup --skip messaging-teams ./my-bundle
+```
+
+### Jalankan Ulang Setup
+
+```bash
+# Force re-setup (useful after URL changes)
+gtc start ./my-bundle --force-setup
+```
+
+## Pemecahan Masalah
+
+### Registrasi Webhook Gagal
+
+```
+Error: Failed to register webhook: 401 Unauthorized
+```
+
+Periksa bahwa bot token Anda benar dan belum kedaluwarsa.
+
+### Field Wajib Hilang
+
+```
+Error: Missing required field 'bot_token' for messaging-telegram
+```
+
+Pastikan semua field wajib ada di file jawaban Anda.
+
+### URL Publik Tidak Dapat Diakses
+
+```
+Error: Webhook verification failed: Connection refused
+```
+
+Pastikan URL publik Anda dapat diakses dari internet. Periksa bahwa ngrok/cloudflared sedang berjalan.
+
+### Kredensial Tidak Ditemukan
+
+```
+Error: Secret 'slack_bot_token' not found
+```
+
+Jalankan `gtc setup` untuk mengonfigurasi provider, atau periksa file jawaban Anda.
+
+## Praktik Terbaik
+
+1. **Gunakan file jawaban di CI/CD** - Hindari prompt interaktif di pipeline otomatis
+2. **Jaga kredensial tetap aman** - Jangan commit file jawaban dengan token nyata ke git
+3. **Gunakan variabel lingkungan** - Referensikan secret via `$ENV_VAR` di jawaban
+4. **Uji dengan dry-run** - Pratinjau setup sebelum melakukan perubahan
+5. **Generate ulang saat URL berubah** - Jalankan ulang setup saat URL publik Anda berubah
+
+## Langkah Berikutnya
+
+- [gtc start](/id/cli/start/) - Jalankan server runtime
+- [Setup Telegram](/id/providers/messaging/telegram/) - Panduan Telegram terperinci
+- [Setup Slack](/id/providers/messaging/slack/) - Panduan Slack terperinci

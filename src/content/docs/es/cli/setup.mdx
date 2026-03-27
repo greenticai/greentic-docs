@@ -1,0 +1,299 @@
+---
+title: gtc setup
+description: Configura providers en tu bundle de Greentic
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Resumen
+
+El comando `gtc setup` configura providers en tu bundle de Greentic. Ejecuta flows de configuración para cada provider habilitado, recopilando credenciales y configurando webhooks.
+
+## Uso
+
+```bash
+gtc setup [OPTIONS] <BUNDLE_PATH>
+```
+
+## Opciones
+
+| Opción | Descripción |
+|--------|-------------|
+| `--answers <FILE>` | Ruta al archivo de respuestas (no interactivo) |
+| `--dry-run` | Previsualiza la configuración sin realizar cambios |
+| `--emit-answers <FILE>` | Genera una plantilla de respuestas |
+| `--advanced` | Incluye campos opcionales en la plantilla de respuestas |
+| `--provider <NAME>` | Configura solo un provider específico |
+| `--skip <NAME>` | Omite un provider específico |
+| `-v, --verbose` | Habilita salida detallada |
+
+## Configuración interactiva
+
+Ejecuta la configuración en modo interactivo para que se te solicite información para cada provider:
+
+```bash
+gtc setup ./my-bundle
+```
+
+La CLI solicitará:
+- Credenciales del provider (API keys, tokens)
+- URL pública para webhooks
+- Opciones de configuración opcionales
+
+## Configuración no interactiva
+
+### Generar una plantilla de respuestas
+
+Primero, genera una plantilla con todos los campos requeridos:
+
+```bash
+# Basic template (required fields only)
+gtc setup --dry-run --emit-answers answers.json ./my-bundle
+
+# Full template (including optional fields)
+gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
+```
+
+### Formato del archivo de respuestas
+
+<Tabs>
+<TabItem label="JSON">
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "api_base_url": "https://slack.com/api",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  },
+  "messaging-teams": {
+    "enabled": false
+  }
+}
+```
+
+</TabItem>
+<TabItem label="YAML">
+
+```yaml title="answers.yaml"
+messaging-telegram:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+
+messaging-slack:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  api_base_url: https://slack.com/api
+  bot_token: xoxb-xxx-xxx-xxx
+  slack_app_id: A07XXXXXX
+  slack_configuration_token: xoxe.xoxp-xxx
+
+messaging-teams:
+  enabled: false
+```
+
+</TabItem>
+</Tabs>
+
+### Aplicar respuestas
+
+```bash
+gtc setup --answers answers.json ./my-bundle
+```
+
+## Configuración específica por provider
+
+### Telegram
+
+```json
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  }
+}
+```
+
+**Cómo obtener credenciales:**
+1. Envía un mensaje a [@BotFather](https://t.me/botfather) en Telegram
+2. Envía `/newbot` y sigue las indicaciones
+3. Copia el token del bot
+
+### Slack
+
+```json
+{
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  }
+}
+```
+
+**Cómo obtener credenciales:**
+1. Ve a [api.slack.com/apps](https://api.slack.com/apps)
+2. Crea una app nueva o selecciona una existente
+3. Obtén el Bot Token en OAuth & Permissions
+4. Obtén el App ID en Basic Information
+5. Obtén el Configuration Token en App Manifest
+
+### Microsoft Teams
+
+```json
+{
+  "messaging-teams": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "app_id": "your-app-id",
+    "app_password": "your-app-password",
+    "tenant_id": "your-tenant-id"
+  }
+}
+```
+
+### WhatsApp (via Meta)
+
+```json
+{
+  "messaging-whatsapp": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "phone_number_id": "123456789",
+    "access_token": "EAAxxxxx",
+    "verify_token": "your-verify-token"
+  }
+}
+```
+
+## Configuración de URL pública
+
+<Aside type="caution">
+Los providers basados en webhooks requieren una URL accesible públicamente. `public_base_url` se reemplazará automáticamente al usar ngrok o cloudflared con `gtc start`.
+</Aside>
+
+### Usar ngrok
+
+```bash
+# Start ngrok in separate terminal
+ngrok http 8080
+
+# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
+# Use this as public_base_url in answers
+```
+
+### Usar Cloudflared
+
+```bash
+# Cloudflared generates URL automatically with gtc start
+gtc start ./my-bundle --cloudflared on
+```
+
+## Ejecución del flow de configuración
+
+Cuando ejecutas `gtc setup`, hace lo siguiente:
+
+<Steps>
+
+1. **Carga la configuración del bundle**
+
+   Lee `greentic.demo.yaml` para encontrar providers.
+
+2. **Valida las respuestas**
+
+   Comprueba que todos los campos requeridos estén presentes.
+
+3. **Ejecuta los flows de configuración**
+
+   Ejecuta el `setup_flow` de cada provider (por ejemplo, registro de webhooks).
+
+4. **Almacena las credenciales**
+
+   Guarda las credenciales en el secrets store configurado.
+
+5. **Ejecuta la verificación**
+
+   Ejecuta `verify_flow` para confirmar que la configuración funcionó.
+
+</Steps>
+
+## Configuración selectiva
+
+### Configurar un solo provider
+
+```bash
+gtc setup --provider messaging-telegram ./my-bundle
+```
+
+### Omitir un provider específico
+
+```bash
+gtc setup --skip messaging-teams ./my-bundle
+```
+
+### Ejecutar la configuración de nuevo
+
+```bash
+# Force re-setup (useful after URL changes)
+gtc start ./my-bundle --force-setup
+```
+
+## Solución de problemas
+
+### Falló el registro del webhook
+
+```
+Error: Failed to register webhook: 401 Unauthorized
+```
+
+Verifica que el token de tu bot sea correcto y no haya expirado.
+
+### Falta un campo requerido
+
+```
+Error: Missing required field 'bot_token' for messaging-telegram
+```
+
+Asegúrate de que todos los campos requeridos estén en tu archivo de respuestas.
+
+### La URL pública no es accesible
+
+```
+Error: Webhook verification failed: Connection refused
+```
+
+Asegúrate de que tu URL pública sea accesible desde internet. Verifica que ngrok/cloudflared esté en ejecución.
+
+### Credencial no encontrada
+
+```
+Error: Secret 'slack_bot_token' not found
+```
+
+Ejecuta `gtc setup` para configurar el provider, o revisa tu archivo de respuestas.
+
+## Buenas prácticas
+
+1. **Usa archivos de respuestas en CI/CD** - Evita prompts interactivos en pipelines automatizados
+2. **Mantén seguras las credenciales** - No hagas commit de archivos de respuestas con tokens reales a git
+3. **Usa variables de entorno** - Referencia secrets mediante `$ENV_VAR` en las respuestas
+4. **Prueba con dry-run** - Previsualiza la configuración antes de aplicar cambios
+5. **Regenera al cambiar la URL** - Vuelve a ejecutar la configuración cuando cambie tu URL pública
+
+## Siguientes pasos
+
+- [gtc start](/es/cli/start/) - Ejecutar el servidor runtime
+- [Telegram Setup](/es/providers/messaging/telegram/) - Guía detallada de Telegram
+- [Slack Setup](/es/providers/messaging/slack/) - Guía detallada de Slack

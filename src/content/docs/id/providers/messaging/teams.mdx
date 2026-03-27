@@ -1,0 +1,355 @@
+---
+title: Microsoft Teams
+description: Hubungkan digital worker Anda ke Microsoft Teams
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider Microsoft Teams mengintegrasikan digital worker Anda dengan channel dan chat Teams. Provider ini mendukung:
+
+- Pesan channel
+- Chat pribadi
+- Chat grup
+- Adaptive Cards
+- Komponen interaktif
+- Lampiran file
+
+## Prasyarat
+
+- Tenant Microsoft 365
+- Akses admin ke Azure AD
+
+## Penyiapan
+
+<Steps>
+
+1. **Buat Azure Bot Registration**
+
+   Buka [Azure Portal](https://portal.azure.com):
+   - Cari "Bot Services"
+   - Klik "Create"
+   - Isi detail:
+     - Bot handle: your-bot-name
+     - Subscription: subscription Anda
+     - Resource group: buat atau pilih
+     - Pricing: F0 (gratis) atau S1
+   - Klik "Create"
+
+2. **Konfigurasikan Endpoint Bot**
+
+   Di Bot Service Anda:
+   - Buka **Configuration**
+   - Atur **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
+
+3. **Dapatkan Kredensial App**
+
+   Di **Configuration**:
+   - Salin **Microsoft App ID**
+   - Klik "Manage" di samping Microsoft App ID
+   - Buat **Client Secret** baru
+   - Salin nilai secret tersebut (hanya ditampilkan sekali!)
+
+4. **Aktifkan Teams Channel**
+
+   Di Bot Service Anda:
+   - Buka **Channels**
+   - Klik **Microsoft Teams**
+   - Terima syarat dan aktifkan
+
+5. **Buat Teams App Package**
+
+   Buat manifest untuk app Teams Anda:
+
+   ```json title="manifest.json"
+   {
+     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+     "manifestVersion": "1.16",
+     "version": "1.0.0",
+     "id": "{{BOT_ID}}",
+     "packageName": "com.yourcompany.supportbot",
+     "developer": {
+       "name": "Your Company",
+       "websiteUrl": "https://yourcompany.com",
+       "privacyUrl": "https://yourcompany.com/privacy",
+       "termsOfUseUrl": "https://yourcompany.com/terms"
+     },
+     "name": {
+       "short": "Support Bot",
+       "full": "Support Bot for Customer Service"
+     },
+     "description": {
+       "short": "Customer support assistant",
+       "full": "AI-powered customer support assistant"
+     },
+     "icons": {
+       "outline": "outline.png",
+       "color": "color.png"
+     },
+     "accentColor": "#0078D4",
+     "bots": [
+       {
+         "botId": "{{BOT_ID}}",
+         "scopes": ["personal", "team", "groupchat"],
+         "supportsFiles": true,
+         "isNotificationOnly": false
+       }
+     ],
+     "permissions": ["identity", "messageTeamMembers"],
+     "validDomains": ["your-domain.com"]
+   }
+   ```
+
+6. **Konfigurasikan Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-teams": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "app_id": "your-microsoft-app-id",
+       "app_password": "your-client-secret",
+       "tenant_id": "your-azure-tenant-id"
+     }
+   }
+   ```
+
+7. **Jalankan Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+8. **Install App di Teams**
+
+   - Zip `manifest.json` beserta ikon
+   - Buka Teams Admin Center atau unggah langsung
+   - Install ke tim atau pengguna Anda
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|--------|----------|-------------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL publik untuk webhook |
+| `app_id` | Ya | Microsoft App ID |
+| `app_password` | Ya | Client Secret |
+| `tenant_id` | Tidak | Azure AD Tenant ID (untuk app single-tenant) |
+
+## Fitur
+
+### Pesan Teks
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Pemformatan Markdown
+
+Teams mendukung subset Markdown:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - Bullet 1
+      - Bullet 2
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+Teams memiliki dukungan Adaptive Card yang sangat baik:
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "How can I assist you today?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Create Ticket"
+              data:
+                action: "ticket"
+```
+
+### Hero Cards
+
+```yaml
+- id: hero_card
+  type: reply
+  config:
+    hero_card:
+      title: "Support Bot"
+      subtitle: "Your AI Assistant"
+      text: "I can help with technical issues, billing questions, and more."
+      images:
+        - url: "https://example.com/bot-image.png"
+      buttons:
+        - type: messageBack
+          title: "Get Started"
+          text: "get started"
+          displayText: "Getting started..."
+```
+
+### Saran (Quick Replies)
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - title: "Check Status"
+        value: "status"
+      - title: "Create Ticket"
+        value: "ticket"
+      - title: "Contact Human"
+        value: "human"
+```
+
+### Lampiran File
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - contentType: "application/pdf"
+        contentUrl: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Menangani Aksi Card
+
+```yaml title="flows/on_card_action.ygtc"
+name: handle_card_action
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "data.action == 'help'"
+          next: show_help
+        - expression: "data.action == 'ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: invoke
+    name: "adaptiveCard/action"
+    target: route_action
+```
+
+## Konfigurasi Channel
+
+### Team Channel
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          teams:
+            provider: messaging-teams
+            config:
+              team_id: "19:xxx@thread.tacv2"
+              channel_id: "19:yyy@thread.tacv2"
+```
+
+### Chat Pribadi
+
+Untuk chat pribadi 1:1, tidak diperlukan konfigurasi channel. Bot akan merespons siapa pun yang mengirim pesan kepadanya.
+
+## Pesan Proaktif
+
+Kirim pesan tanpa inisiasi pengguna:
+
+```yaml
+- id: proactive
+  type: reply
+  config:
+    message: "Reminder: Your ticket #123 needs attention"
+    conversation_reference:
+      conversation_id: "{{stored_conversation_id}}"
+      service_url: "{{stored_service_url}}"
+```
+
+<Aside type="note">
+Simpan conversation reference saat pengguna pertama kali berinteraksi dengan bot Anda untuk mengaktifkan pesan proaktif nanti.
+</Aside>
+
+## Troubleshooting
+
+### Bot Tidak Merespons
+
+1. **Periksa konfigurasi endpoint** di Azure Bot Service
+2. **Verifikasi sertifikat SSL** valid
+3. **Periksa kredensial app** sudah benar
+4. **Tinjau activity logs** di Azure
+
+### Error "Unauthorized"
+
+- Verifikasi App ID dan Password
+- Periksa tenant ID untuk app single-tenant
+- Pastikan bot diaktifkan di Teams channel
+
+### Card Tidak Muncul
+
+- Validasi JSON card dengan [Adaptive Cards Designer](https://adaptivecards.io/designer/)
+- Periksa apakah Teams mendukung versi card tersebut
+- Verifikasi semua field wajib tersedia
+
+### Pesan Terlambat
+
+- Teams dapat mengelompokkan pesan; ini normal
+- Periksa performa server Anda
+- Verifikasi tidak ada rate limiting
+
+## Keamanan
+
+<Aside type="caution">
+Selalu validasi token JWT pada request masuk untuk memastikan request tersebut berasal dari Microsoft.
+</Aside>
+
+Greentic secara otomatis memvalidasi:
+- Tanda tangan JWT
+- Klaim issuer dan audience
+- Kedaluwarsa token
+
+## Langkah Selanjutnya
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Rancang card secara visual
+- [Slack Provider](/id/providers/messaging/slack/) - Tambahkan integrasi Slack
+- [WebChat Provider](/id/providers/messaging/webchat/) - Sematkan di website

@@ -1,0 +1,338 @@
+---
+title: Flujos
+description: Comprender las definiciones de flows en Greentic
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+## ¿Qué es un Flow?
+
+Un **Flow** es un grafo de orquestación definido en YAML que describe cómo se mueven los mensajes y los datos a través de tu trabajador digital. Los flows se almacenan en archivos `.ygtc` y definen:
+
+- **Nodes** - Pasos individuales de procesamiento (componentes WASM)
+- **Edges** - Conexiones entre nodes
+- **Triggers** - Qué inicia el flow
+- **Conditions** - Lógica de ramificación
+
+## Estructura básica de un flow
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+# Define the nodes (processing steps)
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! How can I help you today?"
+
+# Define what triggers this flow
+triggers:
+  - type: message
+    pattern: "hello|hi|hey"
+    target: greet
+```
+
+## Componentes de un flow
+
+### Nodes
+
+Los nodes son los bloques de construcción de un flow. Cada node representa un componente WASM que procesa datos:
+
+```yaml
+nodes:
+  - id: unique_node_id
+    type: node_type           # Component type
+    config:                   # Component-specific configuration
+      key: value
+    next: next_node_id        # Optional: next node to execute
+```
+
+#### Tipos comunes de nodes
+
+| Tipo | Propósito |
+|------|-----------|
+| `reply` | Envía un mensaje de vuelta al usuario |
+| `llm` | Llama a un LLM (OpenAI, etc.) |
+| `template` | Renderiza una plantilla Handlebars |
+| `script` | Ejecuta un script Rhai |
+| `branch` | Ramificación condicional |
+| `http` | Realiza solicitudes HTTP |
+| `state` | Gestiona el estado de la sesión |
+
+### Edges
+
+Los edges conectan nodes entre sí. Pueden ser implícitos (mediante `next`) o explícitos:
+
+```yaml
+nodes:
+  - id: start
+    type: template
+    config:
+      template: "Processing your request..."
+    next: process
+
+  - id: process
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "{{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{llm_response}}"
+```
+
+### Triggers
+
+Los triggers definen qué inicia un flow:
+
+```yaml
+triggers:
+  # Message pattern trigger
+  - type: message
+    pattern: "order|purchase|buy"
+    target: handle_order
+
+  # Default trigger (catch-all)
+  - type: default
+    target: fallback_handler
+
+  # Event trigger
+  - type: event
+    event_type: "user.created"
+    target: welcome_user
+```
+
+## Ramificación condicional
+
+Usa nodes `branch` para lógica condicional:
+
+```yaml
+nodes:
+  - id: check_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent == 'greeting'"
+          next: greet_user
+        - expression: "intent == 'help'"
+          next: show_help
+        - expression: "intent == 'order'"
+          next: process_order
+      default: fallback
+
+  - id: greet_user
+    type: reply
+    config:
+      message: "Hello! Nice to meet you!"
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's what I can help you with..."
+
+  - id: fallback
+    type: reply
+    config:
+      message: "I'm not sure I understand. Can you rephrase?"
+```
+
+## Trabajar con estado
+
+Los flows pueden leer y escribir el estado de la sesión:
+
+```yaml
+nodes:
+  - id: save_name
+    type: state
+    config:
+      action: set
+      key: "user_name"
+      value: "{{extracted_name}}"
+    next: confirm
+
+  - id: get_name
+    type: state
+    config:
+      action: get
+      key: "user_name"
+      output: "stored_name"
+    next: greet_by_name
+```
+
+## Integración con LLM
+
+Integra LLM para respuestas impulsadas por AI:
+
+```yaml
+nodes:
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        You are a helpful customer service agent.
+        Extract the user's intent and any relevant entities.
+      prompt: "User message: {{message}}"
+      output_format: json
+    next: process_result
+```
+
+## Renderizado de plantillas
+
+Usa plantillas Handlebars para contenido dinámico:
+
+```yaml
+nodes:
+  - id: format_response
+    type: template
+    config:
+      template: |
+        Hi {{user_name}}!
+
+        Here's your order summary:
+        {{#each items}}
+        - {{name}}: ${{price}}
+        {{/each}}
+
+        Total: ${{total}}
+    next: send_response
+```
+
+## Validación de flows
+
+Valida tus flows antes del despliegue:
+
+```bash
+greentic-flow doctor ./flows/
+
+# Or with the GTC CLI
+gtc flow validate ./flows/hello.ygtc
+```
+
+<Aside type="tip">
+Usa `greentic-flow doctor` para detectar problemas como:
+- Referencias a nodes faltantes
+- Tipos de node no válidos
+- Dependencias circulares
+- Violaciones del esquema
+</Aside>
+
+## Buenas prácticas
+
+1. **Mantén los flows enfocados** - Un flow por intención de usuario o flujo de trabajo
+2. **Usa IDs significativos** - Los IDs de nodes deben describir su propósito
+3. **Documenta con comentarios** - Agrega descripciones a los flows complejos
+4. **Prueba de forma incremental** - Valida después de cada cambio
+5. **Versiona tus flows** - Usa versionado semántico
+
+## Ejemplo: flow completo de atención al cliente
+
+```yaml title="flows/customer_service.ygtc"
+name: customer_service
+version: "1.0"
+description: Handle customer inquiries with AI assistance
+
+nodes:
+  # Analyze the incoming message
+  - id: analyze_intent
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: |
+        Classify the customer's intent into one of:
+        - greeting
+        - order_status
+        - product_question
+        - complaint
+        - other
+
+        Respond with JSON: {"intent": "...", "confidence": 0.0-1.0}
+      prompt: "{{message}}"
+      output_format: json
+    next: route_intent
+
+  # Route based on intent
+  - id: route_intent
+    type: branch
+    config:
+      conditions:
+        - expression: "intent.intent == 'greeting'"
+          next: handle_greeting
+        - expression: "intent.intent == 'order_status'"
+          next: handle_order_status
+        - expression: "intent.intent == 'complaint'"
+          next: handle_complaint
+      default: handle_general
+
+  # Handle greeting
+  - id: handle_greeting
+    type: reply
+    config:
+      message: "Hello! Welcome to our support. How can I help you today?"
+
+  # Handle order status
+  - id: handle_order_status
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/orders/{{order_id}}"
+    next: format_order_response
+
+  - id: format_order_response
+    type: template
+    config:
+      template: |
+        Your order #{{order_id}} is currently: {{status}}
+        Expected delivery: {{delivery_date}}
+    next: send_order_response
+
+  - id: send_order_response
+    type: reply
+    config:
+      message: "{{formatted_response}}"
+
+  # Handle complaints with escalation
+  - id: handle_complaint
+    type: reply
+    config:
+      message: "I'm sorry to hear that. Let me connect you with a specialist who can help resolve this."
+    next: escalate_to_human
+
+  - id: escalate_to_human
+    type: event
+    config:
+      event_type: "escalation.requested"
+      payload:
+        reason: "complaint"
+        conversation_id: "{{session_id}}"
+
+  # General handler
+  - id: handle_general
+    type: llm
+    config:
+      model: "gpt-4"
+      system_prompt: "You are a helpful customer service agent. Be friendly and concise."
+      prompt: "{{message}}"
+    next: send_general_response
+
+  - id: send_general_response
+    type: reply
+    config:
+      message: "{{llm_response}}"
+
+triggers:
+  - type: message
+    target: analyze_intent
+```
+
+## Siguientes pasos
+
+- [Packs](/es/concepts/packs/) - Empaqueta tus flows para el despliegue
+- [Componentes](/es/concepts/components/) - Crea tipos de node personalizados
+- [Referencia del esquema de Flow](/es/reference/flow-schema/) - Esquema YAML completo

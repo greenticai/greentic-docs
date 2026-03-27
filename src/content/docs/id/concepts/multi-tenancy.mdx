@@ -1,0 +1,315 @@
+---
+title: Multi-Tenancy
+description: Memahami arsitektur multi-tenant di Greentic
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Greentic dirancang dari awal untuk **deployment multi-tenant**. Setiap aspek platform mendukung isolasi tenant, sehingga satu deployment dapat melayani banyak organisasi dengan aman.
+
+## Hierarki Tenant
+
+```
+Workspace
+└── Tenant (organization)
+    └── Environment (prod, staging, dev)
+        └── Team (department, group)
+            └── Channel (messaging provider instance)
+                └── Session (user conversation)
+```
+
+## TenantCtx
+
+Struct `TenantCtx` mengalir melalui semua operasi:
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+Setiap panggilan API, eksekusi flow, dan akses data dibatasi ke sebuah `TenantCtx`.
+
+## Konfigurasi
+
+### Definisi Tenant
+
+```yaml title="tenants/acme/tenant.gmap"
+tenant:
+  id: acme
+  name: "ACME Corporation"
+  settings:
+    timezone: "America/New_York"
+    language: "en-US"
+
+environments:
+  - id: prod
+    name: "Production"
+  - id: staging
+    name: "Staging"
+```
+
+### Definisi Team
+
+```yaml title="tenants/acme/teams/support/team.gmap"
+team:
+  id: support
+  name: "Customer Support"
+  tenant_id: acme
+
+channels:
+  slack:
+    provider: messaging-slack
+    config:
+      workspace_id: "T123456"
+      channel_id: "C789012"
+
+  telegram:
+    provider: messaging-telegram
+    config:
+      chat_id: "-1001234567890"
+```
+
+### Konfigurasi Bundle
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  acme:
+    name: "ACME Corporation"
+    teams:
+      support:
+        name: "Customer Support"
+        channels:
+          slack:
+            provider: messaging-slack
+          telegram:
+            provider: messaging-telegram
+
+      sales:
+        name: "Sales Team"
+        channels:
+          teams:
+            provider: messaging-teams
+
+  bigcorp:
+    name: "BigCorp Inc."
+    teams:
+      helpdesk:
+        channels:
+          webchat:
+            provider: messaging-webchat
+```
+
+## Isolasi Data
+
+### Penyimpanan Session
+
+Session diisolasi berdasarkan konteks tenant:
+
+```
+sessions/
+├── acme/
+│   ├── prod/
+│   │   ├── support/
+│   │   │   ├── session_001.cbor
+│   │   │   └── session_002.cbor
+│   │   └── sales/
+│   │       └── session_003.cbor
+│   └── staging/
+│       └── support/
+│           └── session_004.cbor
+└── bigcorp/
+    └── prod/
+        └── helpdesk/
+            └── session_005.cbor
+```
+
+### Isolasi State
+
+Working memory (state) dibatasi per session:
+
+```rust
+// State key format
+let key = format!(
+    "state:{}:{}:{}:{}",
+    tenant_ctx.tenant_id,
+    tenant_ctx.env_id,
+    tenant_ctx.team_id.unwrap_or("default"),
+    session_id
+);
+```
+
+### Isolasi Subject NATS
+
+Routing pesan menggunakan subject dengan scope tenant:
+
+```
+greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+                          │      │       │      │
+                          │      │       │      └─ Channel ID (slack, telegram)
+                          │      │       └──────── Team ID
+                          │      └─────────────── Tenant ID
+                          └────────────────────── Environment (prod, staging)
+```
+
+## Isolasi Secret
+
+Secret disimpan dan diambil dengan scope tenant:
+
+```rust
+// Secret retrieval includes tenant context
+let secret = secrets_client
+    .get_secret(&tenant_ctx, "api_key")
+    .await?;
+```
+
+### Namespace Secret
+
+```
+secrets/
+├── global/           # Platform-wide secrets
+│   └── signing_key
+├── acme/             # Tenant: ACME
+│   ├── slack_bot_token
+│   ├── openai_api_key
+│   └── teams/
+│       └── support/
+│           └── webhook_secret
+└── bigcorp/          # Tenant: BigCorp
+    └── telegram_bot_token
+```
+
+## Isolasi Flow
+
+Setiap tenant dapat memiliki flow dan konfigurasi yang berbeda:
+
+```yaml title="tenants/acme/apps/support-bot/flows/on_message.ygtc"
+name: acme_support_flow
+version: "1.0"
+
+# ACME-specific support flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Welcome to ACME Support! How can I help?"
+```
+
+```yaml title="tenants/bigcorp/apps/helpdesk/flows/on_message.ygtc"
+name: bigcorp_helpdesk_flow
+version: "1.0"
+
+# BigCorp-specific helpdesk flow
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "BigCorp Helpdesk here. What's your issue?"
+```
+
+## Kontrol Akses
+
+<Aside type="caution">
+Isolasi tenant ditegakkan pada level runtime. Selalu verifikasi `TenantCtx` di komponen kustom.
+</Aside>
+
+### Akses Komponen
+
+Komponen menerima `TenantCtx` dan harus menghormati batasannya:
+
+```rust
+impl Guest for MyComponent {
+    fn process(input: Input, ctx: &TenantCtx) -> Output {
+        // Verify tenant has access to requested resource
+        if !has_permission(ctx, &input.resource_id) {
+            return Output::error("Access denied");
+        }
+
+        // Process with tenant scope
+        process_for_tenant(ctx, input)
+    }
+}
+```
+
+### Akses API
+
+REST API menegakkan scope tenant:
+
+```http
+GET /api/v1/sessions
+Authorization: Bearer <token>
+X-Tenant-ID: acme
+X-Team-ID: support
+```
+
+## Model Deployment
+
+### Single-Tenant
+
+Satu instance Greentic per tenant:
+
+```
+┌─────────────────┐
+│ Greentic (ACME) │
+└─────────────────┘
+
+┌─────────────────┐
+│ Greentic (BigCorp)│
+└─────────────────┘
+```
+
+### Multi-Tenant Shared
+
+Banyak tenant di atas infrastruktur bersama:
+
+```
+┌───────────────────────────────────┐
+│         Greentic Instance         │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │ (prod)  │  │    (prod)      ││
+│  └─────────┘  └─────────────────┘│
+│  ┌─────────┐  ┌─────────────────┐│
+│  │  ACME   │  │    BigCorp     ││
+│  │(staging)│  │   (staging)    ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+```
+
+### Hybrid
+
+Campuran sumber daya dedicated dan shared:
+
+```
+┌───────────────────────────────────┐
+│    Shared Greentic Instance       │
+│  ┌─────────┐  ┌─────────────────┐│
+│  │ Small   │  │   Medium        ││
+│  │ Tenants │  │   Tenants       ││
+│  └─────────┘  └─────────────────┘│
+└───────────────────────────────────┘
+
+┌───────────────────────────────────┐
+│  Dedicated: Enterprise Tenant     │
+│  (Custom SLA, dedicated resources)│
+└───────────────────────────────────┘
+```
+
+## Praktik Terbaik
+
+1. **Selalu teruskan TenantCtx** - Jangan pernah hardcode ID tenant
+2. **Validasi di batas sistem** - Periksa akses tenant di level API dan komponen
+3. **Gunakan logging dengan scope tenant** - Sertakan ID tenant di setiap entri log
+4. **Pisahkan secret** - Jangan pernah berbagi secret antar tenant
+5. **Uji isolasi** - Pastikan satu tenant tidak bisa mengakses data tenant lain
+6. **Pantau per tenant** - Lacak penggunaan dan error per tenant
+
+## Langkah Berikutnya
+
+- [Architecture Overview](/id/concepts/architecture/)
+- [Session Management](/id/concepts/sessions/)
+- [Configuration Reference](/id/reference/configuration/)

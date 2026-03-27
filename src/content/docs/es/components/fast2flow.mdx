@@ -1,0 +1,411 @@
+---
+title: fast2flow
+description: Extensión de enrutamiento de intenciones y despacho de flows de alto rendimiento
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Resumen
+
+**fast2flow** es una extensión de enrutamiento de alto rendimiento que enruta mensajes entrantes al flow adecuado usando puntuación determinista basada en tokens (BM25) con fallback opcional a LLM.
+
+Concepto principal: un usuario envía un mensaje como "refund please" → fast2flow consulta índices específicos del tenant → devuelve una directiva de enrutamiento (`Dispatch`, `Respond`, `Deny` o `Continue`).
+
+**Principios clave:**
+- **Determinista primero**: puntuación BM25 basada en tokens para un enrutamiento predecible y explicable
+- **Fail-open**: errores, timeouts o índices faltantes producen una directiva `Continue`
+- **Con límite de tiempo**: aplicación estricta de timeout mediante `time_budget_ms`
+- **Impulsado por políticas**: el comportamiento en runtime cambia sin cambios de código
+
+## Arquitectura
+
+```
+Incoming Message
+    │
+    ▼
+┌──────────────────────────────────────────────────┐
+│                fast2flow Pipeline                 │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │  1. Hook Filter                            │  │
+│  │  Allow/deny lists, respond rules, policy   │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  2. Index Lookup                           │  │
+│  │  Load TF-IDF index for tenant scope        │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  3. Deterministic Strategy (BM25)          │  │
+│  │  Token scoring with title boosting (2x)    │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  4. Confidence Gate                        │  │
+│  │  min_confidence threshold check            │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  5. LLM Fallback (optional)                │  │
+│  │  OpenAI or Ollama for ambiguous cases      │  │
+│  └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
+    │
+    ▼
+Routing Directive (Dispatch / Respond / Deny / Continue)
+```
+
+## Directivas de enrutamiento
+
+Cada decisión de enrutamiento produce una de cuatro directivas:
+
+| Directiva | Propósito | Campos |
+|-----------|-----------|--------|
+| `dispatch` | Enrutar a un flow específico | `target`, `confidence`, `reason` |
+| `respond` | Devolver una respuesta inmediata | `message` |
+| `deny` | Bloquear la solicitud | `reason` |
+| `continue` | Sin decisión, deja que el llamador la maneje | — |
+
+```json
+// Dispatch to a flow
+{"type": "dispatch", "target": "support-pack:refund_request", "confidence": 0.92, "reason": "BM25 match"}
+
+// Auto-respond without routing
+{"type": "respond", "message": "Use the self-service refund form at /refund."}
+
+// Block the request
+{"type": "deny", "reason": "Denied by scope policy"}
+
+// Pass through (fail-open default)
+{"type": "continue"}
+```
+
+## Instalación
+
+fast2flow se distribuye como un artefacto `.gtpack` a través de GHCR:
+
+```bash
+# Pull from GHCR
+oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:latest
+
+# Or reference a specific version
+oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:v0.4.6
+```
+
+El pack registra un hook `post_ingress` que intercepta mensajes antes de que lleguen a cualquier flow.
+
+## Componentes WASM
+
+fast2flow incluye tres components WASM (dirigidos a `wasm32-wasip2`):
+
+| Component | Propósito | Operación |
+|-----------|-----------|-----------|
+| **Indexer** | Construye un índice TF-IDF consultable a partir de metadatos de flows | `build`, `update` |
+| **Matcher** | Emparejamiento rápido de intenciones basado en BM25 contra el índice | `match` |
+| **Router** | Orquesta todo el pipeline de enrutamiento | `route` |
+
+Estos components son coordinados por tres flows definidos en el pack:
+
+```yaml
+# flows/index.ygtc  — Runs at deploy time to build indexes
+# flows/match.ygtc  — Runtime BM25 intent matching
+# flows/route.ygtc  — Full routing pipeline with LLM fallback
+```
+
+## Flujo de trabajo del Bundle
+
+fast2flow indexa flows a partir de los archivos `.ygtc` de tu bundle. El indexer escanea el directorio del bundle, extrae metadatos (title, description, tags) y construye un índice TF-IDF con puntuación BM25.
+
+### Estructura del Bundle
+
+```
+my-bundle/
+├── packs/
+│   ├── support-pack/
+│   │   └── flows/
+│   │       ├── refund.ygtc
+│   │       ├── shipping.ygtc
+│   │       └── faq.ygtc
+│   └── hr-pack/
+│       └── flows/
+│           ├── leave.ygtc
+│           └── booking.ygtc
+```
+
+### Definición de Flow (`.ygtc`)
+
+Cada archivo de flow proporciona los metadatos usados para el emparejamiento de intenciones:
+
+```yaml title="refund.ygtc"
+id: refund_request
+title: Process Refund Request
+description: Handle customer refund requests for orders and payments
+type: messaging
+tags:
+  - refund
+  - payment
+  - billing
+  - return
+start: collect_info
+
+nodes:
+  collect_info:
+    templating.handlebars:
+      text: "Please provide your order number for the refund."
+    routing:
+      - out: true
+```
+
+<Aside type="tip">
+Las palabras del título reciben un impulso TF-IDF de 2x, así que elige títulos descriptivos para mejorar la precisión del enrutamiento.
+</Aside>
+
+### Construir el índice
+
+Usa la CLI para construir un índice a partir de tu bundle:
+
+```bash
+greentic-fast2flow bundle index \
+  --bundle ./my-bundle \
+  --output ./state/indexes \
+  --tenant demo \
+  --team default \
+  --verbose
+```
+
+Esto produce:
+- `index.json`: índice TF-IDF con frecuencias de términos y frecuencias de documentos
+- `intents.md`: documentación de intenciones legible por humanos
+
+### Validar un Bundle
+
+```bash
+greentic-fast2flow bundle validate --bundle ./my-bundle
+```
+
+## Configuración de políticas
+
+Las políticas controlan el comportamiento del enrutamiento en runtime sin cambios de código. Son archivos JSON cargados desde `/mnt/registry/fast2flow-policy.json` o desde una ruta personalizada.
+
+### Estructura de la política
+
+```json title="fast2flow-policy.json"
+{
+  "stage_order": ["scope", "channel", "provider"],
+  "default": {
+    "min_confidence": 0.5,
+    "llm_min_confidence": 0.5,
+    "candidate_limit": 20
+  },
+  "scope_overrides": [],
+  "channel_overrides": [],
+  "provider_overrides": []
+}
+```
+
+### Reglas de política
+
+Todos los campos de regla son opcionales; solo se aplican los campos especificados:
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `min_confidence` | `f32` | Puntuación BM25 mínima para despachar (0.0–1.0) |
+| `llm_min_confidence` | `f32` | Confianza mínima del LLM para despachar (0.0–1.0) |
+| `candidate_limit` | `usize` | Máximo de candidatos a evaluar |
+| `allow_channels` | `string[]` | Lista blanca de canales (`null` = permitir todos) |
+| `deny_channels` | `string[]` | Lista negra de canales |
+| `allow_providers` | `string[]` | Lista blanca de providers (`null` = permitir todos) |
+| `deny_providers` | `string[]` | Lista negra de providers |
+| `allow_scopes` | `string[]` | Lista blanca de scopes (`null` = permitir todos) |
+| `deny_scopes` | `string[]` | Lista negra de scopes |
+| `respond_rules` | `object[]` | Reglas de respuesta automática (coincidencia por palabras clave) |
+
+### Ejemplos de overrides
+
+Los overrides se aplican en orden de etapas (scope → channel → provider) con ordenación por prioridad dentro de cada etapa.
+
+**Override de scope**: confianza más estricta para un tenant VIP:
+
+```json
+{
+  "id": "vip-tenant",
+  "priority": 10,
+  "scope": "tenant-vip",
+  "rules": {
+    "min_confidence": 0.8,
+    "candidate_limit": 10
+  }
+}
+```
+
+**Override de channel**: respuesta automática en el canal email:
+
+```json
+{
+  "id": "email-autorespond",
+  "priority": 20,
+  "channel": "email",
+  "rules": {
+    "respond_rules": [
+      {
+        "needle": "refund",
+        "message": "Refund requests via email take 3–5 business days. Use chat for instant support.",
+        "mode": "contains"
+      }
+    ]
+  }
+}
+```
+
+**Override de provider**: restringir a un provider específico:
+
+```json
+{
+  "id": "slack-only",
+  "priority": 30,
+  "provider": "slack",
+  "rules": {
+    "deny_providers": ["telegram"]
+  }
+}
+```
+
+### Reglas de respuesta
+
+Las reglas de respuesta automática hacen match con el texto antes de que se ejecute el pipeline de enrutamiento:
+
+```json
+{
+  "needle": "business hours",
+  "message": "Our business hours are Mon–Fri 9AM–5PM UTC.",
+  "mode": "contains"
+}
+```
+
+Modos compatibles: `exact`, `contains` (predeterminado), `regex`.
+
+### CLI de gestión de políticas
+
+```bash
+# Print default policy
+greentic-fast2flow policy print-default
+
+# Validate a policy file
+greentic-fast2flow policy validate --file ./my-policy.json
+```
+
+## Fallback a LLM
+
+Cuando la estrategia determinista BM25 produce puntuaciones de baja confianza, fast2flow puede usar un LLM como fallback para la clasificación.
+
+| Proveedor | Variables de entorno |
+|-----------|----------------------|
+| **OpenAI** | `FAST2FLOW_OPENAI_API_KEY_PATH`, `FAST2FLOW_OPENAI_MODEL_PATH` |
+| **Ollama** | `FAST2FLOW_OLLAMA_ENDPOINT_PATH`, `FAST2FLOW_OLLAMA_MODEL_PATH` |
+| **Disabled** | `FAST2FLOW_LLM_PROVIDER=disabled` (predeterminado) |
+
+```bash
+# Enable OpenAI fallback
+FAST2FLOW_LLM_PROVIDER=openai \
+FAST2FLOW_OPENAI_API_KEY_PATH=/run/secrets/openai-key \
+greentic-fast2flow-routing-host < request.json
+```
+
+<Aside type="caution">
+Los providers de LLM solo están disponibles en el binario host nativo. El runtime de components WASM requiere `FAST2FLOW_LLM_PROVIDER=disabled`.
+</Aside>
+
+## Referencia CLI
+
+### Comandos de Bundle
+
+```bash
+# Build TF-IDF index from bundle
+greentic-fast2flow bundle index \
+  --bundle ./my-bundle \
+  --output ./indexes \
+  --tenant demo \
+  --team default \
+  --generate-docs \
+  --verbose
+
+# Validate bundle has indexable flows
+greentic-fast2flow bundle validate --bundle ./my-bundle
+```
+
+### Comandos de índice
+
+```bash
+# Build index from flow definitions JSON
+greentic-fast2flow index build \
+  --scope tenant-a \
+  --flows flows.json \
+  --output /tmp/indexes
+
+# Inspect a built index
+greentic-fast2flow index inspect \
+  --scope tenant-a \
+  --input /tmp/indexes
+```
+
+### Comandos de ruta
+
+```bash
+# Simulate a routing decision
+greentic-fast2flow route simulate \
+  --scope tenant-a \
+  --text "I need a refund" \
+  --indexes-path /tmp/indexes
+```
+
+### Comandos de política
+
+```bash
+# Print default policy template
+greentic-fast2flow policy print-default
+
+# Validate policy file
+greentic-fast2flow policy validate --file policy.json
+```
+
+## Variables de entorno
+
+| Variable | Valor por defecto | Descripción |
+|----------|-------------------|-------------|
+| `FAST2FLOW_LLM_PROVIDER` | `disabled` | Provider LLM: `disabled`, `openai`, `ollama` |
+| `FAST2FLOW_POLICY_PATH` | `/mnt/registry/fast2flow-policy.json` | Ruta del archivo de política |
+| `FAST2FLOW_TRACE_POLICY` | — | Establece `1` para emitir el rastro de política en stderr |
+| `FAST2FLOW_MIN_CONFIDENCE` | `0.5` | Umbral mínimo de confianza por defecto |
+| `FAST2FLOW_LLM_MIN_CONFIDENCE` | `0.5` | Confianza mínima del LLM por defecto |
+| `FAST2FLOW_CANDIDATE_LIMIT` | `20` | Máximo de candidatos por defecto |
+
+## Rendimiento
+
+fast2flow está optimizado para enrutamiento de baja latencia:
+
+| Etapa | Latencia típica |
+|-------|-----------------|
+| Hook filter (allow/deny) | < 0.1ms |
+| BM25 index lookup | < 1ms |
+| Policy resolution | < 0.1ms |
+| LLM fallback (if enabled) | 200–500ms |
+
+<Aside type="tip">
+Empieza con enrutamiento determinista BM25. Habilita el fallback a LLM solo si tus flows tienen intenciones superpuestas que BM25 no puede distinguir.
+</Aside>
+
+## Buenas prácticas
+
+1. **Escribe títulos descriptivos**: las palabras del título obtienen un impulso TF-IDF de 2x para una mejor puntuación
+2. **Usa tags específicos**: los tags son la señal principal para el emparejamiento BM25
+3. **Define umbrales adecuados**: empieza con `min_confidence: 0.5` y ajústalo hacia arriba
+4. **Usa políticas para overrides**: cambia el comportamiento por scope/channel/provider sin volver a desplegar
+5. **Supervisa la tasa de Continue**: una salida alta de `Continue` indica huecos en la cobertura de tus flows
+6. **Mantén LLM como fallback**: el enrutamiento determinista es más rápido y predecible
+
+## Siguientes pasos
+
+- [Guía de Flows](/es/concepts/flows/) - Aprende sobre definiciones de flow `.ygtc`
+- [Guía de Packs](/es/concepts/packs/) - Comprende la distribución `.gtpack`
+- [Referencia de Control Chains](/es/reference/control-chains/) - Registro de hooks y políticas

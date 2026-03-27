@@ -1,0 +1,147 @@
+---
+title: 快速开始
+description: 在几分钟内运行你的第一个 Greentic 数字员工
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+本指南将帮助你在本地运行一个基础的 Greentic 数字员工。
+
+## 前置条件
+
+开始之前，请确保你已经具备：
+
+- **Rust** 1.90 或更高版本（`rustup default 1.90`）
+- **Node.js** 18+（用于前端工具）
+- **Git**（用于克隆仓库）
+
+## 安装
+
+<Steps>
+
+1. **安装 GTC CLI**
+
+   ```bash
+   cargo install greentic-cli
+   ```
+
+   或从源码构建：
+
+   ```bash
+   git clone https://github.com/greenticai/greentic.git
+   cd greentic/greentic
+   cargo build --release
+   ```
+
+2. **创建新的 bundle**
+
+   使用 wizard 根据你的目标配置创建新的 bundle：
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+   或以交互方式运行：
+
+   ```bash
+   gtc wizard
+   ```
+
+3. **配置 providers**
+
+   设置你的消息 providers（例如 Telegram、Slack）：
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+   若需非交互式配置，可使用 answers 文件：
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **启动运行时**
+
+   启动你的数字员工：
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## 示例：Hello World Flow
+
+创建一个简单 flow 来响应消息：
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! I'm your digital worker."
+
+triggers:
+  - type: message
+    pattern: "hello"
+    target: greet
+```
+
+## Bundle 结构
+
+一个典型的 Greentic bundle 如下所示：
+
+```
+my-bundle/
+├── greentic.demo.yaml      # Main configuration
+├── providers/
+│   └── messaging/
+│       └── messaging-telegram.gtpack
+├── apps/
+│   └── my-app/
+│       └── flows/
+│           └── on_message.ygtc
+└── seeds.yaml              # Seed data (optional)
+```
+
+## 配置文件
+
+主配置文件（`greentic.demo.yaml`）定义了你的整体设置：
+
+```yaml title="greentic.demo.yaml"
+name: my-digital-worker
+version: "1.0"
+
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+
+apps:
+  my-app:
+    path: "apps/my-app"
+    default_flow: "on_message"
+
+tenants:
+  demo:
+    name: Demo Tenant
+    teams:
+      default:
+        channels:
+          telegram:
+            provider: messaging-telegram
+```
+
+## 下一步
+
+现在你已经完成了基础环境搭建，可以继续：
+
+- [Learn about Flows](/zh/concepts/flows/) - 理解 flow 定义
+- [Configure Telegram](/zh/providers/messaging/telegram/) - 设置 Telegram bot
+- [Configure Slack](/zh/providers/messaging/slack/) - 连接到 Slack workspace
+- [Build custom components](/zh/concepts/components/) - 创建你自己的 WASM components

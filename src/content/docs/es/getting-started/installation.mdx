@@ -1,0 +1,253 @@
+---
+title: Instalación
+description: Instrucciones detalladas de instalación para Greentic
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Requisitos del sistema
+
+### Requisitos mínimos
+
+| Componente | Requisito |
+|-----------|-------------|
+| Sistema operativo | Linux, macOS, Windows |
+| Rust | 1.90+ |
+| Memoria | 4 GB RAM |
+| Disco | 2 GB de espacio libre |
+
+### Recomendado
+
+| Componente | Requisito |
+|-----------|-------------|
+| Rust | 1.91 (latest) |
+| Memoria | 8 GB RAM |
+| CPU | Procesador multinúcleo |
+
+## Instalar Rust
+
+Si no tienes Rust instalado:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Establece la versión correcta del toolchain:
+
+```bash
+rustup default 1.90
+```
+
+Agrega el target WASM para construir componentes:
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+## Instalar GTC CLI
+
+<Tabs>
+<TabItem label="Cargo (Recomendado)">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="Desde el código fuente">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+
+# Add to PATH
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+<TabItem label="Binarios precompilados">
+
+Descarga desde [GitHub Releases](https://github.com/greenticai/greentic/releases):
+
+```bash
+# macOS (Apple Silicon)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-arm64.tar.gz
+tar -xzf gtc-darwin-arm64.tar.gz
+sudo mv gtc /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-x64.tar.gz
+
+# Linux (x86_64)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-linux-x64.tar.gz
+
+# Windows
+# Download gtc-windows-x64.zip from releases
+```
+
+</TabItem>
+</Tabs>
+
+## Verificar la instalación
+
+```bash
+gtc --version
+```
+
+Salida esperada:
+```
+gtc 0.4.x
+```
+
+## Dependencias opcionales
+
+### NATS (Bus de mensajes)
+
+Para despliegues de producción:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name nats -p 4222:4222 nats:latest
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install nats-server
+nats-server
+```
+
+</TabItem>
+<TabItem label="Descarga directa">
+
+Descarga desde [nats.io](https://nats.io/download/)
+
+</TabItem>
+</Tabs>
+
+### Redis (Almacenamiento de sesiones)
+
+Para persistencia de sesiones en producción:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name redis -p 6379:6379 redis:alpine
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install redis
+redis-server
+```
+
+</TabItem>
+</Tabs>
+
+### Ngrok/Cloudflared (URLs públicas)
+
+Para providers basados en webhooks (Telegram, Slack, etc.):
+
+<Tabs>
+<TabItem label="Ngrok">
+
+```bash
+# Install
+brew install ngrok/ngrok/ngrok  # macOS
+# or download from https://ngrok.com/download
+
+# Configure
+ngrok config add-authtoken YOUR_TOKEN
+
+# Run
+ngrok http 8080
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+# Install
+brew install cloudflared  # macOS
+# or download from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Run
+cloudflared tunnel --url http://localhost:8080
+```
+
+</TabItem>
+</Tabs>
+
+## Herramientas de desarrollo
+
+### Constructor de packs
+
+Construye archivos `.gtpack`:
+
+```bash
+cargo install greentic-pack
+```
+
+### Validador de flows
+
+Valida definiciones de flow:
+
+```bash
+cargo install greentic-flow
+```
+
+### Creación de componentes
+
+Crea componentes WASM:
+
+```bash
+cargo install greentic-component
+```
+
+## Verificar tu entorno
+
+Ejecuta lo siguiente para verificar que todo funciona:
+
+```bash
+# Check GTC CLI
+gtc --help
+
+# Check Rust WASM target
+rustup target list --installed | grep wasm32-wasip2
+
+# Create and run a test bundle
+gtc wizard --dry-run
+```
+
+## Resolución de problemas
+
+### Problemas comunes
+
+**Error: "wasm32-wasip2 target not found"**
+```bash
+rustup target add wasm32-wasip2
+```
+
+**Error: "Cannot connect to NATS"**
+```bash
+# Start embedded NATS with gtc start
+gtc start ./my-bundle --nats on
+```
+
+**Error: "Permission denied"**
+```bash
+# On Linux/macOS, ensure binary is executable
+chmod +x /usr/local/bin/gtc
+```
+
+## Siguientes pasos
+
+- [Inicio rápido](/es/getting-started/quick-start/) - Crea tu primer trabajador digital
+- [Resumen de la arquitectura](/es/concepts/architecture/) - Comprende la plataforma

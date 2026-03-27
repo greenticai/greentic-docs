@@ -1,0 +1,261 @@
+---
+title: cards2pack
+description: Adaptive Cards を Greentic packs に変換する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+**cards2pack** は Adaptive Card の JSON ファイルを Greentic packs に変換する CLI ツールです。次のことを行います:
+
+- cards を走査し、依存グラフを構築して `.ygtc` flows を生成する
+- i18n 用に翻訳可能な文字列を抽出する
+- `greentic-i18n-translator` によって cards を自動翻訳する
+- すべてをデプロイ可能な `.gtpack` にパッケージングする
+
+## インストール
+
+```bash
+cargo install greentic-cards2pack
+```
+
+必要なツール:
+
+```bash
+cargo install greentic-flow greentic-pack
+cargo install greentic-i18n-translator  # optional, for --auto-translate
+```
+
+## クイックスタート
+
+<Steps>
+
+1. **Adaptive Cards を作成する**
+
+   ```json title="cards/welcome.json"
+   {
+     "type": "AdaptiveCard",
+     "version": "1.4",
+     "body": [
+       { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+       { "type": "TextBlock", "text": "How can I help you today?" }
+     ],
+     "actions": [
+       {
+         "type": "Action.Submit",
+         "title": "Get Started",
+         "data": { "flow": "demo", "step": "next-card" }
+       }
+     ]
+   }
+   ```
+
+2. **pack を生成する**
+
+   ```bash
+   greentic-cards2pack generate \
+     --cards ./cards \
+     --out ./my-pack \
+     --name my-pack
+   ```
+
+3. **出力**
+
+   ```
+   my-pack/
+     pack.yaml
+     flows/main.ygtc
+     assets/cards/welcome.json
+     dist/my-pack.gtpack
+     .cards2pack/manifest.json
+   ```
+
+</Steps>
+
+## CLI リファレンス
+
+### `generate`
+
+メインコマンドです。cards を走査し、flows を生成して、pack をビルドします。
+
+```bash
+greentic-cards2pack generate [OPTIONS]
+```
+
+| Flag | 説明 |
+|------|-------------|
+| `--cards <DIR>` | Adaptive Card JSON ファイルのディレクトリ（必須） |
+| `--out <DIR>` | 出力 workspace ディレクトリ（必須） |
+| `--name <NAME>` | Pack 名（必須） |
+| `--strict` | 欠落した target、重複、無効な JSON をエラーにする |
+| `--group-by <MODE>` | Flow のグループ化: `folder` または `flow-field` |
+| `--default-flow <NAME>` | グループ化されない cards のデフォルト flow 名 |
+| `--prompt` | prompt ベースのルーティングを有効にする（`prompt2flow` node を追加） |
+| `--prompt-json <FILE>` | prompt ルーティング用の回答 JSON（`--prompt` が必要） |
+| `--auto-translate` | 最大 8 並列スレッドで cards を自動翻訳する（`greentic-i18n-translator` が必要） |
+| `--langs <CODES>` | カンマ区切りの言語コード。省略すると対応する 65 以上のすべての locale に翻訳 |
+| `--glossary <FILE>` | 一貫した翻訳のための glossary JSON |
+| `--verbose` | 詳細出力を表示する |
+
+### `extract-i18n`
+
+cards から翻訳可能な文字列を JSON bundle に抽出します。
+
+```bash
+greentic-cards2pack extract-i18n [OPTIONS]
+```
+
+| Flag | 説明 |
+|------|-------------|
+| `--input <DIR>` | card JSON ファイルのディレクトリ（必須） |
+| `--output <FILE>` | 出力 JSON パス（デフォルト: `i18n/en.json`） |
+| `--prefix <PREFIX>` | キー接頭辞（デフォルト: `card`） |
+| `--include-existing` | すでに `$t()` パターンを含む文字列も含める |
+| `--verbose` | 抽出レポートを表示する |
+
+## Card の識別
+
+cards は次の優先順で識別されます:
+1. card JSON 内の `greentic.cardId` フィールド
+2. ファイル名の stem（例: `welcome.json` → `welcome`）
+
+cards は次の方法で flows にグループ化されます:
+- action data 内の `flow` フィールド
+- `--group-by folder`（ディレクトリ構造）
+- `--default-flow` fallback
+
+## i18n と自動翻訳
+
+### 文字列を抽出する
+
+```bash
+greentic-cards2pack extract-i18n \
+  --input ./cards \
+  --output i18n/en.json \
+  --verbose
+```
+
+出力:
+
+```json title="i18n/en.json"
+{
+  "card.welcome.body_0.text": "Welcome!",
+  "card.welcome.body_1.text": "How can I help you today?",
+  "card.welcome.actions_0.title": "Get Started"
+}
+```
+
+<Aside type="note">
+キーは `{prefix}.{cardId}.{json_path}.{field}` のパターンに従います。card ID は `greentic.cardId` またはファイル名から取得されます。
+</Aside>
+
+<Aside type="tip">
+抽出は、書き換え後や中間生成物ではなく、常にディスク上の元の card ファイルを読み取ります。これにより、抽出された文字列が authors の記述内容と一致し、内部変換によるずれを防げます。
+</Aside>
+
+### 抽出されるフィールドの種類
+
+| Field | ソース |
+|-------|--------|
+| `text` | TextBlock の内容 |
+| `title` | Action titles、card titles、toggle titles |
+| `label` | Input labels |
+| `placeholder` | Input placeholders |
+| `errorMessage` | Validation errors |
+| `altText` | 画像の代替テキスト |
+| `fallbackText` | フォールバック内容 |
+| FactSet `title`/`value` | Fact entries |
+| ChoiceSet `title` | Choice options |
+
+### 自動翻訳（1 コマンド）
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./my-pack \
+  --name my-pack \
+  --auto-translate \
+  --langs fr,de
+```
+
+これにより、元の card ファイルから文字列を抽出し、最大 8 並列スレッドで `greentic-i18n-translator` によって翻訳し、すべてをまとめて bundle します:
+
+```
+my-pack/assets/i18n/
+  en.json   # English (source)
+  fr.json   # French
+  de.json   # German
+```
+
+<Aside type="caution">
+翻訳の失敗は致命的ではありません。警告は `.cards2pack/manifest.json` に記録され、それでも pack はビルドされます。非 strict モードでは、`greentic-pack build` のエラーも致命的ではないため、一部の検証チェックが失敗しても pack は生成されます。
+</Aside>
+
+### Glossary
+
+brand 名や技術用語の表記を統一するには glossary を使います:
+
+```json title="glossary.json"
+{
+  "Greentic": "Greentic",
+  "Dashboard": "Dashboard"
+}
+```
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de \
+  --glossary glossary.json
+```
+
+## Flow の生成
+
+生成された flow セクションは markers で囲まれます:
+
+```yaml
+# BEGIN GENERATED (cards2pack)
+# ... generated nodes ...
+# END GENERATED (cards2pack)
+
+# Developer space below (preserved on regen)
+```
+
+markers の外側の内容は再生成時にも保持されます。
+
+### strict モード
+
+`--strict` を使うと:
+- 欠落した route targets はエラーになる（stub nodes ではなく）
+- 重複した `cardId` 値はエラーになる
+- 無効な JSON はエラーになる
+
+## テンプレート変数
+
+動的コンテンツには Handlebars 構文を使います:
+
+```json
+{
+  "type": "TextBlock",
+  "text": "Hello, {{name}}!"
+}
+```
+
+<Aside type="note">
+`{{variable}}` のような純粋なテンプレート式は i18n 抽出時にスキップされます。`Hello, {{name}}!` のような混在テキストは抽出されます。
+</Aside>
+
+## 例: 翻訳付きマルチステップフォーム
+
+```bash
+# Create cards in cards/ directory, then:
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./checkout-pack \
+  --name checkout \
+  --auto-translate \
+  --langs fr,ja,es \
+  --glossary glossary.json \
+  --strict
+```

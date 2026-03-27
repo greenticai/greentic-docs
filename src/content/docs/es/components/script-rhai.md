@@ -1,13 +1,13 @@
 ---
 title: Script (Rhai)
-description: Rhai scripting component for custom logic
+description: Componente de scripting Rhai para lógica personalizada
 ---
 
-## Overview
+## Resumen
 
-The **Script** component enables custom logic using the Rhai scripting language, a simple yet powerful embedded scripting language for Rust.
+El componente **Script** permite lógica personalizada usando el lenguaje de scripting Rhai, un lenguaje de scripting embebido para Rust que es simple pero potente.
 
-## Basic Usage
+## Uso básico
 
 ```yaml
 - id: calculate
@@ -22,7 +22,7 @@ The **Script** component enables custom logic using the Rhai scripting language,
   output: calculated_total
 ```
 
-## Rhai Syntax
+## Sintaxis de Rhai
 
 ### Variables
 
@@ -33,7 +33,7 @@ let items = [1, 2, 3];
 let user = #{ name: "Bob", age: 30 };
 ```
 
-### Functions
+### Funciones
 
 ```js
 fn greet(name) {
@@ -43,7 +43,7 @@ fn greet(name) {
 let message = greet("World");
 ```
 
-### Control Flow
+### Flujo de control
 
 ```js
 if x > 10 {
@@ -64,7 +64,7 @@ while condition {
 }
 ```
 
-### Working with Objects
+### Trabajar con objetos
 
 ```js
 let user = #{
@@ -76,9 +76,9 @@ let name = user.name;
 user.age = 25;
 ```
 
-## Flow Integration
+## Integración con Flows
 
-### Access Context
+### Acceder al contexto
 
 ```yaml
 - id: process
@@ -100,7 +100,7 @@ user.age = 25;
       }
 ```
 
-### Conditional Logic
+### Lógica condicional
 
 ```yaml
 - id: validate
@@ -125,7 +125,7 @@ user.age = 25;
     default: show_error
 ```
 
-### Data Transformation
+### Transformación de datos
 
 ```yaml
 - id: transform
@@ -146,9 +146,9 @@ user.age = 25;
       transformed
 ```
 
-## Built-in Functions
+## Funciones integradas
 
-### String Functions
+### Funciones de cadenas
 
 ```js
 let s = "Hello World";
@@ -162,7 +162,7 @@ s.trim()          // Remove whitespace
 s.sub_string(0,5) // "Hello"
 ```
 
-### Array Functions
+### Funciones de arrays
 
 ```js
 let arr = [1, 2, 3, 4, 5];
@@ -176,7 +176,7 @@ arr.map(|x| x * 2)     // [2, 4, 6, 8, 10]
 arr.reduce(|a, b| a + b, 0)  // 15
 ```
 
-### Object Functions
+### Funciones de objetos
 
 ```js
 let obj = #{ a: 1, b: 2 };
@@ -186,7 +186,7 @@ obj.values()      // [1, 2]
 obj.contains("a") // true
 ```
 
-## Error Handling
+## Manejo de errores
 
 ```js
 try {
@@ -198,7 +198,7 @@ try {
 }
 ```
 
-## Example: Order Processing
+## Ejemplo: Procesamiento de pedidos
 
 ```yaml
 - id: process_order
@@ -238,7 +238,7 @@ try {
       }
 ```
 
-## Next Steps
+## Siguientes pasos
 
-- [Templates Component](/components/templates/)
-- [LLM OpenAI](/components/llm-openai/)
+- [Componente Templates](/es/components/templates/)
+- [LLM OpenAI](/es/components/llm-openai/)

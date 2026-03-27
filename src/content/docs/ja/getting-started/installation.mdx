@@ -1,0 +1,253 @@
+---
+title: インストール
+description: Greentic の詳細なインストール手順
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## システム要件
+
+### 最小要件
+
+| Component | 要件 |
+|-----------|------|
+| OS | Linux, macOS, Windows |
+| Rust | 1.90+ |
+| Memory | 4 GB RAM |
+| Disk | 2 GB の空き容量 |
+
+### 推奨
+
+| Component | 要件 |
+|-----------|------|
+| Rust | 1.91 (latest) |
+| Memory | 8 GB RAM |
+| CPU | マルチコア processor |
+
+## Rust のインストール
+
+Rust がインストールされていない場合:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+正しい toolchain version を設定します:
+
+```bash
+rustup default 1.90
+```
+
+component を build するための WASM target を追加します:
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+## GTC CLI のインストール
+
+<Tabs>
+<TabItem label="Cargo (Recommended)">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="From Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+
+# Add to PATH
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+<TabItem label="Pre-built Binaries">
+
+[GitHub Releases](https://github.com/greenticai/greentic/releases) からダウンロードします:
+
+```bash
+# macOS (Apple Silicon)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-arm64.tar.gz
+tar -xzf gtc-darwin-arm64.tar.gz
+sudo mv gtc /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-x64.tar.gz
+
+# Linux (x86_64)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-linux-x64.tar.gz
+
+# Windows
+# Download gtc-windows-x64.zip from releases
+```
+
+</TabItem>
+</Tabs>
+
+## インストールの確認
+
+```bash
+gtc --version
+```
+
+期待される出力:
+```
+gtc 0.4.x
+```
+
+## オプション依存関係
+
+### NATS (Message Bus)
+
+production deployment 向け:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name nats -p 4222:4222 nats:latest
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install nats-server
+nats-server
+```
+
+</TabItem>
+<TabItem label="Direct Download">
+
+[nats.io](https://nats.io/download/) からダウンロードします
+
+</TabItem>
+</Tabs>
+
+### Redis (Session Storage)
+
+production の session persistence 向け:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name redis -p 6379:6379 redis:alpine
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install redis
+redis-server
+```
+
+</TabItem>
+</Tabs>
+
+### Ngrok/Cloudflared (Public URLs)
+
+webhook ベースの provider (Telegram、Slack など) 向け:
+
+<Tabs>
+<TabItem label="Ngrok">
+
+```bash
+# Install
+brew install ngrok/ngrok/ngrok  # macOS
+# or download from https://ngrok.com/download
+
+# Configure
+ngrok config add-authtoken YOUR_TOKEN
+
+# Run
+ngrok http 8080
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+# Install
+brew install cloudflared  # macOS
+# or download from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Run
+cloudflared tunnel --url http://localhost:8080
+```
+
+</TabItem>
+</Tabs>
+
+## Development Tools
+
+### Pack Builder
+
+`.gtpack` archive を build します:
+
+```bash
+cargo install greentic-pack
+```
+
+### Flow Validator
+
+flow definition を検証します:
+
+```bash
+cargo install greentic-flow
+```
+
+### Component Authoring
+
+WASM component を作成します:
+
+```bash
+cargo install greentic-component
+```
+
+## セットアップの検証
+
+すべてが正しく動作していることを確認するには、次を実行します:
+
+```bash
+# Check GTC CLI
+gtc --help
+
+# Check Rust WASM target
+rustup target list --installed | grep wasm32-wasip2
+
+# Create and run a test bundle
+gtc wizard --dry-run
+```
+
+## トラブルシューティング
+
+### よくある問題
+
+**Error: "wasm32-wasip2 target not found"**
+```bash
+rustup target add wasm32-wasip2
+```
+
+**Error: "Cannot connect to NATS"**
+```bash
+# Start embedded NATS with gtc start
+gtc start ./my-bundle --nats on
+```
+
+**Error: "Permission denied"**
+```bash
+# On Linux/macOS, ensure binary is executable
+chmod +x /usr/local/bin/gtc
+```
+
+## 次のステップ
+
+- [Quick Start](/ja/getting-started/quick-start/) - 最初の digital worker を作成する
+- [Architecture Overview](/ja/concepts/architecture/) - platform を理解する

@@ -1,0 +1,253 @@
+---
+title: Instalasi
+description: Instruksi instalasi lengkap untuk Greentic
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Persyaratan Sistem
+
+### Persyaratan Minimum
+
+| Komponen | Persyaratan |
+|----------|-------------|
+| OS | Linux, macOS, Windows |
+| Rust | 1.90+ |
+| Memori | 4 GB RAM |
+| Disk | 2 GB ruang kosong |
+
+### Rekomendasi
+
+| Komponen | Persyaratan |
+|----------|-------------|
+| Rust | 1.91 (terbaru) |
+| Memori | 8 GB RAM |
+| CPU | Prosesor multi-core |
+
+## Menginstal Rust
+
+Jika Anda belum menginstal Rust:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Atur versi toolchain yang benar:
+
+```bash
+rustup default 1.90
+```
+
+Tambahkan target WASM untuk build komponen:
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+## Menginstal GTC CLI
+
+<Tabs>
+<TabItem label="Cargo (Rekomendasi)">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="Dari Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+
+# Tambahkan ke PATH
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+<TabItem label="Binary Pre-built">
+
+Download dari [GitHub Releases](https://github.com/greenticai/greentic/releases):
+
+```bash
+# macOS (Apple Silicon)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-arm64.tar.gz
+tar -xzf gtc-darwin-arm64.tar.gz
+sudo mv gtc /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-darwin-x64.tar.gz
+
+# Linux (x86_64)
+curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-linux-x64.tar.gz
+
+# Windows
+# Download gtc-windows-x64.zip dari releases
+```
+
+</TabItem>
+</Tabs>
+
+## Verifikasi Instalasi
+
+```bash
+gtc --version
+```
+
+Output yang diharapkan:
+```
+gtc 0.4.x
+```
+
+## Dependensi Opsional
+
+### NATS (Message Bus)
+
+Untuk deployment produksi:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name nats -p 4222:4222 nats:latest
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install nats-server
+nats-server
+```
+
+</TabItem>
+<TabItem label="Download Langsung">
+
+Download dari [nats.io](https://nats.io/download/)
+
+</TabItem>
+</Tabs>
+
+### Redis (Penyimpanan Sesi)
+
+Untuk persistensi sesi produksi:
+
+<Tabs>
+<TabItem label="Docker">
+
+```bash
+docker run -d --name redis -p 6379:6379 redis:alpine
+```
+
+</TabItem>
+<TabItem label="Homebrew (macOS)">
+
+```bash
+brew install redis
+redis-server
+```
+
+</TabItem>
+</Tabs>
+
+### Ngrok/Cloudflared (URL Publik)
+
+Untuk provider berbasis webhook (Telegram, Slack, dll.):
+
+<Tabs>
+<TabItem label="Ngrok">
+
+```bash
+# Instal
+brew install ngrok/ngrok/ngrok  # macOS
+# atau download dari https://ngrok.com/download
+
+# Konfigurasi
+ngrok config add-authtoken TOKEN_ANDA
+
+# Jalankan
+ngrok http 8080
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+# Instal
+brew install cloudflared  # macOS
+# atau download dari https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/
+
+# Jalankan
+cloudflared tunnel --url http://localhost:8080
+```
+
+</TabItem>
+</Tabs>
+
+## Tool Development
+
+### Pack Builder
+
+Build arsip `.gtpack`:
+
+```bash
+cargo install greentic-pack
+```
+
+### Flow Validator
+
+Validasi definisi flow:
+
+```bash
+cargo install greentic-flow
+```
+
+### Pembuatan Komponen
+
+Buat komponen WASM:
+
+```bash
+cargo install greentic-component
+```
+
+## Memverifikasi Setup Anda
+
+Jalankan perintah berikut untuk memverifikasi semuanya berfungsi:
+
+```bash
+# Cek GTC CLI
+gtc --help
+
+# Cek target Rust WASM
+rustup target list --installed | grep wasm32-wasip2
+
+# Buat dan jalankan bundle tes
+gtc wizard --dry-run
+```
+
+## Pemecahan Masalah
+
+### Masalah Umum
+
+**Error: "wasm32-wasip2 target not found"**
+```bash
+rustup target add wasm32-wasip2
+```
+
+**Error: "Cannot connect to NATS"**
+```bash
+# Jalankan NATS embedded dengan gtc start
+gtc start ./my-bundle --nats on
+```
+
+**Error: "Permission denied"**
+```bash
+# Di Linux/macOS, pastikan binary bisa dieksekusi
+chmod +x /usr/local/bin/gtc
+```
+
+## Langkah Selanjutnya
+
+- [Mulai Cepat](/id/getting-started/quick-start/) - Buat digital worker pertama Anda
+- [Ikhtisar Arsitektur](/id/concepts/architecture/) - Pahami platform

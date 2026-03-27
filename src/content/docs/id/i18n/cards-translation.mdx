@@ -1,0 +1,235 @@
+---
+title: Terjemahan Cards
+description: Menerjemahkan Adaptive Cards dengan i18n
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Greentic mendukung penerjemahan Adaptive Cards ke berbagai bahasa. Anda dapat memilih:
+- **Satu perintah:** `generate --auto-translate` (extract + translate + build)
+- **Langkah demi langkah:** extract → translate → build
+
+## Quick Start (satu perintah)
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards \
+  --out ./my-pack \
+  --name my-pack \
+  --auto-translate \
+  --langs fr,de,ja
+```
+
+Selesai. Pack akan menyertakan `assets/i18n/en.json`, `fr.json`, `de.json`, `ja.json`.
+
+## Workflow Langkah demi Langkah
+
+<Steps>
+
+1. **Buat card**
+
+   ```json title="cards/welcome.json"
+   {
+     "type": "AdaptiveCard",
+     "version": "1.4",
+     "body": [
+       { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+       { "type": "TextBlock", "text": "How can I help you today?" }
+     ],
+     "actions": [
+       { "type": "Action.Submit", "title": "Get Help" },
+       { "type": "Action.Submit", "title": "Contact Support" }
+     ]
+   }
+   ```
+
+2. **Ekstrak string yang dapat diterjemahkan**
+
+   ```bash
+   greentic-cards2pack extract-i18n \
+     --input ./cards \
+     --output i18n/en.json
+   ```
+
+   Output:
+
+   ```json title="i18n/en.json"
+   {
+     "card.welcome.body_0.text": "Welcome!",
+     "card.welcome.body_1.text": "How can I help you today?",
+     "card.welcome.actions_0.title": "Get Help",
+     "card.welcome.actions_1.title": "Contact Support"
+   }
+   ```
+
+3. **Terjemahkan dengan greentic-i18n-translator**
+
+   ```bash
+   greentic-i18n-translator translate \
+     --langs fr,ja \
+     --en i18n/en.json
+   ```
+
+   Perintah ini membuat `i18n/fr.json` dan `i18n/ja.json` di direktori yang sama.
+
+   <Aside type="note">
+   `greentic-i18n-translator` menggunakan Codex CLI untuk penerjemahan. Instal dengan `cargo install greentic-i18n-translator`.
+   </Aside>
+
+4. **Generate pack**
+
+   ```bash
+   greentic-cards2pack generate \
+     --cards ./cards \
+     --out ./my-pack \
+     --name my-pack
+   ```
+
+</Steps>
+
+## Format Key
+
+Key yang diekstrak mengikuti pola:
+
+```
+{prefix}.{cardId}.{json_path}.{field}
+```
+
+| Part | Source | Example |
+|------|--------|---------|
+| `prefix` | Flag `--prefix` (default: `card`) | `card` |
+| `cardId` | Field `greentic.cardId` atau nama file | `welcome` |
+| `json_path` | Posisi dalam struktur card | `body_0`, `actions_1` |
+| `field` | Nama field | `text`, `title`, `label` |
+
+Contoh:
+- `card.welcome.body_0.text` → teks TextBlock pertama
+- `card.welcome.actions_0.title` → title action pertama
+- `card.form.body_1.placeholder` → placeholder elemen body kedua
+- `card.form.body_0_choices_2.title` → title opsi choice ketiga
+
+## Glosarium
+
+Pertahankan konsistensi nama brand dan istilah teknis di seluruh terjemahan:
+
+```json title="glossary.json"
+{
+  "Greentic": "Greentic",
+  "Dashboard": "Dashboard",
+  "CLI": "CLI"
+}
+```
+
+Gunakan dengan salah satu pendekatan:
+
+```bash
+# One command
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de \
+  --glossary glossary.json
+
+# Step by step
+greentic-i18n-translator translate \
+  --langs fr,de \
+  --en i18n/en.json \
+  --glossary glossary.json
+```
+
+## Apa Saja yang Diekstrak
+
+| Field | Source Element |
+|-------|--------------|
+| `text` | TextBlock, RichTextBlock |
+| `title` | Actions, toggle, title fact |
+| `label` | Label input |
+| `placeholder` | Placeholder input |
+| `errorMessage` | Pesan validasi |
+| `altText` | Teks alt gambar |
+| `fallbackText` | Konten fallback |
+| `value` | Nilai fact |
+
+**Dilewati secara otomatis:**
+- String kosong
+- Template Handlebars murni: `{{variable}}`
+- Referensi variabel: `${var}`
+- Pola i18n yang sudah ada: `$t(key)` (kecuali `--include-existing`)
+
+## Penerjemahan Runtime
+
+### Konfigurasikan locale
+
+```yaml title="greentic.demo.yaml"
+i18n:
+  default_locale: "en"
+  locales:
+    en: "assets/i18n/en.json"
+    fr: "assets/i18n/fr.json"
+    ja: "assets/i18n/ja.json"
+```
+
+### Atur locale di flow
+
+```yaml
+- id: set_language
+  type: state
+  config:
+    key: "locale"
+    value: "fr"
+  next: show_welcome
+
+- id: show_welcome
+  type: adaptive-card
+  config:
+    card: "cards/welcome"
+    # Card text automatically resolved based on session locale
+```
+
+## Penanganan Error
+
+Kegagalan terjemahan **tidak fatal**. Jika `greentic-i18n-translator` gagal untuk suatu bahasa:
+- Pack tetap berhasil di-build
+- Peringatan muncul di `.cards2pack/manifest.json`
+- Bundle bahasa Inggris (`en.json`) selalu dibuat
+
+Cek peringatan:
+
+```bash
+cat my-pack/.cards2pack/manifest.json | jq '.warnings[] | select(.kind == "translation")'
+```
+
+## Troubleshooting
+
+### Translator tidak ditemukan
+
+```
+auto-translation failed: failed to execute greentic-i18n-translator
+```
+
+Instal: `cargo install greentic-i18n-translator`
+
+Atau atur path kustom: `export GREENTIC_I18N_TRANSLATOR_BIN=/path/to/translator`
+
+### Terjemahan hilang saat runtime
+
+Jika sebuah key tidak ada di bundle bahasa target, runtime akan fallback ke teks sumber bahasa Inggris.
+
+### Placeholder hilang saat diterjemahkan
+
+Pastikan placeholder Handlebars tetap dipertahankan:
+
+```json
+// Correct
+{ "card.welcome.body_0.text": "Bonjour, {{name}} !" }
+
+// Wrong — placeholder lost
+{ "card.welcome.body_0.text": "Bonjour, nom !" }
+```
+
+## Langkah Berikutnya
+
+- [cards2pack CLI Reference](/id/components/cards2pack/)
+- [I18nId Specification](/id/i18n/i18nid-spec/)
+- [i18n Overview](/id/i18n/overview/)

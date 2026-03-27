@@ -1,0 +1,238 @@
+---
+title: Webhook
+description: HTTP-Webhooks von externen Diensten empfangen
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der Webhook-Events-Provider ermöglicht es Ihrem digitalen Worker, HTTP-Webhooks von externen Diensten wie GitHub, Stripe, Shopify usw. zu empfangen.
+
+## Einrichtung
+
+<Steps>
+
+1. **Provider konfigurieren**
+
+   ```json title="answers.json"
+   {
+     "events-webhook": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app"
+     }
+   }
+   ```
+
+2. **Setup ausführen**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **Webhook registrieren**
+
+   Verwenden Sie die generierte Webhook-URL in Ihrem externen Dienst:
+   ```
+   https://your-domain.com/events/webhook/{tenant}/{event_type}
+   ```
+
+</Steps>
+
+## Konfigurationsoptionen
+
+| Option | Erforderlich | Beschreibung |
+|--------|----------|-------------|
+| `enabled` | Ja | Provider aktivieren/deaktivieren |
+| `public_base_url` | Ja | Öffentliche URL für Webhooks |
+| `secret_header` | Nein | Header-Name für die Signaturvalidierung |
+| `secret_key` | Nein | Geheimer Schlüssel für die Signaturvalidierung |
+
+## Webhook-URL-Format
+
+```
+POST https://your-domain.com/events/webhook/{tenant}/{event_type}
+```
+
+Beispiel:
+```
+POST https://your-domain.com/events/webhook/demo/order.created
+```
+
+## Webhooks verarbeiten
+
+### Einfacher Handler
+
+```yaml title="flows/on_webhook.ygtc"
+name: handle_webhook
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        let data = event.payload;
+        // Process webhook data
+        data
+    next: respond
+
+  - id: respond
+    type: http_response
+    config:
+      status: 200
+      body:
+        success: true
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+### GitHub-Webhook
+
+```yaml
+nodes:
+  - id: check_event
+    type: branch
+    config:
+      conditions:
+        - expression: "headers['x-github-event'] == 'push'"
+          next: handle_push
+        - expression: "headers['x-github-event'] == 'pull_request'"
+          next: handle_pr
+      default: ignore
+
+  - id: handle_push
+    type: script
+    config:
+      script: |
+        let commits = event.payload.commits;
+        format!("Received {} commits", commits.len())
+
+triggers:
+  - type: event
+    event_type: "github"
+    target: check_event
+```
+
+### Stripe-Webhook
+
+```yaml
+nodes:
+  - id: handle_stripe
+    type: branch
+    config:
+      conditions:
+        - expression: "event.payload.type == 'payment_intent.succeeded'"
+          next: payment_success
+        - expression: "event.payload.type == 'payment_intent.failed'"
+          next: payment_failed
+
+triggers:
+  - type: event
+    event_type: "stripe"
+    target: handle_stripe
+```
+
+## Signaturvalidierung
+
+<Aside type="caution">
+Validieren Sie in Produktion immer Webhook-Signaturen, um unbefugte Anfragen zu verhindern.
+</Aside>
+
+### HMAC-Validierung
+
+```json title="answers.json"
+{
+  "events-webhook": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "signatures": {
+      "github": {
+        "header": "X-Hub-Signature-256",
+        "algorithm": "sha256",
+        "secret": "your-github-secret"
+      },
+      "stripe": {
+        "header": "Stripe-Signature",
+        "algorithm": "stripe",
+        "secret": "whsec_xxx"
+      }
+    }
+  }
+}
+```
+
+## Antwortverarbeitung
+
+### Sofortige Antwort
+
+Die meisten Webhook-Provider erwarten eine schnelle Antwort:
+
+```yaml
+- id: ack
+  type: http_response
+  config:
+    status: 200
+  next: async_process  # Process async after responding
+```
+
+### Asynchrone Verarbeitung
+
+Bestätigen Sie bei langlaufenden Aufgaben zuerst den Empfang:
+
+```yaml
+nodes:
+  - id: acknowledge
+    type: http_response
+    config:
+      status: 202
+      body:
+        message: "Processing"
+    next: process_async
+
+  - id: process_async
+    type: async
+    config:
+      flow: "process_webhook_data"
+      payload: "{{event.payload}}"
+```
+
+## Webhooks testen
+
+### Mit curl
+
+```bash
+curl -X POST https://your-domain.com/events/webhook/demo/test \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello from webhook"}'
+```
+
+### Mit dem ngrok-Inspector
+
+```bash
+ngrok http 8080
+# Visit http://localhost:4040 to inspect requests
+```
+
+## Fehlerbehebung
+
+### Webhook nicht empfangen
+
+1. Prüfen Sie, ob die URL korrekt ist
+2. Stellen Sie sicher, dass die öffentliche URL erreichbar ist
+3. Prüfen Sie Firewall-/Security-Group-Einstellungen
+4. Sehen Sie die Logs des externen Dienstes durch
+
+### Signaturvalidierung fehlgeschlagen
+
+1. Prüfen Sie, ob der geheime Schlüssel übereinstimmt
+2. Prüfen Sie, ob der Header-Name korrekt ist
+3. Stellen Sie sicher, dass für die Validierung der rohe Request-Body verwendet wird
+
+## Nächste Schritte
+
+- [Timer-Provider](/de/providers/events/timer/)
+- [Flows-Leitfaden](/de/concepts/flows/)

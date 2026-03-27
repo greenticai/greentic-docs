@@ -1,0 +1,48 @@
+---
+title: Greentic 平台
+description: 基于 WASM component 的多租户平台，用于构建 AI 驱动的数字员工
+template: splash
+hero:
+  tagline: 使用 WebAssembly 构建并运行自主式 agentic 自动化流水线
+  actions:
+    - text: 开始使用
+      link: /zh/getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: 在 GitHub 上查看
+      link: https://github.com/greenticai
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 关键特性
+
+<CardGrid stagger>
+	<Card title="WASM Components" icon="puzzle">
+		使用 WebAssembly (WASI Preview 2) 进行可移植、沙箱化执行。一次构建，到处运行。
+	</Card>
+	<Card title="Multi-Tenant" icon="setting">
+		内置租户隔离，并通过 `TenantCtx` 支持安全、可扩展的部署。
+	</Card>
+	<Card title="Flow-Based Orchestration" icon="random">
+		使用基于 YAML 的 flow 图（`.ygtc` 文件）定义自动化流水线。
+	</Card>
+	<Card title="Provider Ecosystem" icon="external">
+		通过 WASM provider packs 连接 Slack、Teams、Telegram、WhatsApp 等服务。
+	</Card>
+</CardGrid>
+
+## 架构亮点
+
+- **Flows** - 使用 YAML 定义、由 WASM component 节点组成的编排图
+- **Packs** - 带签名的 `.gtpack` 归档，包含 flows、components 和 assets
+- **Components** - 实现 Greentic WIT 接口的可移植 WASM 构建块
+- **Providers** - 连接外部服务的 WASM components（消息、事件、secrets）
+
+## 快速链接
+
+- [快速开始指南](/zh/getting-started/quick-start/) - 几分钟内完成启动运行
+- [核心概念](/zh/concepts/architecture/) - 了解平台架构
+- [GTC CLI 参考](/zh/cli/overview/) - 掌握命令行工具
+- [消息 Providers](/zh/providers/messaging/overview/) - 连接你的消息渠道

@@ -1,0 +1,200 @@
+---
+title: Ringkasan Arsitektur
+description: Pahami arsitektur platform Greentic
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Arsitektur Tingkat Tinggi
+
+Greentic mengikuti arsitektur berlapis dengan pemisahan tanggung jawab yang jelas:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Messaging Channels                    │
+│         (Slack, Teams, Telegram, WhatsApp, WebChat)     │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Gateway (HTTP/NATS)                    │
+│                 Public Endpoint Router                   │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    greentic-runner                       │
+│           (Production Runtime Host)                      │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │              Flow Executor                       │    │
+│  │         (Wasmtime Component Model)              │    │
+│  └─────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           Session Manager                        │    │
+│  │         (Memory / Redis)                         │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    WASM Components                       │
+│    (Flows, Providers, MCP Tools, Custom Components)     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Komponen Inti
+
+<CardGrid>
+  <Card title="greentic-runner" icon="rocket">
+    Runtime produksi utama yang meng-host dan mengeksekusi flow, mengelola session, dan mengoordinasikan semua layanan platform.
+  </Card>
+  <Card title="greentic-flow" icon="random">
+    Definisi skema flow, intermediate representation (IR), loader, dan validator untuk file `.ygtc`.
+  </Card>
+  <Card title="greentic-pack" icon="puzzle">
+    CLI pack builder untuk membuat arsip `.gtpack` bertanda tangan yang berisi flow, komponen, dan aset.
+  </Card>
+  <Card title="greentic-component" icon="setting">
+    CLI authoring komponen dan utilitas runtime untuk membangun komponen WASM.
+  </Card>
+</CardGrid>
+
+## Runtime Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **WASM Runtime** | Wasmtime v41 | Eksekusi component model |
+| **Async Runtime** | Tokio v1 | Async I/O, penjadwalan task |
+| **HTTP Server** | Axum v0.8 | REST API, webhook |
+| **Message Bus** | NATS | Distribusi event, pub/sub |
+| **Session Store** | Memory/Redis | Persistensi state flow |
+| **Secrets** | AWS/Azure/GCP/Vault | Manajemen kredensial |
+
+## Alur Data
+
+### Alur Pesan Masuk
+
+```
+1. External Message (e.g., Slack)
+   │
+2. Webhook Handler (Provider Ingress)
+   │
+3. NATS: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+   │
+4. Flow Router (tenant/team resolution)
+   │
+5. Flow Executor (WASM component execution)
+   │
+6. Session State Update
+   │
+7. Reply/Action Nodes
+   │
+8. NATS: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+   │
+9. Provider Egress → External Service
+```
+
+### Alur Pemuatan Pack
+
+```
+1. Bundle Configuration (greentic.demo.yaml)
+   │
+2. Pack Resolver (local/OCI registry)
+   │
+3. Signature Verification (ed25519-dalek)
+   │
+4. CBOR Metadata Parsing
+   │
+5. WASM Component Instantiation
+   │
+6. WIT Interface Binding
+   │
+7. Runtime Registration
+```
+
+## Model Multi-Tenancy
+
+Greentic mengimplementasikan isolasi tenant di setiap lapisan:
+
+```
+Tenant
+  └── Environment (prod, staging, dev)
+        └── Team
+              └── Channel (messaging provider instance)
+                    └── Session (user conversation state)
+```
+
+### TenantCtx
+
+Struct `TenantCtx` mengalir melalui semua operasi:
+
+```rust
+pub struct TenantCtx {
+    pub tenant_id: String,
+    pub env_id: String,
+    pub team_id: Option<String>,
+}
+```
+
+## Arsitektur Antarmuka WIT
+
+Greentic menggunakan spesifikasi **WebAssembly Interface Types (WIT)** untuk mendefinisikan antarmuka komponen:
+
+```wit
+// greentic-interfaces/wit/component.wit
+package greentic:component;
+
+interface types {
+    record message {
+        id: string,
+        content: string,
+        sender: string,
+        timestamp: u64,
+    }
+
+    record outcome {
+        success: bool,
+        data: option<string>,
+        error: option<string>,
+    }
+}
+
+world component {
+    import types;
+    export execute: func(input: types.message) -> types.outcome;
+}
+```
+
+## Dependensi Layanan
+
+```
+greentic-types  ─────────────────────────── (foundation)
+    ↑
+greentic-telemetry
+greentic-interfaces ← greentic-types
+greentic-config ← greentic-types
+    ↑
+greentic-session ← greentic-types
+greentic-state ← greentic-types + greentic-interfaces
+greentic-flow ← greentic-interfaces + greentic-types
+    ↑
+greentic-pack ← greentic-flow + greentic-types
+greentic-component ← greentic-interfaces + greentic-types
+greentic-mcp ← greentic-interfaces + greentic-types
+    ↑
+greentic-runner ← ALL of the above
+```
+
+## Observability
+
+Greentic menggunakan **OpenTelemetry** untuk distributed tracing dan metrics:
+
+- **Tracing**: OTLP exporter untuk korelasi trace terdistribusi
+- **Metrics**: Waktu eksekusi flow, throughput pesan, tingkat error
+- **Logging**: Structured logging dengan trace context
+
+## Langkah Berikutnya
+
+- [Flows](/id/concepts/flows/) - Pelajari definisi flow
+- [Packs](/id/concepts/packs/) - Pahami struktur pack
+- [Components](/id/concepts/components/) - Bangun komponen WASM kustom

@@ -1,0 +1,349 @@
+---
+title: gtc start
+description: 启动 Greentic runtime 服务器
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概述
+
+`gtc start` 命令会启动 Greentic runtime 服务器。它会启动所有必要服务，包括 HTTP 服务器、NATS 总线和 flow 执行器。
+
+## 用法
+
+```bash
+gtc start [OPTIONS] <BUNDLE_PATH>
+```
+
+## 选项
+
+| 选项 | 说明 | 默认值 |
+|--------|-------------|---------|
+| `--host <HOST>` | 绑定地址 | `0.0.0.0` |
+| `--port <PORT>` | HTTP 端口 | `8080` |
+| `--cloudflared <on/off>` | 启用 Cloudflare tunnel | `on` |
+| `--ngrok <on/off>` | 启用 ngrok tunnel | `off` |
+| `--nats <on/off>` | 启用内嵌 NATS | `on` |
+| `--skip-setup` | 跳过 provider setup flows | `false` |
+| `--force-setup` | 强制重新运行 setup flows | `false` |
+| `-v, --verbose` | 启用详细/debug 日志 | `false` |
+| `-q, --quiet` | 最小化输出 | `false` |
+
+## 基本用法
+
+### 使用默认配置启动
+
+```bash
+gtc start ./my-bundle
+```
+
+这会启动：
+- 监听在 `0.0.0.0:8080` 的 HTTP 服务器
+- 内嵌 NATS 服务器
+- Cloudflared tunnel（如果可用）
+
+### 用于开发的启动方式
+
+```bash
+# Use ngrok instead of cloudflared
+gtc start ./my-bundle --cloudflared off --ngrok on
+
+# With verbose logging
+gtc start ./my-bundle --verbose
+
+# Skip setup (if already configured)
+gtc start ./my-bundle --skip-setup
+```
+
+### 用于生产环境的启动方式
+
+```bash
+# No tunnels, external NATS
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Custom port
+gtc start ./my-bundle --port 3000 --cloudflared off
+```
+
+## Tunnel 配置
+
+### Cloudflared（默认）
+
+Cloudflared 会创建一个通往 Cloudflare 网络的安全 tunnel：
+
+```bash
+gtc start ./my-bundle --cloudflared on
+
+# Output:
+# Cloudflare tunnel started: https://random-words.trycloudflare.com
+# Webhook URLs will use: https://random-words.trycloudflare.com
+```
+
+<Aside type="note">
+除非你配置了持久 tunnel，否则 Cloudflared URL 会在每次重启时变化。
+</Aside>
+
+### ngrok
+
+在开发期间使用 ngrok 以获得稳定 URL：
+
+```bash
+gtc start ./my-bundle --ngrok on
+
+# Output:
+# ngrok tunnel started: https://abc123.ngrok-free.app
+# Webhook URLs will use: https://abc123.ngrok-free.app
+```
+
+### 不使用 Tunnel
+
+用于拥有公共域名的生产环境：
+
+```bash
+gtc start ./my-bundle --cloudflared off --ngrok off
+
+# Make sure your server is publicly accessible
+# and update provider webhooks with your domain
+```
+
+## NATS 配置
+
+### 内嵌 NATS（默认）
+
+```bash
+gtc start ./my-bundle --nats on
+
+# Starts embedded NATS on localhost:4222
+```
+
+### 外部 NATS
+
+```bash
+# Disable embedded, use external
+gtc start ./my-bundle --nats off
+
+# Set NATS URL via environment
+GREENTIC_NATS_URL=nats://nats.example.com:4222 gtc start ./my-bundle --nats off
+```
+
+## Setup Flow 行为
+
+### 默认行为
+
+默认情况下，如果 providers 尚未配置，`gtc start` 会运行 setup flows：
+
+```bash
+gtc start ./my-bundle
+# Runs setup flows for unconfigured providers
+```
+
+### 跳过 Setup
+
+完全跳过 setup flows（使用现有配置）：
+
+```bash
+gtc start ./my-bundle --skip-setup
+```
+
+### 强制 Setup
+
+强制重新运行所有 setup flows（在 URL 变更后很有用）：
+
+```bash
+gtc start ./my-bundle --force-setup
+```
+
+## Runtime 端点
+
+运行时，服务器会暴露以下端点：
+
+| 端点 | 用途 |
+|----------|---------|
+| `GET /health` | 健康检查 |
+| `GET /ready` | 就绪探针 |
+| `POST /webhook/{provider}/{tenant}/{team}` | Provider webhooks |
+| `GET /api/v1/sessions` | 会话管理 |
+| `POST /api/v1/messages` | 发送消息 |
+| `GET /auth/config` | OAuth 配置端点 |
+| `POST /oauth/token-exchange` | 服务端 OIDC token exchange 代理 |
+
+### 健康检查示例
+
+```bash
+curl http://localhost:8080/health
+# {"status": "healthy"}
+```
+
+### OAuth 支持
+
+Runtime 为需要用户认证的消息 provider（如 WebChat 或 Teams）提供两个 OAuth/OIDC 集成端点。
+
+#### `GET /auth/config`
+
+从 secrets store 读取 OAuth 配置并返回给客户端。客户端使用此端点发现发起授权流程所需的身份提供商设置。
+
+```bash
+curl http://localhost:8080/auth/config
+# {
+#   "authority": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+#   "client_id": "your-client-id",
+#   "redirect_uri": "https://your-public-url/auth/callback",
+#   "scope": "openid profile"
+# }
+```
+
+#### `POST /oauth/token-exchange`
+
+这是一个用于 OIDC 授权码交换的服务端 token exchange 代理。它允许客户端在不直接从前端调用身份提供商 token 端点的情况下交换授权码，从而避免浏览器 CORS 限制。
+
+```bash
+curl -X POST http://localhost:8080/oauth/token-exchange \
+  -H "Content-Type: application/json" \
+  -d '{"code": "authorization_code_here", "redirect_uri": "https://your-public-url/auth/callback"}'
+```
+
+<Aside type="tip">
+该 token exchange 代理使浏览器无需直接联系身份提供商的 token 端点，否则这类请求通常会因多数身份提供商实施的 CORS 策略而失败。
+</Aside>
+
+### 静态路由
+
+静态路由（例如健康检查和 OAuth 端点）无需显式 public base URL 即可配置。这意味着即使 tunnel 或 public URL 尚未建立，这些端点也会在服务器启动后立即可用。
+
+<Aside type="note">
+Provider webhook 端点仍然需要 public base URL，以便外部服务可以访问服务器。静态路由仅限本地，不依赖 tunnel 可用性。
+</Aside>
+
+## 日志
+
+### 日志级别
+
+```bash
+# Debug (most verbose)
+GREENTIC_LOG_LEVEL=debug gtc start ./my-bundle
+
+# Info (default)
+GREENTIC_LOG_LEVEL=info gtc start ./my-bundle
+
+# Warning
+GREENTIC_LOG_LEVEL=warn gtc start ./my-bundle
+```
+
+### Verbose 模式
+
+```bash
+gtc start ./my-bundle --verbose
+
+# Equivalent to GREENTIC_LOG_LEVEL=debug
+```
+
+### 日志格式
+
+```bash
+# JSON format (for production)
+GREENTIC_LOG_FORMAT=json gtc start ./my-bundle
+
+# Pretty format (for development, default)
+GREENTIC_LOG_FORMAT=pretty gtc start ./my-bundle
+```
+
+## 信号
+
+| 信号 | 行为 |
+|--------|----------|
+| `SIGTERM` | 优雅关闭 |
+| `SIGINT` (Ctrl+C) | 优雅关闭 |
+| `SIGHUP` | 重新加载配置 |
+
+## 环境变量
+
+| 变量 | 说明 |
+|----------|-------------|
+| `GREENTIC_HOST` | 绑定地址 |
+| `GREENTIC_PORT` | HTTP 端口 |
+| `GREENTIC_LOG_LEVEL` | 日志详细程度 |
+| `GREENTIC_LOG_FORMAT` | 日志格式（json/pretty） |
+| `GREENTIC_NATS_URL` | 外部 NATS URL |
+| `GREENTIC_REDIS_URL` | 用于 sessions 的 Redis URL |
+
+## 故障排查
+
+### 端口已被占用
+
+```
+Error: Address already in use (os error 48)
+```
+
+另一个进程正在使用端口 8080。停止该进程或使用其他端口：
+
+```bash
+gtc start ./my-bundle --port 3000
+```
+
+### NATS 连接失败
+
+```
+Error: Failed to connect to NATS
+```
+
+如果使用外部 NATS，请确保它正在运行且可访问。否则请启用内嵌 NATS：
+
+```bash
+gtc start ./my-bundle --nats on
+```
+
+### Tunnel 启动失败
+
+```
+Error: Failed to start cloudflared tunnel
+```
+
+安装 cloudflared，或改用 ngrok：
+
+```bash
+# Install cloudflared
+brew install cloudflared
+
+# Or use ngrok
+gtc start ./my-bundle --cloudflared off --ngrok on
+```
+
+### Provider Setup 失败
+
+```
+Error: Setup flow failed for messaging-telegram
+```
+
+检查 answers 文件中的凭据，并确保 public URL 可访问：
+
+```bash
+# Re-run setup
+gtc start ./my-bundle --force-setup --verbose
+```
+
+## Docker 部署
+
+```dockerfile title="Dockerfile"
+FROM rust:1.90 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/gtc /usr/local/bin/
+COPY my-bundle /app/bundle
+WORKDIR /app
+EXPOSE 8080
+CMD ["gtc", "start", "/app/bundle", "--cloudflared", "off"]
+```
+
+```bash
+docker build -t my-worker .
+docker run -p 8080:8080 my-worker
+```
+
+## 下一步
+
+- [Building Packs](/zh/cli/building-packs/) - 创建和管理 packs
+- [Configuration Reference](/zh/reference/configuration/) - 完整配置选项
+- [Troubleshooting Guide](/zh/reference/troubleshooting/) - 常见问题

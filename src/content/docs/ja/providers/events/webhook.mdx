@@ -1,0 +1,238 @@
+---
+title: Webhook
+description: 外部サービスから HTTP webhook を受信する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+Webhook events provider を使うと、digital worker は GitHub、Stripe、Shopify などの外部サービスから HTTP webhook を受信できます。
+
+## セットアップ
+
+<Steps>
+
+1. **provider を設定する**
+
+   ```json title="answers.json"
+   {
+     "events-webhook": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app"
+     }
+   }
+   ```
+
+2. **セットアップを実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **Webhook を登録する**
+
+   外部サービスで、生成された webhook URL を使用します:
+   ```
+   https://your-domain.com/events/webhook/{tenant}/{event_type}
+   ```
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `public_base_url` | Yes | webhook 用の公開 URL |
+| `secret_header` | No | 署名検証に使う header 名 |
+| `secret_key` | No | 署名検証に使う secret key |
+
+## Webhook URL 形式
+
+```
+POST https://your-domain.com/events/webhook/{tenant}/{event_type}
+```
+
+例:
+```
+POST https://your-domain.com/events/webhook/demo/order.created
+```
+
+## Webhook の処理
+
+### 基本ハンドラー
+
+```yaml title="flows/on_webhook.ygtc"
+name: handle_webhook
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        let data = event.payload;
+        // Process webhook data
+        data
+    next: respond
+
+  - id: respond
+    type: http_response
+    config:
+      status: 200
+      body:
+        success: true
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+### GitHub Webhook
+
+```yaml
+nodes:
+  - id: check_event
+    type: branch
+    config:
+      conditions:
+        - expression: "headers['x-github-event'] == 'push'"
+          next: handle_push
+        - expression: "headers['x-github-event'] == 'pull_request'"
+          next: handle_pr
+      default: ignore
+
+  - id: handle_push
+    type: script
+    config:
+      script: |
+        let commits = event.payload.commits;
+        format!("Received {} commits", commits.len())
+
+triggers:
+  - type: event
+    event_type: "github"
+    target: check_event
+```
+
+### Stripe Webhook
+
+```yaml
+nodes:
+  - id: handle_stripe
+    type: branch
+    config:
+      conditions:
+        - expression: "event.payload.type == 'payment_intent.succeeded'"
+          next: payment_success
+        - expression: "event.payload.type == 'payment_intent.failed'"
+          next: payment_failed
+
+triggers:
+  - type: event
+    event_type: "stripe"
+    target: handle_stripe
+```
+
+## 署名検証
+
+<Aside type="caution">
+本番環境では、必ず webhook の署名を検証して不正なリクエストを防いでください。
+</Aside>
+
+### HMAC 検証
+
+```json title="answers.json"
+{
+  "events-webhook": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "signatures": {
+      "github": {
+        "header": "X-Hub-Signature-256",
+        "algorithm": "sha256",
+        "secret": "your-github-secret"
+      },
+      "stripe": {
+        "header": "Stripe-Signature",
+        "algorithm": "stripe",
+        "secret": "whsec_xxx"
+      }
+    }
+  }
+}
+```
+
+## レスポンス処理
+
+### 即時レスポンス
+
+多くの webhook provider は素早いレスポンスを期待します:
+
+```yaml
+- id: ack
+  type: http_response
+  config:
+    status: 200
+  next: async_process  # Process async after responding
+```
+
+### 非同期処理
+
+長時間かかる処理では、先に受領応答を返します:
+
+```yaml
+nodes:
+  - id: acknowledge
+    type: http_response
+    config:
+      status: 202
+      body:
+        message: "Processing"
+    next: process_async
+
+  - id: process_async
+    type: async
+    config:
+      flow: "process_webhook_data"
+      payload: "{{event.payload}}"
+```
+
+## Webhook のテスト
+
+### curl を使う
+
+```bash
+curl -X POST https://your-domain.com/events/webhook/demo/test \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello from webhook"}'
+```
+
+### ngrok inspector を使う
+
+```bash
+ngrok http 8080
+# Visit http://localhost:4040 to inspect requests
+```
+
+## トラブルシューティング
+
+### Webhook を受信できない
+
+1. URL が正しいことを確認する
+2. 公開 URL にアクセスできることを確認する
+3. firewall / security group を確認する
+4. 外部サービスの log を確認する
+
+### 署名検証に失敗する
+
+1. secret key が一致していることを確認する
+2. header 名が正しいことを確認する
+3. 検証に raw body を使っていることを確認する
+
+## 次のステップ
+
+- [Timer Provider](/ja/providers/events/timer/)
+- [Flows Guide](/ja/concepts/flows/)

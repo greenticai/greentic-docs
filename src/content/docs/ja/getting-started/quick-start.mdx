@@ -1,0 +1,147 @@
+---
+title: クイックスタート
+description: 最初の Greentic digital worker を数分で起動する
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+このガイドは、基本的な Greentic digital worker をローカルで起動するのに役立ちます。
+
+## 前提条件
+
+開始前に、次を用意してください:
+
+- **Rust** 1.90 以降 (`rustup default 1.90`)
+- **Node.js** 18+ (frontend tools 用)
+- repository を clone するための **Git**
+
+## インストール
+
+<Steps>
+
+1. **GTC CLI をインストールする**
+
+   ```bash
+   cargo install greentic-cli
+   ```
+
+   または source から build します:
+
+   ```bash
+   git clone https://github.com/greenticai/greentic.git
+   cd greentic/greentic
+   cargo build --release
+   ```
+
+2. **新しい bundle を作成する**
+
+   wizard を使って、希望する configuration を持つ新しい bundle を作成します:
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+   または対話形式で実行します:
+
+   ```bash
+   gtc wizard
+   ```
+
+3. **provider を設定する**
+
+   messaging provider (例: Telegram、Slack) をセットアップします:
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+   非対話の setup では、answers file を使います:
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **runtime を起動する**
+
+   digital worker を起動します:
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## 例: Hello World Flow
+
+メッセージに応答する単純な flow を作成します:
+
+```yaml title="flows/hello.ygtc"
+name: hello_world
+version: "1.0"
+description: A simple greeting flow
+
+nodes:
+  - id: greet
+    type: reply
+    config:
+      message: "Hello! I'm your digital worker."
+
+triggers:
+  - type: message
+    pattern: "hello"
+    target: greet
+```
+
+## Bundle Structure
+
+一般的な Greentic bundle は次のようになります:
+
+```
+my-bundle/
+├── greentic.demo.yaml      # Main configuration
+├── providers/
+│   └── messaging/
+│       └── messaging-telegram.gtpack
+├── apps/
+│   └── my-app/
+│       └── flows/
+│           └── on_message.ygtc
+└── seeds.yaml              # Seed data (optional)
+```
+
+## Configuration File
+
+メインの configuration file (`greentic.demo.yaml`) はセットアップ内容を定義します:
+
+```yaml title="greentic.demo.yaml"
+name: my-digital-worker
+version: "1.0"
+
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+
+apps:
+  my-app:
+    path: "apps/my-app"
+    default_flow: "on_message"
+
+tenants:
+  demo:
+    name: Demo Tenant
+    teams:
+      default:
+        channels:
+          telegram:
+            provider: messaging-telegram
+```
+
+## 次のステップ
+
+基本セットアップが動いたら、次に進みます:
+
+- [Flows について学ぶ](/ja/concepts/flows/) - flow definition を理解する
+- [Telegram を設定する](/ja/providers/messaging/telegram/) - Telegram bot をセットアップする
+- [Slack を設定する](/ja/providers/messaging/slack/) - Slack workspace に接続する
+- [カスタム components を構築する](/ja/concepts/components/) - 独自の WASM component を作成する

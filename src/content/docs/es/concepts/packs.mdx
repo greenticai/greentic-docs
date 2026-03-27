@@ -1,0 +1,362 @@
+---
+title: Packs
+description: Comprender los packs de Greentic - archivos firmados y portátiles para distribuir flows, componentes y assets
+---
+
+import { Aside, Card, CardGrid, FileTree, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Un **Pack** (`.gtpack`) es un archivo autocontenido y firmado que agrupa todo lo necesario para desplegar una capacidad en la plataforma Greentic: flows, componentes WASM, assets y metadatos. Los packs son la unidad principal de distribución y despliegue en Greentic.
+
+## ¿Por qué packs?
+
+Greentic está diseñado en torno a un **modelo de extensión dinámica**: todo lo que no forma parte del núcleo de la plataforma se entrega como un pack. Esto significa que la plataforma puede ampliarse sin recompilar ni volver a desplegar el runtime principal.
+
+<CardGrid>
+  <Card title="Portátil" icon="rocket">
+    Entrega funciones completas como un solo archivo `.gtpack`. No hay resolución de dependencias en el momento del despliegue: todo viene incluido.
+  </Card>
+  <Card title="Seguro" icon="approve-check">
+    Cada pack tiene hash de contenido (BLAKE3) y firma (Ed25519). El runtime verifica la integridad y autenticidad antes de cargarlo.
+  </Card>
+  <Card title="Versionado" icon="list-format">
+    El versionado semántico rastrea la compatibilidad. Las restricciones de dependencias se declaran en el manifiesto y se resuelven en tiempo de build.
+  </Card>
+  <Card title="Aislado" icon="setting">
+    Los componentes WASM dentro de los packs se ejecutan en un entorno WASI Preview 2 aislado con permisos de capacidades explícitos.
+  </Card>
+</CardGrid>
+
+## Estructura de un pack
+
+Un archivo `.gtpack` es un archivo estructurado que contiene el siguiente layout:
+
+<FileTree>
+- my-feature.gtpack
+  - manifest.cbor Metadatos del pack (nombre, versión, capacidades, firmas)
+  - flows/
+    - main.ygtc Flow principal de orquestación
+    - helpers.ygtc Subflow reutilizable
+    - setup.ygtc Flow de aprovisionamiento / setup
+  - components/
+    - processor.wasm Componente WASM (wasm32-wasip2)
+  - assets/
+    - templates/
+      - welcome.hbs Plantilla Handlebars
+    - cards/
+      - greeting.json Definición de Adaptive Card
+    - i18n/
+      - en.json Strings de localización
+      - id.json
+  - sbom.json Software Bill of Materials
+  - signature.sig Firma Ed25519 sobre el hash de contenido
+</FileTree>
+
+| Entrada | Formato | Propósito |
+|-------|--------|-----------|
+| `manifest.cbor` | CBOR | Identidad del pack, capacidades, grafo de dependencias, índice de flows/componentes/assets |
+| `flows/*.ygtc` | YAML | Grafos de orquestación que definen la lógica de ejecución |
+| `components/*.wasm` | WASM (wasm32-wasip2) | Módulos de código portátiles y aislados |
+| `assets/` | Cualquiera | Plantillas, cards, paquetes i18n, imágenes y otros recursos estáticos |
+| `sbom.json` | SPDX/CycloneDX | Software Bill of Materials para auditorías de la cadena de suministro |
+| `signature.sig` | Ed25519 | Firma criptográfica sobre el hash de contenido BLAKE3 |
+
+## Tipos de packs
+
+Greentic usa un sistema de tipos **basado en capacidades** para clasificar packs. El ID de capacidad en el manifiesto determina cómo trata el runtime a un pack.
+
+### Packs de provider
+
+Los packs de provider conectan servicios externos (plataformas de mensajería, fuentes de eventos, almacenes de secrets) con el runtime de Greentic. Cada pack de provider suele incluir componentes WASM de ingress, egress y operator, además de flows de setup/verificación.
+
+```toml title="pack.toml — Telegram messaging provider"
+[pack]
+name = "messaging-telegram"
+version = "0.4.6"
+description = "Telegram messaging provider for Greentic"
+authors = ["Greentic <team@greentic.ai>"]
+
+[capabilities]
+id = "greentic.cap.messaging.provider.v1"
+provides = ["telegram"]
+
+[flows]
+setup_default = "flows/setup.ygtc"
+verify_webhooks = "flows/verify.ygtc"
+
+[components]
+ingress = "components/messaging-ingress-telegram.wasm"
+egress = "components/messaging-provider-telegram.wasm"
+operator = "components/telegram.wasm"
+
+[secrets]
+required = ["telegram_bot_token"]
+optional = ["public_base_url"]
+```
+
+<Aside>
+Los packs de provider siguen una convención de nombres: `messaging-{platform}` para providers de mensajería, `events-{source}` para providers de eventos.
+</Aside>
+
+### Packs de aplicación
+
+Los packs de aplicación contienen la lógica de negocio: el "trabajador digital" real que procesa mensajes, maneja eventos y orquesta acciones.
+
+```toml title="pack.toml — Customer service application"
+[pack]
+name = "customer-service"
+version = "1.0.0"
+description = "AI-powered customer service digital worker"
+authors = ["Your Team <team@example.com>"]
+
+[capabilities]
+id = "greentic.cap.app.v1"
+provides = ["customer-service"]
+
+[dependencies]
+greentic-templates = "^0.4"
+greentic-llm-openai = "^0.4"
+
+[flows]
+on_message = "flows/on_message.ygtc"
+on_escalation = "flows/escalation.ygtc"
+
+[components]
+classifier = "components/intent-classifier.wasm"
+
+[assets]
+cards = "assets/cards/"
+templates = "assets/templates/"
+i18n = "assets/i18n/"
+```
+
+### Packs de componentes
+
+Los packs de componentes proporcionan bloques WASM reutilizables de los que otros packs pueden depender. No contienen flows, solo componentes y su configuración.
+
+```toml title="pack.toml — OpenAI LLM component"
+[pack]
+name = "llm-openai"
+version = "0.4.6"
+description = "OpenAI-compatible LLM component for Greentic"
+
+[capabilities]
+id = "greentic.cap.component.v1"
+provides = ["llm"]
+
+[components]
+llm = "components/llm-openai.wasm"
+
+[config]
+default_model = "gpt-4"
+max_tokens = 4096
+```
+
+## Crear un pack
+
+<Steps>
+1. **Configura la estructura de directorios**
+
+   ```bash
+   mkdir -p my-pack/{flows,components,assets}
+   ```
+
+2. **Escribe el manifiesto**
+
+   Crea un `pack.toml` (o `pack.yaml`) en la raíz del directorio de tu pack:
+
+   ```toml title="my-pack/pack.toml"
+   [pack]
+   name = "my-feature"
+   version = "1.0.0"
+   description = "A feature pack for handling customer inquiries"
+   authors = ["Your Name <you@example.com>"]
+
+   [capabilities]
+   id = "greentic.cap.app.v1"
+   provides = ["customer-service"]
+
+   [dependencies]
+   greentic-templates = "^0.4"
+
+   [flows]
+   main = "flows/main.ygtc"
+   setup = "flows/setup.ygtc"
+
+   [components]
+   processor = "components/processor.wasm"
+
+   [assets]
+   templates = "assets/templates/"
+   cards = "assets/cards/"
+   ```
+
+3. **Agrega tus flows**
+
+   Escribe flows de orquestación en formato `.ygtc` (YAML) dentro de `flows/`. Consulta la [guía de Flows](/es/concepts/flows/) para ver el esquema completo.
+
+4. **Agrega componentes WASM**
+
+   Compila tus componentes apuntando a `wasm32-wasip2` y coloca los archivos `.wasm` en `components/`:
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   cp target/wasm32-wasip2/release/processor.wasm my-pack/components/
+   ```
+
+5. **Construye el pack**
+
+   ```bash
+   # Using the pack builder CLI
+   greentic-pack build ./my-pack
+
+   # Or with the GTC CLI
+   gtc pack build ./my-pack
+
+   # Output: my-feature-1.0.0.gtpack
+   ```
+
+6. **Firma el pack**
+
+   ```bash
+   # Generate a signing key pair (one-time)
+   greentic-pack keygen --output my-key.pem
+
+   # Sign the pack
+   greentic-pack sign my-feature-1.0.0.gtpack --key my-key.pem
+
+   # Verify the signature
+   greentic-pack verify my-feature-1.0.0.gtpack --pubkey my-key.pub
+   ```
+</Steps>
+
+## Uso de packs
+
+### En un bundle
+
+Haz referencia a los packs en la configuración de tu bundle para desplegarlos:
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+apps:
+  customer-service:
+    pack: "apps/customer-service.gtpack"
+    default_flow: "on_message"
+```
+
+### Instalación desde un registro OCI
+
+Los packs se distribuyen como artefactos OCI a través de registros de contenedores (por ejemplo, GHCR):
+
+```bash
+# Pull a pack from the registry
+gtc pack pull ghcr.io/greentic/messaging-telegram:0.4.6
+
+# Or reference directly in your bundle config
+providers:
+  messaging-telegram:
+    pack: "oci://ghcr.io/greentic/messaging-telegram:0.4.6"
+```
+
+## Validación de packs
+
+<Aside type="caution">
+Valida siempre los packs antes del despliegue. Flows no válidos o componentes faltantes provocarán fallos en runtime.
+</Aside>
+
+```bash
+# Validate pack structure and manifest
+greentic-pack validate ./my-pack.gtpack
+
+# Validate all flows within the pack
+greentic-flow doctor --pack ./my-pack.gtpack
+
+# Full verification (signature + content integrity + flow validation)
+greentic-pack verify --full ./my-pack.gtpack
+```
+
+## Metadatos del pack (CBOR)
+
+El archivo `manifest.cbor` es el descriptor legible por máquina del pack, codificado en [CBOR](https://cbor.io/) para una serialización binaria compacta. Contiene el índice completo de flows, componentes y assets, además de declaraciones de capacidades y restricciones de dependencias.
+
+```rust title="Manifest structure (Rust representation)"
+struct PackManifest {
+    name: String,
+    version: String,
+    description: String,
+    authors: Vec<String>,
+    capabilities: Capabilities,
+    flows: HashMap<String, FlowEntry>,
+    components: HashMap<String, ComponentEntry>,
+    assets: HashMap<String, AssetEntry>,
+    dependencies: HashMap<String, VersionReq>,
+    config: HashMap<String, ConfigValue>,
+    signatures: Vec<Signature>,
+}
+```
+
+## Modelo de seguridad
+
+Los packs de Greentic aplican un modelo de seguridad por capas: integridad de contenido, autenticidad y sandboxing por capacidades.
+
+### Hashing de contenido
+
+Cada archivo del pack se hashea individualmente con [BLAKE3](https://github.com/BLAKE3-team/BLAKE3). El hash global del pack es un digest de estilo Merkle:
+
+```text
+pack-hash = blake3(
+    manifest_hash ||
+    flows_hash ||
+    components_hash ||
+    assets_hash
+)
+```
+
+Esto garantiza que cualquier modificación, incluso un solo byte, se detecte en el momento de la carga.
+
+### Verificación de firmas
+
+Los packs se firman con claves [Ed25519](https://ed25519.cr.yp.to/). El runtime verifica automáticamente las firmas antes de cargar cualquier pack:
+
+```bash
+# Manual verification
+greentic-pack verify my-pack.gtpack --pubkey trusted-keys/publisher.pub
+```
+
+### Publicadores de confianza
+
+Configura qué claves de firma acepta el runtime:
+
+```toml title="greentic.toml"
+[security]
+trusted_publishers = [
+    "greentic-official.pub",
+    "my-org.pub",
+]
+reject_unsigned = true
+```
+
+<Aside type="danger">
+Se desaconseja firmemente establecer `reject_unsigned = false` en producción. Los packs sin firma omiten todas las comprobaciones de autenticidad.
+</Aside>
+
+## Buenas prácticas
+
+1. **Versiona semánticamente** — usa [semver](https://semver.org/) para que los consumidores puedan declarar rangos de versiones compatibles
+2. **Un pack, un propósito** — mantén los packs enfocados en una sola función o provider
+3. **Declara todas las dependencias** — enumera cada capacidad que requiere tu pack
+4. **Incluye un SBOM** — habilita auditorías de seguridad posteriores y cumplimiento de licencias
+5. **Firma cada release** — nunca despliegues packs sin firmar en producción
+6. **Valida antes de publicar** — ejecuta `greentic-pack verify --full` en tu pipeline de CI
+7. **Usa IDs de capacidad de forma consistente** — sigue la convención `greentic.cap.{category}.v{N}`
+
+## Siguientes pasos
+
+- [Componentes](/es/concepts/components/) — aprende a construir componentes WASM para packs
+- [Construcción de Packs](/es/cli/building-packs/) — comandos CLI para gestionar packs
+- [Referencia del formato de Pack](/es/reference/pack-format/) — especificación completa de `.gtpack`
+- [Flujos](/es/concepts/flows/) — escribe flows de orquestación para tus packs

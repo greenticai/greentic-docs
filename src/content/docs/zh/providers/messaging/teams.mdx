@@ -1,0 +1,355 @@
+---
+title: Microsoft Teams
+description: 将你的数字员工连接到 Microsoft Teams
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概览
+
+Microsoft Teams provider 将你的数字员工集成到 Teams 频道和聊天中。它支持：
+
+- 频道消息
+- 私人聊天
+- 群聊
+- Adaptive Cards
+- 交互组件
+- 文件附件
+
+## 前置条件
+
+- Microsoft 365 tenant
+- Azure AD 管理员权限
+
+## 设置
+
+<Steps>
+
+1. **创建 Azure Bot Registration**
+
+   前往 [Azure Portal](https://portal.azure.com)：
+   - 搜索 “Bot Services”
+   - 点击 “Create”
+   - 填写信息：
+     - Bot handle: your-bot-name
+     - Subscription: your subscription
+     - Resource group: 创建或选择
+     - Pricing: F0（免费）或 S1
+   - 点击 “Create”
+
+2. **配置 Bot Endpoint**
+
+   在你的 Bot Service 中：
+   - 前往 **Configuration**
+   - 设置 **Messaging endpoint**：`https://your-domain.com/webhook/teams/{tenant}/{team}`
+
+3. **获取 App 凭证**
+
+   在 **Configuration** 中：
+   - 复制 **Microsoft App ID**
+   - 点击 Microsoft App ID 旁边的 “Manage”
+   - 创建新的 **Client Secret**
+   - 复制 secret 值（只会显示一次）
+
+4. **启用 Teams Channel**
+
+   在你的 Bot Service 中：
+   - 前往 **Channels**
+   - 点击 **Microsoft Teams**
+   - 接受条款并启用
+
+5. **创建 Teams App Package**
+
+   为你的 Teams app 创建 manifest：
+
+   ```json title="manifest.json"
+   {
+     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+     "manifestVersion": "1.16",
+     "version": "1.0.0",
+     "id": "{{BOT_ID}}",
+     "packageName": "com.yourcompany.supportbot",
+     "developer": {
+       "name": "Your Company",
+       "websiteUrl": "https://yourcompany.com",
+       "privacyUrl": "https://yourcompany.com/privacy",
+       "termsOfUseUrl": "https://yourcompany.com/terms"
+     },
+     "name": {
+       "short": "Support Bot",
+       "full": "Support Bot for Customer Service"
+     },
+     "description": {
+       "short": "Customer support assistant",
+       "full": "AI-powered customer support assistant"
+     },
+     "icons": {
+       "outline": "outline.png",
+       "color": "color.png"
+     },
+     "accentColor": "#0078D4",
+     "bots": [
+       {
+         "botId": "{{BOT_ID}}",
+         "scopes": ["personal", "team", "groupchat"],
+         "supportsFiles": true,
+         "isNotificationOnly": false
+       }
+     ],
+     "permissions": ["identity", "messageTeamMembers"],
+     "validDomains": ["your-domain.com"]
+   }
+   ```
+
+6. **配置 Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-teams": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "app_id": "your-microsoft-app-id",
+       "app_password": "your-client-secret",
+       "tenant_id": "your-azure-tenant-id"
+     }
+   }
+   ```
+
+7. **运行设置**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+8. **在 Teams 中安装 App**
+
+   - 将 manifest.json 与图标一起打包为 zip
+   - 前往 Teams Admin Center 或直接上传
+   - 安装到你的团队或用户
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | webhook 的公网 URL |
+| `app_id` | 是 | Microsoft App ID |
+| `app_password` | 是 | Client Secret |
+| `tenant_id` | 否 | Azure AD Tenant ID（用于单租户 app） |
+
+## 功能
+
+### 文本消息
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown 格式
+
+Teams 支持部分 Markdown：
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - Bullet 1
+      - Bullet 2
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+Teams 对 Adaptive Card 的支持非常完善：
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "How can I assist you today?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Create Ticket"
+              data:
+                action: "ticket"
+```
+
+### Hero Cards
+
+```yaml
+- id: hero_card
+  type: reply
+  config:
+    hero_card:
+      title: "Support Bot"
+      subtitle: "Your AI Assistant"
+      text: "I can help with technical issues, billing questions, and more."
+      images:
+        - url: "https://example.com/bot-image.png"
+      buttons:
+        - type: messageBack
+          title: "Get Started"
+          text: "get started"
+          displayText: "Getting started..."
+```
+
+### 建议操作（Quick Replies）
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - title: "Check Status"
+        value: "status"
+      - title: "Create Ticket"
+        value: "ticket"
+      - title: "Contact Human"
+        value: "human"
+```
+
+### 文件附件
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - contentType: "application/pdf"
+        contentUrl: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## 处理 Card Actions
+
+```yaml title="flows/on_card_action.ygtc"
+name: handle_card_action
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "data.action == 'help'"
+          next: show_help
+        - expression: "data.action == 'ticket'"
+          next: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: invoke
+    name: "adaptiveCard/action"
+    target: route_action
+```
+
+## 频道配置
+
+### 团队频道
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          teams:
+            provider: messaging-teams
+            config:
+              team_id: "19:xxx@thread.tacv2"
+              channel_id: "19:yyy@thread.tacv2"
+```
+
+### 私人聊天
+
+对于 1:1 私人聊天，不需要额外的频道配置。谁给 bot 发消息，bot 就回复谁。
+
+## 主动消息
+
+无需用户先发起也可以发送消息：
+
+```yaml
+- id: proactive
+  type: reply
+  config:
+    message: "Reminder: Your ticket #123 needs attention"
+    conversation_reference:
+      conversation_id: "{{stored_conversation_id}}"
+      service_url: "{{stored_service_url}}"
+```
+
+<Aside type="note">
+在用户首次与你的 bot 交互时保存 conversation reference，以便后续进行主动消息推送。
+</Aside>
+
+## 故障排查
+
+### Bot 无响应
+
+1. 在 Azure Bot Service 中**检查 endpoint 配置**
+2. **确认 SSL 证书**有效
+3. **检查 app 凭证**是否正确
+4. 在 Azure 中**查看 activity logs**
+
+### `Unauthorized` 错误
+
+- 确认 App ID 和 Password
+- 检查单租户 app 的 tenant ID
+- 确保 bot 已在 Teams channel 中启用
+
+### Card 未渲染
+
+- 使用 [Adaptive Cards Designer](https://adaptivecards.io/designer/) 校验 card JSON
+- 检查 Teams 是否支持该 card 版本
+- 确认所有必填字段都已提供
+
+### 消息延迟
+
+- Teams 可能会批量处理消息；这是正常现象
+- 检查你的服务器性能
+- 确认没有触发速率限制
+
+## 安全
+
+<Aside type="caution">
+始终校验入站请求中的 JWT token，以确认它们来自 Microsoft。
+</Aside>
+
+Greentic 会自动校验：
+- JWT 签名
+- Issuer 和 audience claims
+- Token 过期时间
+
+## 下一步
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - 可视化设计卡片
+- [Slack Provider](/zh/providers/messaging/slack/) - 添加 Slack 集成
+- [WebChat Provider](/zh/providers/messaging/webchat/) - 嵌入到网站中

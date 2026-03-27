@@ -1,0 +1,364 @@
+---
+title: WhatsApp
+description: Hubungkan digital worker Anda ke WhatsApp Business
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider WhatsApp terintegrasi dengan WhatsApp Business API (melalui Meta). Provider ini mendukung:
+
+- Pesan teks
+- Template message
+- Tombol interaktif
+- List message
+- Media (gambar, dokumen, audio, video)
+- Berbagi lokasi
+
+## Prasyarat
+
+- Akun Meta Business
+- Akses WhatsApp Business API
+- Nomor telepon yang terverifikasi
+
+## Penyiapan
+
+<Steps>
+
+1. **Buat Meta App**
+
+   Buka [developers.facebook.com](https://developers.facebook.com):
+   - Buat app baru (tipe Business)
+   - Tambahkan produk WhatsApp
+   - Siapkan WhatsApp Business API
+
+2. **Dapatkan Kredensial API**
+
+   Di dashboard Meta app Anda:
+   - Buka WhatsApp → Getting Started
+   - Salin **Phone Number ID**
+   - Hasilkan dan salin **Permanent Access Token**
+   - Catat **Business Account ID** Anda
+
+3. **Konfigurasikan Webhook**
+
+   Di WhatsApp → Configuration:
+   - Atur Callback URL: `https://your-domain.com/webhook/whatsapp/{tenant}/{team}`
+   - Atur Verify Token (string bebas pilihan Anda)
+   - Subscribe ke: `messages`
+
+4. **Konfigurasikan Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-whatsapp": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "phone_number_id": "123456789012345",
+       "access_token": "EAAxxxxx...",
+       "verify_token": "your-verify-token",
+       "business_account_id": "987654321098765"
+     }
+   }
+   ```
+
+5. **Jalankan Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|--------|----------|-------------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL publik untuk webhook |
+| `phone_number_id` | Ya | WhatsApp phone number ID |
+| `access_token` | Ya | Permanent access token |
+| `verify_token` | Ya | Webhook verification token |
+| `business_account_id` | Tidak | WhatsApp Business Account ID |
+| `api_version` | Tidak | Versi Graph API (default: v18.0) |
+
+## Fitur
+
+### Pesan Teks
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Template Messages
+
+<Aside type="caution">
+WhatsApp mewajibkan template yang telah disetujui sebelumnya untuk memulai percakapan. Template harus disetujui oleh Meta sebelum digunakan.
+</Aside>
+
+```yaml
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "order_confirmation"
+      language: "en"
+      components:
+        - type: body
+          parameters:
+            - type: text
+              text: "{{order_id}}"
+            - type: text
+              text: "{{customer_name}}"
+```
+
+### Tombol Interaktif
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    interactive:
+      type: button
+      body:
+        text: "What would you like to do?"
+      action:
+        buttons:
+          - type: reply
+            reply:
+              id: "help"
+              title: "Get Help"
+          - type: reply
+            reply:
+              id: "status"
+              title: "Check Status"
+          - type: reply
+            reply:
+              id: "human"
+              title: "Talk to Human"
+```
+
+### List Messages
+
+```yaml
+- id: show_menu
+  type: reply
+  config:
+    interactive:
+      type: list
+      header:
+        type: text
+        text: "Support Menu"
+      body:
+        text: "Please select an option:"
+      action:
+        button: "View Options"
+        sections:
+          - title: "Support"
+            rows:
+              - id: "technical"
+                title: "Technical Support"
+                description: "Hardware and software issues"
+              - id: "billing"
+                title: "Billing"
+                description: "Payment and invoices"
+          - title: "Sales"
+            rows:
+              - id: "pricing"
+                title: "Pricing"
+                description: "Product pricing information"
+```
+
+### Kirim Gambar
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    media:
+      type: image
+      link: "https://example.com/product.jpg"
+      caption: "Here's the product image"
+```
+
+### Kirim Dokumen
+
+```yaml
+- id: send_document
+  type: reply
+  config:
+    media:
+      type: document
+      link: "https://example.com/invoice.pdf"
+      filename: "invoice.pdf"
+      caption: "Your invoice is attached"
+```
+
+### Kirim Lokasi
+
+```yaml
+- id: send_location
+  type: reply
+  config:
+    location:
+      latitude: 37.7749
+      longitude: -122.4194
+      name: "Our Office"
+      address: "123 Main St, San Francisco, CA"
+```
+
+## Menangani Klik Tombol
+
+```yaml title="flows/on_button.ygtc"
+name: handle_button
+version: "1.0"
+
+nodes:
+  - id: route_button
+    type: branch
+    config:
+      conditions:
+        - expression: "button.id == 'help'"
+          next: show_help
+        - expression: "button.id == 'status'"
+          next: check_status
+        - expression: "button.id == 'human'"
+          next: escalate
+      default: unknown
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: interactive
+    target: route_button
+```
+
+## Template Message
+
+### Membuat Template
+
+1. Buka Meta Business Suite → WhatsApp Manager → Message Templates
+2. Buat template baru dengan komponen yang diperlukan
+3. Kirim untuk persetujuan (biasanya 24-48 jam)
+
+### Komponen Template
+
+```yaml
+- id: send_notification
+  type: reply
+  config:
+    template:
+      name: "appointment_reminder"
+      language: "en"
+      components:
+        - type: header
+          parameters:
+            - type: image
+              image:
+                link: "https://example.com/logo.png"
+        - type: body
+          parameters:
+            - type: text
+              text: "{{customer_name}}"
+            - type: text
+              text: "{{appointment_time}}"
+        - type: button
+          sub_type: quick_reply
+          index: 0
+          parameters:
+            - type: payload
+              payload: "confirm"
+```
+
+## Jendela 24 Jam
+
+<Aside type="note">
+WhatsApp menerapkan jendela pesan 24 jam. Setelah 24 jam tanpa respons pengguna, Anda harus menggunakan template message.
+</Aside>
+
+### Periksa Status Jendela
+
+```yaml
+- id: check_window
+  type: branch
+  config:
+    conditions:
+      - expression: "last_message_time + 86400 > now"
+        next: send_freeform
+      default: send_template
+
+- id: send_freeform
+  type: reply
+  config:
+    message: "Thanks for your message!"
+
+- id: send_template
+  type: reply
+  config:
+    template:
+      name: "follow_up"
+      language: "en"
+```
+
+## Troubleshooting
+
+### Verifikasi Webhook Gagal
+
+1. Verifikasi `verify_token` sesuai dengan konfigurasi
+2. Periksa URL webhook dapat diakses secara publik
+3. Pastikan HTTPS dikonfigurasi dengan benar
+
+### Pesan Tidak Terkirim
+
+- Periksa format nomor telepon (sertakan kode negara)
+- Verifikasi template sudah disetujui (jika menggunakan template)
+- Periksa status jendela 24 jam
+- Tinjau log webhook Meta
+
+### Rate Limiting
+
+WhatsApp memiliki batas rate berdasarkan quality rating:
+- Tier 1: 1.000 pesan/hari
+- Tier 2: 10.000 pesan/hari
+- Tier 3: 100.000 pesan/hari
+
+Tangani dengan baik:
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_rate_limit: true
+```
+
+## Keamanan
+
+<Aside type="caution">
+Validasi tanda tangan webhook untuk memastikan request berasal dari Meta.
+</Aside>
+
+Greentic memvalidasi:
+- Header X-Hub-Signature-256
+- Hash payload dengan app secret
+
+## Praktik Terbaik
+
+1. **Gunakan template dengan bijak** - Buat template yang serbaguna dan sudah disetujui
+2. **Hormati jendela 24 jam** - Lacak engagement pengguna
+3. **Tangani opt-out** - Hormati permintaan STOP/UNSUBSCRIBE
+4. **Jaga pesan tetap ringkas** - WhatsApp ditujukan untuk komunikasi cepat
+5. **Gunakan media kaya** - Gambar dan dokumen meningkatkan UX
+
+## Langkah Selanjutnya
+
+- [Telegram Provider](/id/providers/messaging/telegram/) - Alternatif messaging
+- [Template Guidelines](https://developers.facebook.com/docs/whatsapp/message-templates/) - Aturan template dari Meta
+- [Flows Guide](/id/concepts/flows/) - Bangun workflow yang kompleks

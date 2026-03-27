@@ -1,0 +1,330 @@
+---
+title: Provider
+description: Provider-Komponenten in Greentic verstehen
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Was ist ein Provider?
+
+Ein **Provider** ist eine WASM-Komponente, die Greentic mit externen Diensten verbindet. Provider übernehmen:
+
+- **Ingress** - Empfangen von Nachrichten/Ereignissen aus externen Systemen
+- **Egress** - Senden von Nachrichten/Ereignissen an externe Systeme
+- **Operations** - Plattformspezifische Funktionen (Buttons, Cards, Threads)
+
+## Provider-Typen
+
+<CardGrid>
+  <Card title="Messaging-Provider" icon="seti:message">
+    Chat-Messaging verarbeiten: Slack, Teams, Telegram, WhatsApp, WebChat, Webex, Email
+  </Card>
+  <Card title="Event-Provider" icon="seti:pulse">
+    Ereignisse verarbeiten: Webhooks, Timer, Email (SendGrid), SMS (Twilio)
+  </Card>
+  <Card title="Secret-Provider" icon="seti:lock">
+    Anmeldedaten verwalten: AWS, Azure, GCP, Vault, Kubernetes
+  </Card>
+  <Card title="State-Provider" icon="seti:db">
+    Daten persistieren: Memory, Redis, PostgreSQL
+  </Card>
+</CardGrid>
+
+## Provider-Architektur
+
+### Messaging-Provider-Fluss
+
+```
+External Service (Slack/Teams/Telegram)
+    │
+    ▼ Webhook
+┌─────────────────┐
+│ Ingress Component │ ← Parse platform-specific format
+└─────────────────┘
+    │
+    ▼ Normalized Message
+┌─────────────────┐
+│   NATS Bus      │ ← greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│ Flow Executor   │ ← Process with flows
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   NATS Bus      │ ← greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+└─────────────────┘
+    │
+    ▼ Platform-specific format
+┌─────────────────┐
+│ Egress Component│ ← Format for platform API
+└─────────────────┘
+    │
+    ▼ API Call
+External Service
+```
+
+## Provider-Pack-Struktur
+
+```
+messaging-telegram.gtpack/
+├── pack.toml
+├── flows/
+│   ├── setup.ygtc        # Provider setup flow
+│   └── verify.ygtc       # Webhook verification
+├── components/
+│   ├── ingress.wasm      # Webhook handler
+│   ├── egress.wasm       # API sender
+│   └── operator.wasm     # Buttons, threads, cards
+└── assets/
+    └── schemas/
+        └── message.json  # Message schema
+```
+
+### Pack-Manifest
+
+```toml title="pack.toml"
+[pack]
+name = "messaging-telegram"
+version = "1.0.0"
+description = "Telegram messaging provider"
+
+[capabilities]
+id = "greentic.cap.messaging.provider.v1"
+provides = ["telegram"]
+
+[flows]
+setup_default = "flows/setup.ygtc"
+verify_webhooks = "flows/verify.ygtc"
+
+[components]
+ingress = "components/ingress.wasm"
+egress = "components/egress.wasm"
+operator = "components/operator.wasm"
+
+[secrets]
+required = ["telegram_bot_token"]
+optional = ["public_base_url"]
+```
+
+## Einen Provider bauen
+
+### 1. Die WIT-Schnittstelle definieren
+
+```wit title="wit/provider.wit"
+package greentic:messaging-provider;
+
+interface ingress {
+    record raw-message {
+        body: list<u8>,
+        headers: list<tuple<string, string>>,
+        query-params: list<tuple<string, string>>,
+    }
+
+    record normalized-message {
+        id: string,
+        channel-id: string,
+        sender-id: string,
+        content: string,
+        timestamp: u64,
+        metadata: option<string>,
+    }
+
+    parse: func(raw: raw-message) -> result<normalized-message, string>;
+}
+
+interface egress {
+    record outbound-message {
+        channel-id: string,
+        content: string,
+        reply-to: option<string>,
+        attachments: list<attachment>,
+    }
+
+    record attachment {
+        type: string,
+        url: option<string>,
+        data: option<list<u8>>,
+    }
+
+    send: func(msg: outbound-message) -> result<string, string>;
+}
+
+world messaging-provider {
+    import greentic:types/core;
+
+    export ingress;
+    export egress;
+}
+```
+
+### 2. Ingress implementieren
+
+```rust title="src/ingress.rs"
+use wit_bindgen::generate;
+
+generate!({
+    world: "messaging-provider",
+    path: "wit",
+});
+
+impl ingress::Guest for TelegramIngress {
+    fn parse(raw: RawMessage) -> Result<NormalizedMessage, String> {
+        // Parse Telegram webhook payload
+        let payload: TelegramUpdate = serde_json::from_slice(&raw.body)
+            .map_err(|e| format!("Parse error: {}", e))?;
+
+        let message = payload.message
+            .ok_or("No message in update")?;
+
+        Ok(NormalizedMessage {
+            id: message.message_id.to_string(),
+            channel_id: message.chat.id.to_string(),
+            sender_id: message.from.id.to_string(),
+            content: message.text.unwrap_or_default(),
+            timestamp: message.date as u64,
+            metadata: Some(serde_json::to_string(&message)?),
+        })
+    }
+}
+```
+
+### 3. Egress implementieren
+
+```rust title="src/egress.rs"
+impl egress::Guest for TelegramEgress {
+    fn send(msg: OutboundMessage) -> Result<String, String> {
+        let bot_token = get_secret("telegram_bot_token")?;
+
+        let url = format!(
+            "https://api.telegram.org/bot{}/sendMessage",
+            bot_token
+        );
+
+        let payload = SendMessage {
+            chat_id: msg.channel_id.parse()?,
+            text: msg.content,
+            reply_to_message_id: msg.reply_to.map(|id| id.parse().ok()).flatten(),
+        };
+
+        let response = http_post(&url, &serde_json::to_vec(&payload)?)?;
+
+        if response.status == 200 {
+            Ok(response.body)
+        } else {
+            Err(format!("Telegram API error: {}", response.status))
+        }
+    }
+}
+```
+
+### 4. Setup-Flow
+
+```yaml title="flows/setup.ygtc"
+name: setup_default
+version: "1.0"
+description: Configure Telegram webhook
+
+nodes:
+  - id: get_public_url
+    type: config
+    config:
+      key: "public_base_url"
+      output: "base_url"
+    next: set_webhook
+
+  - id: set_webhook
+    type: http
+    config:
+      method: POST
+      url: "https://api.telegram.org/bot{{secrets.telegram_bot_token}}/setWebhook"
+      body:
+        url: "{{base_url}}/webhook/telegram/{{tenant_id}}/{{team_id}}"
+    next: verify_result
+
+  - id: verify_result
+    type: branch
+    config:
+      conditions:
+        - expression: "http_response.ok == true"
+          next: success
+      default: failure
+
+  - id: success
+    type: log
+    config:
+      level: info
+      message: "Telegram webhook configured successfully"
+
+  - id: failure
+    type: error
+    config:
+      message: "Failed to configure Telegram webhook: {{http_response.description}}"
+
+triggers:
+  - type: setup
+    target: get_public_url
+```
+
+## Provider-Konfiguration
+
+### Im Bundle
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+    config:
+      api_base_url: "https://api.telegram.org"
+```
+
+### Secrets
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  }
+}
+```
+
+## NATS-Subjects
+
+Provider kommunizieren über NATS:
+
+| Subject Pattern | Zweck |
+|----------------|-------|
+| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | Eingehende Nachrichten |
+| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | Ausgehende Nachrichten |
+| `greentic.events.{env}.{tenant}.{type}` | Ereignisbenachrichtigungen |
+
+## Verfügbare Provider
+
+### Messaging
+
+- [Slack](/de/providers/messaging/slack/)
+- [Microsoft Teams](/de/providers/messaging/teams/)
+- [Telegram](/de/providers/messaging/telegram/)
+- [WhatsApp](/de/providers/messaging/whatsapp/)
+- [WebChat](/de/providers/messaging/webchat/)
+- [Webex](/de/providers/messaging/webex/)
+- [Email](/de/providers/messaging/email/)
+
+### Events
+
+- [Webhook](/de/providers/events/webhook/)
+- [Timer](/de/providers/events/timer/)
+- [Email (SendGrid)](/de/providers/events/email-sendgrid/)
+- [SMS (Twilio)](/de/providers/events/sms-twilio/)
+
+## Nächste Schritte
+
+- [Überblick über Messaging-Provider](/de/providers/messaging/overview/)
+- [Überblick über Event-Provider](/de/providers/events/overview/)
+- [Multi-Tenancy](/de/concepts/multi-tenancy/)

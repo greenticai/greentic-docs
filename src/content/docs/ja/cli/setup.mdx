@@ -1,0 +1,299 @@
+---
+title: gtc setup
+description: Greentic bundle 内の providers を設定する
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概要
+
+`gtc setup` コマンドは、Greentic bundle 内の providers を設定します。有効な各 provider の setup flows を実行し、認証情報を収集して webhooks を設定します。
+
+## 使い方
+
+```bash
+gtc setup [OPTIONS] <BUNDLE_PATH>
+```
+
+## オプション
+
+| Option | 説明 |
+|--------|-------------|
+| `--answers <FILE>` | 回答ファイルへのパス（非対話型） |
+| `--dry-run` | 変更を加えずに setup をプレビューする |
+| `--emit-answers <FILE>` | 回答テンプレートを生成する |
+| `--advanced` | 回答テンプレートに任意フィールドを含める |
+| `--provider <NAME>` | 特定の provider だけを setup する |
+| `--skip <NAME>` | 特定の provider をスキップする |
+| `-v, --verbose` | 詳細出力を有効にする |
+
+## 対話型セットアップ
+
+各 provider について順にプロンプトを表示するには、対話型で setup を実行します:
+
+```bash
+gtc setup ./my-bundle
+```
+
+CLI は次の項目を尋ねます:
+- provider の認証情報（API keys、tokens）
+- webhooks 用の公開 URL
+- 任意の設定オプション
+
+## 非対話型セットアップ
+
+### 回答テンプレートを生成する
+
+まず、必要なすべてのフィールドを含むテンプレートを生成します:
+
+```bash
+# Basic template (required fields only)
+gtc setup --dry-run --emit-answers answers.json ./my-bundle
+
+# Full template (including optional fields)
+gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
+```
+
+### 回答ファイルの形式
+
+<Tabs>
+<TabItem label="JSON">
+
+```json title="answers.json"
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  },
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://xxx.ngrok-free.app",
+    "api_base_url": "https://slack.com/api",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  },
+  "messaging-teams": {
+    "enabled": false
+  }
+}
+```
+
+</TabItem>
+<TabItem label="YAML">
+
+```yaml title="answers.yaml"
+messaging-telegram:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+
+messaging-slack:
+  enabled: true
+  public_base_url: https://xxx.ngrok-free.app
+  api_base_url: https://slack.com/api
+  bot_token: xoxb-xxx-xxx-xxx
+  slack_app_id: A07XXXXXX
+  slack_configuration_token: xoxe.xoxp-xxx
+
+messaging-teams:
+  enabled: false
+```
+
+</TabItem>
+</Tabs>
+
+### 回答を適用する
+
+```bash
+gtc setup --answers answers.json ./my-bundle
+```
+
+## Provider ごとの設定
+
+### Telegram
+
+```json
+{
+  "messaging-telegram": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  }
+}
+```
+
+**認証情報の取得方法:**
+1. Telegram で [@BotFather](https://t.me/botfather) にメッセージを送る
+2. `/newbot` を送信し、案内に従う
+3. bot token をコピーする
+
+### Slack
+
+```json
+{
+  "messaging-slack": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "bot_token": "xoxb-xxx-xxx-xxx",
+    "slack_app_id": "A07XXXXXX",
+    "slack_configuration_token": "xoxe.xoxp-xxx"
+  }
+}
+```
+
+**認証情報の取得方法:**
+1. [api.slack.com/apps](https://api.slack.com/apps) にアクセスする
+2. 新しい app を作成するか既存のものを選択する
+3. OAuth & Permissions から Bot Token を取得する
+4. Basic Information から App ID を取得する
+5. App Manifest から Configuration Token を取得する
+
+### Microsoft Teams
+
+```json
+{
+  "messaging-teams": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "app_id": "your-app-id",
+    "app_password": "your-app-password",
+    "tenant_id": "your-tenant-id"
+  }
+}
+```
+
+### WhatsApp (via Meta)
+
+```json
+{
+  "messaging-whatsapp": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "phone_number_id": "123456789",
+    "access_token": "EAAxxxxx",
+    "verify_token": "your-verify-token"
+  }
+}
+```
+
+## 公開 URL の設定
+
+<Aside type="caution">
+Webhook ベースの providers には公開アクセス可能な URL が必要です。`gtc start` で ngrok または cloudflared を使う場合、`public_base_url` は自動的に置き換えられます。
+</Aside>
+
+### ngrok を使う
+
+```bash
+# Start ngrok in separate terminal
+ngrok http 8080
+
+# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
+# Use this as public_base_url in answers
+```
+
+### Cloudflared を使う
+
+```bash
+# Cloudflared generates URL automatically with gtc start
+gtc start ./my-bundle --cloudflared on
+```
+
+## Setup Flow の実行
+
+`gtc setup` を実行すると、次の処理が行われます:
+
+<Steps>
+
+1. **bundle 設定を読み込む**
+
+   providers を見つけるために `greentic.demo.yaml` を読み込みます。
+
+2. **回答を検証する**
+
+   必須フィールドがすべて揃っているかを確認します。
+
+3. **setup flows を実行する**
+
+   各 provider の `setup_flow` を実行します（例: webhook 登録）。
+
+4. **認証情報を保存する**
+
+   設定された secrets store に認証情報を保存します。
+
+5. **検証を実行する**
+
+   setup が正しく動作したことを確認するために `verify_flow` を実行します。
+
+</Steps>
+
+## 選択的なセットアップ
+
+### 単一の Provider を setup する
+
+```bash
+gtc setup --provider messaging-telegram ./my-bundle
+```
+
+### 特定の Provider をスキップする
+
+```bash
+gtc setup --skip messaging-teams ./my-bundle
+```
+
+### Setup を再実行する
+
+```bash
+# Force re-setup (useful after URL changes)
+gtc start ./my-bundle --force-setup
+```
+
+## トラブルシューティング
+
+### Webhook の登録に失敗した
+
+```
+Error: Failed to register webhook: 401 Unauthorized
+```
+
+bot token が正しく、有効期限切れでないことを確認してください。
+
+### 必須フィールドが不足している
+
+```
+Error: Missing required field 'bot_token' for messaging-telegram
+```
+
+回答ファイルに必須フィールドがすべて含まれていることを確認してください。
+
+### 公開 URL にアクセスできない
+
+```
+Error: Webhook verification failed: Connection refused
+```
+
+公開 URL にインターネットからアクセスできることを確認してください。ngrok/cloudflared が実行中か確認します。
+
+### 認証情報が見つからない
+
+```
+Error: Secret 'slack_bot_token' not found
+```
+
+provider を設定するために `gtc setup` を実行するか、回答ファイルを確認してください。
+
+## ベストプラクティス
+
+1. **CI/CD では回答ファイルを使う** - 自動化パイプラインで対話型プロンプトを避ける
+2. **認証情報を安全に保つ** - 実際の token を含む回答ファイルを git に commit しない
+3. **環境変数を使う** - 回答内で `$ENV_VAR` を使って secrets を参照する
+4. **dry-run で確認する** - 変更前に setup をプレビューする
+5. **URL 変更時は再生成する** - 公開 URL が変わったら setup を再実行する
+
+## 次のステップ
+
+- [gtc start](/ja/cli/start/) - Runtime server を実行する
+- [Telegram Setup](/ja/providers/messaging/telegram/) - 詳細な Telegram ガイド
+- [Slack Setup](/ja/providers/messaging/slack/) - 詳細な Slack ガイド

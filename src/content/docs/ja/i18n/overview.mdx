@@ -1,0 +1,136 @@
+---
+title: i18n 概要
+description: Greentic における国際化サポート
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## はじめに
+
+Greentic は、**greentic-i18n** library を通じて包括的な国際化（i18n）サポートを提供します。これにより次のことが可能になります。
+
+- 決定論的な文字列 identifier
+- locale ベースの message 取得
+- Adaptive Card の翻訳
+- Runtime での言語切り替え
+
+## 主な機能
+
+<CardGrid>
+  <Card title="決定論的 ID" icon="puzzle">
+    I18nId v1 spec は、一貫性があり衝突耐性のある identifier のために BLAKE3 hashing を使用します。
+  </Card>
+  <Card title="複数フォーマット" icon="document">
+    JSON、YAML、PO、XLIFF の翻訳フォーマットをサポートします。
+  </Card>
+  <Card title="Cards 統合" icon="setting">
+    Adaptive Cards を翻訳するための組み込みサポートがあります。
+  </Card>
+  <Card title="Runtime 切り替え" icon="random">
+    再起動なしで session ごとに言語を変更できます。
+  </Card>
+</CardGrid>
+
+## 仕組み
+
+```
+Source String: "Hello, World!"
+       │
+       ▼
+┌─────────────────────────────────┐
+│     BLAKE3 Hash Function        │
+│  blake3(normalize(string))      │
+└─────────────────────────────────┘
+       │
+       ▼
+I18nId: "i18n:v1:abc123def456"
+       │
+       ▼
+┌─────────────────────────────────┐
+│      Translation Lookup         │
+│   locale_map[id] → "Halo!"     │
+└─────────────────────────────────┘
+```
+
+## クイックスタート
+
+### 1. 文字列を抽出する
+
+Adaptive Cards の場合:
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+```
+
+### 2. 翻訳する
+
+`greentic-i18n-translator` を使用する場合（Codex CLI powered）:
+
+```bash
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+または、pack 生成時に自動翻訳することもできます。
+
+```bash
+greentic-cards2pack generate \
+  --cards ./cards --out ./pack --name demo \
+  --auto-translate --langs fr,de,ja
+```
+
+### 3. Runtime で読み込む
+
+```yaml
+i18n:
+  default_locale: "en"
+  locales:
+    en: "translations/en.json"
+    id: "translations/id.json"
+    ja: "translations/ja.json"
+```
+
+### 4. Flow で使う
+
+```yaml
+- id: greet
+  type: reply
+  config:
+    message_key: "i18n:v1:abc123"  # Resolved based on session locale
+```
+
+## locale の解決順
+
+locale は次の順序で解決されます。
+
+1. Session-level locale（ユーザーごとに設定）
+2. Team-level default
+3. Tenant-level default
+4. Global default
+
+```yaml
+# Set session locale
+- id: set_language
+  type: state
+  config:
+    action: set
+    key: "locale"
+    value: "id"  # Indonesian
+```
+
+## サポートされる言語
+
+任意の言語をサポートできます。よく使われる設定例:
+
+| Locale | Language |
+|--------|----------|
+| `en` | English |
+| `id` | Indonesian |
+| `ja` | Japanese |
+| `zh` | Chinese |
+| `es` | Spanish |
+| `de` | German |
+
+## 次のステップ
+
+- [I18nId Specification](/ja/i18n/i18nid-spec/)
+- [Cards Translation](/ja/i18n/cards-translation/)

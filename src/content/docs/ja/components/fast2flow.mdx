@@ -1,0 +1,411 @@
+---
+title: fast2flow
+description: 高性能な intent routing と flow dispatch 拡張
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 概要
+
+**fast2flow** は高性能な routing 拡張で、決定論的な token ベースのスコアリング（BM25）を使い、必要に応じて LLM fallback を行いながら、受信メッセージを適切な flow に routing します。
+
+中核となる考え方: ユーザーが `"refund please"` のようなメッセージを送る → fast2flow が tenant ごとの indexes を確認する → routing directive（`Dispatch`、`Respond`、`Deny`、`Continue`）を返す。
+
+**主な原則:**
+- **まず決定論的に** - 予測可能で説明可能な routing のために token ベースの BM25 スコアリングを使う
+- **Fail-open** - エラー、タイムアウト、indexes の欠如時には `Continue` directive を返す
+- **時間制約付き** - `time_budget_ms` によって厳格にタイムアウトを適用する
+- **ポリシー駆動** - コード変更なしで runtime の挙動を変更できる
+
+## アーキテクチャ
+
+```
+Incoming Message
+    │
+    ▼
+┌──────────────────────────────────────────────────┐
+│                fast2flow Pipeline                 │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │  1. Hook Filter                            │  │
+│  │  Allow/deny lists, respond rules, policy   │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  2. Index Lookup                           │  │
+│  │  Load TF-IDF index for tenant scope        │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  3. Deterministic Strategy (BM25)          │  │
+│  │  Token scoring with title boosting (2x)    │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  4. Confidence Gate                        │  │
+│  │  min_confidence threshold check            │  │
+│  └────────────────────────────────────────────┘  │
+│                      │                           │
+│  ┌────────────────────────────────────────────┐  │
+│  │  5. LLM Fallback (optional)                │  │
+│  │  OpenAI or Ollama for ambiguous cases      │  │
+│  └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
+    │
+    ▼
+Routing Directive (Dispatch / Respond / Deny / Continue)
+```
+
+## Routing Directives
+
+各 routing 判断では、4 つの directives のいずれかが生成されます:
+
+| Directive | 用途 | Fields |
+|-----------|---------|--------|
+| `dispatch` | 特定の flow に route する | `target`, `confidence`, `reason` |
+| `respond` | 即時応答を返す | `message` |
+| `deny` | リクエストをブロックする | `reason` |
+| `continue` | 判断しない。呼び出し元に処理を任せる | — |
+
+```json
+// Dispatch to a flow
+{"type": "dispatch", "target": "support-pack:refund_request", "confidence": 0.92, "reason": "BM25 match"}
+
+// Auto-respond without routing
+{"type": "respond", "message": "Use the self-service refund form at /refund."}
+
+// Block the request
+{"type": "deny", "reason": "Denied by scope policy"}
+
+// Pass through (fail-open default)
+{"type": "continue"}
+```
+
+## インストール
+
+fast2flow は GHCR 経由の `.gtpack` artifact として配布されます:
+
+```bash
+# Pull from GHCR
+oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:latest
+
+# Or reference a specific version
+oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:v0.4.6
+```
+
+この pack は、メッセージがどの flow にも届く前に横取りする `post_ingress` hook を登録します。
+
+## WASM Components
+
+fast2flow には 3 つの WASM components（`wasm32-wasip2` 向け）が含まれます:
+
+| Component | 用途 | Operation |
+|-----------|---------|-----------|
+| **Indexer** | flow metadata から検索可能な TF-IDF index を構築する | `build`, `update` |
+| **Matcher** | index に対して高速な BM25 ベースの intent matching を行う | `match` |
+| **Router** | 完全な routing pipeline を制御する | `route` |
+
+これらの components は、pack 内で定義された次の 3 つの flows によって協調動作します:
+
+```yaml
+# flows/index.ygtc  — Runs at deploy time to build indexes
+# flows/match.ygtc  — Runtime BM25 intent matching
+# flows/route.ygtc  — Full routing pipeline with LLM fallback
+```
+
+## Bundle ワークフロー
+
+fast2flow は bundle 内の `.ygtc` ファイルから flows を index 化します。indexer は bundle ディレクトリを走査し、metadata（title、description、tags）を抽出し、BM25 スコアリングを持つ TF-IDF index を構築します。
+
+### Bundle 構造
+
+```
+my-bundle/
+├── packs/
+│   ├── support-pack/
+│   │   └── flows/
+│   │       ├── refund.ygtc
+│   │       ├── shipping.ygtc
+│   │       └── faq.ygtc
+│   └── hr-pack/
+│       └── flows/
+│           ├── leave.ygtc
+│           └── booking.ygtc
+```
+
+### Flow Definition (`.ygtc`)
+
+各 flow ファイルは、intent matching に使われる metadata を提供します:
+
+```yaml title="refund.ygtc"
+id: refund_request
+title: Process Refund Request
+description: Handle customer refund requests for orders and payments
+type: messaging
+tags:
+  - refund
+  - payment
+  - billing
+  - return
+start: collect_info
+
+nodes:
+  collect_info:
+    templating.handlebars:
+      text: "Please provide your order number for the refund."
+    routing:
+      - out: true
+```
+
+<Aside type="tip">
+title の単語には 2 倍の TF-IDF boost がかかるため、routing 精度を高めるには説明的な title を付けてください。
+</Aside>
+
+### Index をビルドする
+
+CLI を使って bundle から index をビルドします:
+
+```bash
+greentic-fast2flow bundle index \
+  --bundle ./my-bundle \
+  --output ./state/indexes \
+  --tenant demo \
+  --team default \
+  --verbose
+```
+
+これにより次が生成されます:
+- `index.json` - term frequency と document frequency を持つ TF-IDF index
+- `intents.md` - 人間が読める intent ドキュメント
+
+### Bundle を検証する
+
+```bash
+greentic-fast2flow bundle validate --bundle ./my-bundle
+```
+
+## Policy の設定
+
+policies は、コード変更なしで runtime の routing 挙動を制御します。JSON ファイルとして `/mnt/registry/fast2flow-policy.json` または任意のカスタムパスから読み込まれます。
+
+### Policy 構造
+
+```json title="fast2flow-policy.json"
+{
+  "stage_order": ["scope", "channel", "provider"],
+  "default": {
+    "min_confidence": 0.5,
+    "llm_min_confidence": 0.5,
+    "candidate_limit": 20
+  },
+  "scope_overrides": [],
+  "channel_overrides": [],
+  "provider_overrides": []
+}
+```
+
+### Policy ルール
+
+すべての rule fields は任意です。指定した fields のみが適用されます:
+
+| Field | Type | 説明 |
+|-------|------|-------------|
+| `min_confidence` | `f32` | dispatch に必要な最小 BM25 スコア（0.0–1.0） |
+| `llm_min_confidence` | `f32` | dispatch に必要な最小 LLM confidence（0.0–1.0） |
+| `candidate_limit` | `usize` | 評価する候補の最大数 |
+| `allow_channels` | `string[]` | channels のホワイトリスト（null = すべて許可） |
+| `deny_channels` | `string[]` | channels のブラックリスト |
+| `allow_providers` | `string[]` | providers のホワイトリスト（null = すべて許可） |
+| `deny_providers` | `string[]` | providers のブラックリスト |
+| `allow_scopes` | `string[]` | scopes のホワイトリスト（null = すべて許可） |
+| `deny_scopes` | `string[]` | scopes のブラックリスト |
+| `respond_rules` | `object[]` | 自動応答ルール（keyword matching） |
+
+### Override の例
+
+overrides は、各 stage 内の priority ソートとともに stage order（scope → channel → provider）で適用されます。
+
+**Scope override** - VIP tenant 向けに confidence を厳しくする:
+
+```json
+{
+  "id": "vip-tenant",
+  "priority": 10,
+  "scope": "tenant-vip",
+  "rules": {
+    "min_confidence": 0.8,
+    "candidate_limit": 10
+  }
+}
+```
+
+**Channel override** - email channel で自動応答する:
+
+```json
+{
+  "id": "email-autorespond",
+  "priority": 20,
+  "channel": "email",
+  "rules": {
+    "respond_rules": [
+      {
+        "needle": "refund",
+        "message": "Refund requests via email take 3–5 business days. Use chat for instant support.",
+        "mode": "contains"
+      }
+    ]
+  }
+}
+```
+
+**Provider override** - 特定の provider のみに制限する:
+
+```json
+{
+  "id": "slack-only",
+  "priority": 30,
+  "provider": "slack",
+  "rules": {
+    "deny_providers": ["telegram"]
+  }
+}
+```
+
+### Respond Rules
+
+自動応答ルールは、routing pipeline が実行される前にテキストを照合します:
+
+```json
+{
+  "needle": "business hours",
+  "message": "Our business hours are Mon–Fri 9AM–5PM UTC.",
+  "mode": "contains"
+}
+```
+
+対応する modes: `exact`、`contains`（デフォルト）、`regex`。
+
+### Policy 管理 CLI
+
+```bash
+# Print default policy
+greentic-fast2flow policy print-default
+
+# Validate a policy file
+greentic-fast2flow policy validate --file ./my-policy.json
+```
+
+## LLM Fallback
+
+決定論的な BM25 戦略で低い confidence スコアしか得られない場合、fast2flow は分類のために LLM へ fallback できます。
+
+| Provider | Environment Variables |
+|----------|---------------------|
+| **OpenAI** | `FAST2FLOW_OPENAI_API_KEY_PATH`, `FAST2FLOW_OPENAI_MODEL_PATH` |
+| **Ollama** | `FAST2FLOW_OLLAMA_ENDPOINT_PATH`, `FAST2FLOW_OLLAMA_MODEL_PATH` |
+| **Disabled** | `FAST2FLOW_LLM_PROVIDER=disabled` (default) |
+
+```bash
+# Enable OpenAI fallback
+FAST2FLOW_LLM_PROVIDER=openai \
+FAST2FLOW_OPENAI_API_KEY_PATH=/run/secrets/openai-key \
+greentic-fast2flow-routing-host < request.json
+```
+
+<Aside type="caution">
+LLM providers は native host binary でのみ利用できます。WASM component runtime では `FAST2FLOW_LLM_PROVIDER=disabled` が必要です。
+</Aside>
+
+## CLI リファレンス
+
+### Bundle コマンド
+
+```bash
+# Build TF-IDF index from bundle
+greentic-fast2flow bundle index \
+  --bundle ./my-bundle \
+  --output ./indexes \
+  --tenant demo \
+  --team default \
+  --generate-docs \
+  --verbose
+
+# Validate bundle has indexable flows
+greentic-fast2flow bundle validate --bundle ./my-bundle
+```
+
+### Index コマンド
+
+```bash
+# Build index from flow definitions JSON
+greentic-fast2flow index build \
+  --scope tenant-a \
+  --flows flows.json \
+  --output /tmp/indexes
+
+# Inspect a built index
+greentic-fast2flow index inspect \
+  --scope tenant-a \
+  --input /tmp/indexes
+```
+
+### Route コマンド
+
+```bash
+# Simulate a routing decision
+greentic-fast2flow route simulate \
+  --scope tenant-a \
+  --text "I need a refund" \
+  --indexes-path /tmp/indexes
+```
+
+### Policy コマンド
+
+```bash
+# Print default policy template
+greentic-fast2flow policy print-default
+
+# Validate policy file
+greentic-fast2flow policy validate --file policy.json
+```
+
+## 環境変数
+
+| Variable | Default | 説明 |
+|----------|---------|-------------|
+| `FAST2FLOW_LLM_PROVIDER` | `disabled` | LLM provider: `disabled`, `openai`, `ollama` |
+| `FAST2FLOW_POLICY_PATH` | `/mnt/registry/fast2flow-policy.json` | Policy ファイルパス |
+| `FAST2FLOW_TRACE_POLICY` | — | `1` に設定すると policy trace を stderr に出力 |
+| `FAST2FLOW_MIN_CONFIDENCE` | `0.5` | デフォルトの最小 confidence しきい値 |
+| `FAST2FLOW_LLM_MIN_CONFIDENCE` | `0.5` | デフォルトの LLM 最小 confidence |
+| `FAST2FLOW_CANDIDATE_LIMIT` | `20` | デフォルトの最大候補数 |
+
+## パフォーマンス
+
+fast2flow は低レイテンシの routing 向けに最適化されています:
+
+| Stage | Typical Latency |
+|-------|----------------|
+| Hook filter (allow/deny) | < 0.1ms |
+| BM25 index lookup | < 1ms |
+| Policy resolution | < 0.1ms |
+| LLM fallback (if enabled) | 200–500ms |
+
+<Aside type="tip">
+まずは決定論的な BM25 routing から始めてください。flows の intents が重なっていて BM25 だけでは区別できない場合にのみ LLM fallback を有効にします。
+</Aside>
+
+## ベストプラクティス
+
+1. **説明的な titles を書く** - title の単語は 2 倍の TF-IDF boost を受け、スコアが向上する
+2. **具体的な tags を使う** - tags は BM25 matching の主要なシグナル
+3. **適切なしきい値を設定する** - `min_confidence: 0.5` から始めて調整する
+4. **overrides には policies を使う** - 再デプロイなしで scope/channel/provider ごとに挙動を変える
+5. **Continue 率を監視する** - `Continue` が多い場合、flow coverage にギャップがある
+6. **LLM は fallback に留める** - 決定論的な routing の方が高速で予測しやすい
+
+## 次のステップ
+
+- [Flows Guide](/ja/concepts/flows/) — `.ygtc` flow 定義を学ぶ
+- [Packs Guide](/ja/concepts/packs/) — `.gtpack` 配布形式を理解する
+- [Control Chains Reference](/ja/reference/control-chains/) — hook 登録と policies

@@ -1,0 +1,342 @@
+---
+title: Komponen
+description: Membangun komponen WASM untuk Greentic
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Apa Itu Komponen?
+
+**Component** adalah building block WebAssembly (WASM) portabel yang mengimplementasikan antarmuka Greentic WIT. Komponen bersifat:
+
+- **Sandboxed** - Dieksekusi dalam environment WASM yang terisolasi
+- **Portable** - Berjalan di platform apa pun dengan Wasmtime
+- **Composable** - Dapat digabungkan untuk membangun workflow yang kompleks
+- **Language-agnostic** - Dapat ditulis dalam Rust, Go, atau bahasa lain yang kompatibel dengan WASM
+
+## Jenis Komponen
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| **Node** | Langkah pemrosesan flow | Pemanggil LLM, renderer template |
+| **Provider** | Jembatan layanan eksternal | Telegram, Slack, SendGrid |
+| **Tool** | Implementasi tool MCP | Query database, panggilan API |
+| **Operator** | Transformasi pesan | Penanganan tombol, rendering card |
+
+## Membuat Komponen
+
+### Setup Proyek
+
+Gunakan CLI authoring komponen:
+
+```bash
+# Create new component project
+greentic-component new my-processor
+
+cd my-processor
+```
+
+Ini akan menghasilkan:
+
+```
+my-processor/
+├── Cargo.toml
+├── src/
+│   └── lib.rs
+├── wit/
+│   └── component.wit
+└── build.sh
+```
+
+### Cargo.toml
+
+```toml title="Cargo.toml"
+[package]
+name = "my-processor"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.53"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+```
+
+### Antarmuka WIT
+
+Definisikan antarmuka komponen Anda:
+
+```wit title="wit/component.wit"
+package greentic:my-processor;
+
+interface types {
+    record input {
+        message: string,
+        context: option<string>,
+    }
+
+    record output {
+        result: string,
+        success: bool,
+    }
+}
+
+world processor {
+    import types;
+
+    export process: func(input: types.input) -> types.output;
+}
+```
+
+### Implementasi
+
+```rust title="src/lib.rs"
+use wit_bindgen::generate;
+
+generate!({
+    world: "processor",
+    path: "wit",
+});
+
+struct MyProcessor;
+
+impl Guest for MyProcessor {
+    fn process(input: Input) -> Output {
+        // Your processing logic here
+        let result = format!("Processed: {}", input.message);
+
+        Output {
+            result,
+            success: true,
+        }
+    }
+}
+
+export!(MyProcessor);
+```
+
+### Build
+
+```bash
+# Build for WASM target
+cargo build --target wasm32-wasip2 --release
+
+# Output: target/wasm32-wasip2/release/my_processor.wasm
+```
+
+## Pola Komponen Lanjutan
+
+### Operasi Async
+
+Komponen dapat menjalankan operasi async menggunakan antarmuka WASI:
+
+```rust
+use wit_bindgen::generate;
+
+generate!({
+    world: "async-processor",
+    path: "wit",
+    async: true,
+});
+
+impl Guest for AsyncProcessor {
+    async fn process(input: Input) -> Output {
+        // Async HTTP call
+        let response = http_fetch(&input.url).await;
+
+        Output {
+            result: response.body,
+            success: response.status == 200,
+        }
+    }
+}
+```
+
+### Manajemen State
+
+Akses state session di dalam komponen:
+
+```rust
+impl Guest for StatefulProcessor {
+    fn process(input: Input, state: &mut State) -> Output {
+        // Read from state
+        let counter = state.get("counter").unwrap_or(0);
+
+        // Update state
+        state.set("counter", counter + 1);
+
+        Output {
+            result: format!("Processed {} times", counter + 1),
+            success: true,
+        }
+    }
+}
+```
+
+### Penanganan Error
+
+Gunakan tipe Result untuk penanganan error:
+
+```rust
+impl Guest for SafeProcessor {
+    fn process(input: Input) -> Result<Output, Error> {
+        if input.message.is_empty() {
+            return Err(Error::InvalidInput("Message cannot be empty".into()));
+        }
+
+        Ok(Output {
+            result: process_message(&input.message)?,
+            success: true,
+        })
+    }
+}
+```
+
+## Komponen Bawaan
+
+Greentic menyediakan beberapa komponen bawaan:
+
+### component-llm-openai
+
+Panggil LLM yang kompatibel dengan OpenAI:
+
+```yaml
+- id: analyze
+  type: llm
+  config:
+    model: "gpt-4"
+    system_prompt: "You are a helpful assistant."
+    prompt: "{{message}}"
+```
+
+### component-templates
+
+Render template Handlebars:
+
+```yaml
+- id: format
+  type: template
+  config:
+    template: "Hello, {{name}}! Your order #{{order_id}} is ready."
+```
+
+### component-script-rhai
+
+Eksekusi script Rhai:
+
+```yaml
+- id: calculate
+  type: script
+  config:
+    script: |
+      let total = 0;
+      for item in items {
+        total += item.price * item.quantity;
+      }
+      total
+```
+
+### component-adaptive-card
+
+Render dan validasi Adaptive Card:
+
+```yaml
+- id: show_card
+  type: adaptive-card
+  config:
+    card: "cards/welcome.json"
+    data:
+      user_name: "{{user_name}}"
+```
+
+## Menguji Komponen
+
+### Unit Test
+
+```rust title="src/lib.rs"
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process() {
+        let input = Input {
+            message: "Hello".into(),
+            context: None,
+        };
+
+        let output = MyProcessor::process(input);
+
+        assert!(output.success);
+        assert!(output.result.contains("Processed"));
+    }
+}
+```
+
+### Integration Test
+
+```bash
+# Run with test harness
+greentic-component test ./my-processor
+
+# Test with sample input
+echo '{"message": "test"}' | greentic-component run ./my-processor.wasm
+```
+
+## Praktik Terbaik Komponen
+
+<Aside type="tip">
+Ikuti panduan berikut untuk komponen berkualitas produksi:
+</Aside>
+
+1. **Jaga fokus komponen** - Satu tanggung jawab
+2. **Tangani semua error** - Jangan pernah panic di produksi
+3. **Minimalkan dependensi** - Binary WASM lebih kecil
+4. **Gunakan tipe yang kuat** - Manfaatkan WIT untuk type safety
+5. **Dokumentasikan antarmuka** - Definisi WIT yang jelas
+6. **Uji secara menyeluruh** - Unit test dan integration test
+7. **Optimalkan ukuran** - Gunakan LTO dan optimasi ukuran
+
+## Debugging Komponen
+
+### Inspeksi WASM
+
+```bash
+# Inspect component exports
+wasm-tools component wit ./my-processor.wasm
+
+# Validate component
+wasm-tools validate ./my-processor.wasm
+```
+
+### Logging
+
+Gunakan antarmuka logging WASI:
+
+```rust
+use greentic_interfaces::log;
+
+impl Guest for DebugProcessor {
+    fn process(input: Input) -> Output {
+        log::debug(&format!("Processing: {:?}", input));
+
+        // ... processing ...
+
+        log::info("Processing complete");
+        output
+    }
+}
+```
+
+## Langkah Berikutnya
+
+- [Providers](/id/concepts/providers/) - Bangun komponen provider
+- [MCP Tools](/id/mcp/creating-tools/) - Buat komponen tool MCP
+- [WIT Interfaces Reference](/id/reference/wit-interfaces/) - Spesifikasi WIT lengkap

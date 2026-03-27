@@ -1,0 +1,350 @@
+---
+title: Telegram
+description: 将你的数字员工连接到 Telegram
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概览
+
+Telegram provider 让你的数字员工通过 Telegram bot 进行通信。它支持：
+
+- 文本消息
+- Inline keyboard（按钮）
+- Reply keyboard
+- 文件附件
+- 媒体（图片、视频、文档）
+- 群聊
+
+## 前置条件
+
+- 一个 Telegram 账号
+- 一个 Telegram bot（通过 @BotFather 创建）
+
+## 设置
+
+<Steps>
+
+1. **创建 Telegram bot**
+
+   打开 Telegram 并向 [@BotFather](https://t.me/botfather) 发送消息：
+
+   ```
+   /newbot
+   ```
+
+   按提示操作：
+   - 为你的 bot 输入一个名称（例如 “My Support Bot”）
+   - 输入一个用户名（必须以 `bot` 结尾，例如 “my_support_bot”）
+
+   BotFather 会给你一个类似下面的 **bot token**：
+   ```
+   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   ```
+
+2. **配置 provider**
+
+   创建或更新 answers 文件：
+
+   ```json title="answers.json"
+   {
+     "messaging-telegram": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+     }
+   }
+   ```
+
+3. **运行 setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+4. **启动运行时**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+5. **测试你的 bot**
+
+   打开 Telegram，通过用户名找到你的 bot，然后发送一条消息。
+
+</Steps>
+
+## 配置选项
+
+| 选项 | 必填 | 说明 |
+|------|------|------|
+| `enabled` | 是 | 启用/禁用 provider |
+| `public_base_url` | 是 | webhook 的公网 URL |
+| `bot_token` | 是 | 来自 @BotFather 的 bot token |
+| `api_base_url` | 否 | Telegram API URL（默认：`https://api.telegram.org`） |
+
+## 功能
+
+### 文本消息
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown 格式
+
+Telegram 支持 MarkdownV2：
+
+```yaml
+- id: formatted_reply
+  type: reply
+  config:
+    message: |
+      *Bold* _Italic_ `Code`
+      [Link](https://example.com)
+    parse_mode: MarkdownV2
+```
+
+### Inline Keyboards（按钮）
+
+```yaml
+- id: ask_action
+  type: reply
+  config:
+    message: "What would you like to do?"
+    buttons:
+      - row:
+          - label: "Get Help"
+            callback_data: "action:help"
+          - label: "Settings"
+            callback_data: "action:settings"
+      - row:
+          - label: "Contact Support"
+            url: "https://support.example.com"
+```
+
+### Reply Keyboards
+
+```yaml
+- id: ask_choice
+  type: reply
+  config:
+    message: "Choose an option:"
+    reply_keyboard:
+      - ["Option A", "Option B"]
+      - ["Option C", "Cancel"]
+    resize_keyboard: true
+    one_time_keyboard: true
+```
+
+### 发送图片
+
+```yaml
+- id: send_image
+  type: reply
+  config:
+    photo:
+      url: "https://example.com/image.jpg"
+      caption: "Here's your image!"
+```
+
+### 发送文档
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    document:
+      url: "https://example.com/report.pdf"
+      filename: "report.pdf"
+      caption: "Your monthly report"
+```
+
+### 回复指定消息
+
+```yaml
+- id: reply_to_message
+  type: reply
+  config:
+    message: "This is a reply to your previous message"
+    reply_to_message_id: "{{original_message_id}}"
+```
+
+## 处理按钮回调
+
+当用户点击 inline keyboard 按钮时，你会收到一个回调：
+
+```yaml title="flows/on_callback.ygtc"
+name: handle_callback
+version: "1.0"
+
+nodes:
+  - id: check_action
+    type: branch
+    config:
+      conditions:
+        - expression: "callback_data == 'action:help'"
+          next: show_help
+        - expression: "callback_data == 'action:settings'"
+          next: show_settings
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+  - id: show_settings
+    type: reply
+    config:
+      message: "Settings menu..."
+
+  - id: unknown_action
+    type: reply
+    config:
+      message: "Unknown action"
+
+triggers:
+  - type: callback_query
+    target: check_action
+```
+
+## 群聊支持
+
+Telegram provider 支持群聊：
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          telegram-group:
+            provider: messaging-telegram
+            config:
+              chat_id: "-1001234567890"  # Group chat ID
+```
+
+<Aside type="note">
+群聊 ID 以 `-100` 开头，后面跟着 chat ID。
+</Aside>
+
+### 获取群聊 ID
+
+1. 将你的 bot 添加到群组
+2. 在群组里发送一条消息
+3. 在 webhook payload 中查看 `chat.id`
+
+或者使用 Telegram API：
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+```
+
+## Webhook 配置
+
+setup flow 会自动配置 webhook：
+
+```
+POST https://api.telegram.org/bot<TOKEN>/setWebhook
+{
+  "url": "https://your-domain.com/webhook/telegram/{tenant}/{team}",
+  "allowed_updates": ["message", "callback_query"]
+}
+```
+
+### 手动配置 Webhook
+
+如有需要，可手动配置：
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/webhook/telegram/demo/default",
+    "allowed_updates": ["message", "callback_query"]
+  }'
+```
+
+## 故障排查
+
+### Bot 无响应
+
+1. **检查 webhook 状态：**
+   ```bash
+   curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+   ```
+
+2. **确认公网 URL 可访问：**
+   ```bash
+   curl https://your-domain.ngrok-free.app/health
+   ```
+
+3. **检查日志：**
+   ```bash
+   gtc start ./my-bundle --verbose
+   ```
+
+### Webhook 注册失败
+
+```
+Error: 401 Unauthorized
+```
+
+确认你的 bot token 正确且未过期。
+
+### 未收到消息
+
+1. 确保 bot 已启动（用户已发送 `/start`）
+2. 检查 bot 是否已加入群组（群聊场景）
+3. 确认 webhook URL 与你的公网 URL 一致
+
+### 速率限制
+
+Telegram 有速率限制：
+- 每个 chat 每秒 1 条消息
+- 全局每秒 30 条消息
+
+请优雅处理速率限制：
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Response"
+    retry_on_429: true
+    max_retries: 3
+```
+
+## 安全
+
+<Aside type="caution">
+绝不要暴露你的 bot token。请将其保存在安全的 secrets 存储中。
+</Aside>
+
+### Webhook 安全
+
+Telegram 会在 webhook 请求中发送 secret token。Greentic 会自动校验。
+
+### 输入校验
+
+始终校验用户输入：
+
+```yaml
+- id: validate
+  type: script
+  config:
+    script: |
+      if message.len() > 4096 {
+        return error("Message too long")
+      }
+      message
+```
+
+## 下一步
+
+- [Slack Provider](/zh/providers/messaging/slack/) - 添加 Slack 集成
+- [Flows 指南](/zh/concepts/flows/) - 构建复杂工作流
+- [Buttons and Cards](/zh/components/adaptive-cards/) - 富 UI 元素

@@ -1,0 +1,362 @@
+---
+title: Packs
+description: Memahami Greentic pack - arsip portabel bertanda tangan untuk mendistribusikan flow, komponen, dan aset
+---
+
+import { Aside, Card, CardGrid, FileTree, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Sebuah **Pack** (`.gtpack`) adalah arsip mandiri yang ditandatangani dan menggabungkan semua yang dibutuhkan untuk melakukan deployment capability ke dalam platform Greentic: flow, komponen WASM, aset, dan metadata. Pack adalah unit distribusi dan deployment utama di Greentic.
+
+## Mengapa Packs?
+
+Greentic dirancang dengan **model ekstensi dinamis**: semua hal yang bukan bagian inti platform dikirimkan sebagai pack. Artinya, platform dapat diperluas tanpa recompilation atau redeployment runtime inti.
+
+<CardGrid>
+  <Card title="Portable" icon="rocket">
+    Kirim fitur lengkap sebagai satu file `.gtpack`. Tidak ada resolusi dependensi saat deployment, semua sudah dibundel.
+  </Card>
+  <Card title="Secure" icon="approve-check">
+    Setiap pack memiliki content hash (BLAKE3) dan ditandatangani (Ed25519). Runtime memverifikasi integritas dan autentisitas sebelum memuatnya.
+  </Card>
+  <Card title="Versioned" icon="list-format">
+    Semantic versioning melacak kompatibilitas. Constraint dependensi dideklarasikan di manifest dan di-resolve saat build.
+  </Card>
+  <Card title="Sandboxed" icon="setting">
+    Komponen WASM di dalam pack dieksekusi di environment WASI Preview 2 yang di-sandbox dengan grant capability yang eksplisit.
+  </Card>
+</CardGrid>
+
+## Struktur Pack
+
+File `.gtpack` adalah arsip terstruktur yang berisi layout berikut:
+
+<FileTree>
+- my-feature.gtpack
+  - manifest.cbor Metadata pack (name, version, capabilities, signatures)
+  - flows/
+    - main.ygtc Flow orkestrasi utama
+    - helpers.ygtc Sub-flow yang dapat digunakan ulang
+    - setup.ygtc Flow provisioning / setup
+  - components/
+    - processor.wasm Komponen WASM (wasm32-wasip2)
+  - assets/
+    - templates/
+      - welcome.hbs Template Handlebars
+    - cards/
+      - greeting.json Definisi Adaptive Card
+    - i18n/
+      - en.json String lokalisasi
+      - id.json
+  - sbom.json Software Bill of Materials
+  - signature.sig Tanda tangan Ed25519 di atas content hash
+</FileTree>
+
+| Entry | Format | Purpose |
+|-------|--------|---------|
+| `manifest.cbor` | CBOR | Identitas pack, capability, grafik dependensi, indeks flow/komponen/aset |
+| `flows/*.ygtc` | YAML | Graf orkestrasi yang mendefinisikan logika eksekusi |
+| `components/*.wasm` | WASM (wasm32-wasip2) | Modul kode portabel yang di-sandbox |
+| `assets/` | Any | Template, card, bundle i18n, gambar, dan resource statis lainnya |
+| `sbom.json` | SPDX/CycloneDX | Software Bill of Materials untuk audit supply chain |
+| `signature.sig` | Ed25519 | Tanda tangan kriptografis di atas BLAKE3 content hash |
+
+## Jenis Pack
+
+Greentic menggunakan sistem tipe berbasis **capability** untuk mengklasifikasikan pack. ID capability di manifest menentukan bagaimana runtime memperlakukan pack tersebut.
+
+### Provider Packs
+
+Provider pack menjembatani layanan eksternal (platform messaging, sumber event, secret store) ke dalam runtime Greentic. Setiap provider pack biasanya mencakup komponen WASM ingress, egress, dan operator, ditambah flow setup/verifikasi.
+
+```toml title="pack.toml — Telegram messaging provider"
+[pack]
+name = "messaging-telegram"
+version = "0.4.6"
+description = "Telegram messaging provider for Greentic"
+authors = ["Greentic <team@greentic.ai>"]
+
+[capabilities]
+id = "greentic.cap.messaging.provider.v1"
+provides = ["telegram"]
+
+[flows]
+setup_default = "flows/setup.ygtc"
+verify_webhooks = "flows/verify.ygtc"
+
+[components]
+ingress = "components/messaging-ingress-telegram.wasm"
+egress = "components/messaging-provider-telegram.wasm"
+operator = "components/telegram.wasm"
+
+[secrets]
+required = ["telegram_bot_token"]
+optional = ["public_base_url"]
+```
+
+<Aside>
+Provider pack mengikuti konvensi penamaan: `messaging-{platform}` untuk messaging provider, `events-{source}` untuk event provider.
+</Aside>
+
+### Application Packs
+
+Application pack berisi business logic, yaitu "digital worker" yang sesungguhnya, yang memproses pesan, menangani event, dan mengorkestrasi tindakan.
+
+```toml title="pack.toml — Customer service application"
+[pack]
+name = "customer-service"
+version = "1.0.0"
+description = "AI-powered customer service digital worker"
+authors = ["Your Team <team@example.com>"]
+
+[capabilities]
+id = "greentic.cap.app.v1"
+provides = ["customer-service"]
+
+[dependencies]
+greentic-templates = "^0.4"
+greentic-llm-openai = "^0.4"
+
+[flows]
+on_message = "flows/on_message.ygtc"
+on_escalation = "flows/escalation.ygtc"
+
+[components]
+classifier = "components/intent-classifier.wasm"
+
+[assets]
+cards = "assets/cards/"
+templates = "assets/templates/"
+i18n = "assets/i18n/"
+```
+
+### Component Packs
+
+Component pack menyediakan building block WASM yang dapat digunakan ulang dan bisa dijadikan dependensi oleh pack lain. Pack ini tidak berisi flow, hanya komponen dan konfigurasinya.
+
+```toml title="pack.toml — OpenAI LLM component"
+[pack]
+name = "llm-openai"
+version = "0.4.6"
+description = "OpenAI-compatible LLM component for Greentic"
+
+[capabilities]
+id = "greentic.cap.component.v1"
+provides = ["llm"]
+
+[components]
+llm = "components/llm-openai.wasm"
+
+[config]
+default_model = "gpt-4"
+max_tokens = 4096
+```
+
+## Membuat Pack
+
+<Steps>
+1. **Siapkan struktur direktori**
+
+   ```bash
+   mkdir -p my-pack/{flows,components,assets}
+   ```
+
+2. **Tulis manifest**
+
+   Buat `pack.toml` (atau `pack.yaml`) di root direktori pack Anda:
+
+   ```toml title="my-pack/pack.toml"
+   [pack]
+   name = "my-feature"
+   version = "1.0.0"
+   description = "A feature pack for handling customer inquiries"
+   authors = ["Your Name <you@example.com>"]
+
+   [capabilities]
+   id = "greentic.cap.app.v1"
+   provides = ["customer-service"]
+
+   [dependencies]
+   greentic-templates = "^0.4"
+
+   [flows]
+   main = "flows/main.ygtc"
+   setup = "flows/setup.ygtc"
+
+   [components]
+   processor = "components/processor.wasm"
+
+   [assets]
+   templates = "assets/templates/"
+   cards = "assets/cards/"
+   ```
+
+3. **Tambahkan flow Anda**
+
+   Tulis flow orkestrasi dalam format `.ygtc` (YAML) di bawah `flows/`. Lihat [panduan Flows](/id/concepts/flows/) untuk skema lengkapnya.
+
+4. **Tambahkan komponen WASM**
+
+   Build komponen Anda dengan target `wasm32-wasip2` lalu tempatkan file `.wasm` di `components/`:
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   cp target/wasm32-wasip2/release/processor.wasm my-pack/components/
+   ```
+
+5. **Build pack**
+
+   ```bash
+   # Using the pack builder CLI
+   greentic-pack build ./my-pack
+
+   # Or with the GTC CLI
+   gtc pack build ./my-pack
+
+   # Output: my-feature-1.0.0.gtpack
+   ```
+
+6. **Tandatangani pack**
+
+   ```bash
+   # Generate a signing key pair (one-time)
+   greentic-pack keygen --output my-key.pem
+
+   # Sign the pack
+   greentic-pack sign my-feature-1.0.0.gtpack --key my-key.pem
+
+   # Verify the signature
+   greentic-pack verify my-feature-1.0.0.gtpack --pubkey my-key.pub
+   ```
+</Steps>
+
+## Menggunakan Pack
+
+### Di Dalam Bundle
+
+Referensikan pack di konfigurasi bundle Anda untuk melakukan deployment:
+
+```yaml title="greentic.demo.yaml"
+providers:
+  messaging-telegram:
+    pack: "providers/messaging/messaging-telegram.gtpack"
+    setup_flow: "setup_default"
+    verify_flow: "verify_webhooks"
+
+apps:
+  customer-service:
+    pack: "apps/customer-service.gtpack"
+    default_flow: "on_message"
+```
+
+### Instalasi dari OCI Registry
+
+Pack didistribusikan sebagai OCI artifact melalui container registry (misalnya GHCR):
+
+```bash
+# Pull a pack from the registry
+gtc pack pull ghcr.io/greentic/messaging-telegram:0.4.6
+
+# Or reference directly in your bundle config
+providers:
+  messaging-telegram:
+    pack: "oci://ghcr.io/greentic/messaging-telegram:0.4.6"
+```
+
+## Validasi Pack
+
+<Aside type="caution">
+Selalu validasi pack sebelum deployment. Flow yang tidak valid atau komponen yang hilang akan menyebabkan kegagalan runtime.
+</Aside>
+
+```bash
+# Validate pack structure and manifest
+greentic-pack validate ./my-pack.gtpack
+
+# Validate all flows within the pack
+greentic-flow doctor --pack ./my-pack.gtpack
+
+# Full verification (signature + content integrity + flow validation)
+greentic-pack verify --full ./my-pack.gtpack
+```
+
+## Metadata Pack (CBOR)
+
+File `manifest.cbor` adalah deskriptor pack yang dapat dibaca mesin, dikodekan dalam [CBOR](https://cbor.io/) untuk serialisasi biner yang ringkas. File ini berisi indeks lengkap flow, komponen, dan aset, plus deklarasi capability dan constraint dependensi.
+
+```rust title="Manifest structure (Rust representation)"
+struct PackManifest {
+    name: String,
+    version: String,
+    description: String,
+    authors: Vec<String>,
+    capabilities: Capabilities,
+    flows: HashMap<String, FlowEntry>,
+    components: HashMap<String, ComponentEntry>,
+    assets: HashMap<String, AssetEntry>,
+    dependencies: HashMap<String, VersionReq>,
+    config: HashMap<String, ConfigValue>,
+    signatures: Vec<Signature>,
+}
+```
+
+## Model Keamanan
+
+Greentic pack menerapkan model keamanan berlapis: integritas konten, autentisitas, dan sandboxing capability.
+
+### Content Hashing
+
+Setiap file di dalam pack di-hash secara individual dengan [BLAKE3](https://github.com/BLAKE3-team/BLAKE3). Hash keseluruhan pack adalah digest bergaya Merkle:
+
+```text
+pack-hash = blake3(
+    manifest_hash ||
+    flows_hash ||
+    components_hash ||
+    assets_hash
+)
+```
+
+Ini memastikan bahwa setiap modifikasi, bahkan hanya satu byte, akan terdeteksi saat load time.
+
+### Verifikasi Tanda Tangan
+
+Pack ditandatangani dengan key [Ed25519](https://ed25519.cr.yp.to/). Runtime memverifikasi tanda tangan secara otomatis sebelum memuat pack apa pun:
+
+```bash
+# Manual verification
+greentic-pack verify my-pack.gtpack --pubkey trusted-keys/publisher.pub
+```
+
+### Trusted Publishers
+
+Konfigurasikan key penandatanganan mana yang diterima runtime:
+
+```toml title="greentic.toml"
+[security]
+trusted_publishers = [
+    "greentic-official.pub",
+    "my-org.pub",
+]
+reject_unsigned = true
+```
+
+<Aside type="danger">
+Mengatur `reject_unsigned = false` di produksi sangat tidak disarankan. Pack tanpa tanda tangan akan melewati semua pemeriksaan autentisitas.
+</Aside>
+
+## Praktik Terbaik
+
+1. **Gunakan versioning secara semantik** — gunakan [semver](https://semver.org/) agar konsumen dapat mendeklarasikan rentang versi yang kompatibel
+2. **Satu pack, satu tujuan** — jaga pack tetap fokus pada satu fitur atau provider
+3. **Deklarasikan semua dependensi** — daftar setiap capability yang dibutuhkan pack Anda
+4. **Sertakan SBOM** — memungkinkan audit keamanan dan kepatuhan lisensi di downstream
+5. **Tandatangani setiap rilis** — jangan pernah melakukan deployment pack tanpa tanda tangan di produksi
+6. **Validasi sebelum publish** — jalankan `greentic-pack verify --full` di pipeline CI Anda
+7. **Gunakan ID capability secara konsisten** — ikuti konvensi penamaan `greentic.cap.{category}.v{N}`
+
+## Langkah Berikutnya
+
+- [Components](/id/concepts/components/) — pelajari cara membangun komponen WASM untuk pack
+- [Building Packs](/id/cli/building-packs/) — perintah CLI untuk manajemen pack
+- [Pack Format Reference](/id/reference/pack-format/) — spesifikasi `.gtpack` lengkap
+- [Flows](/id/concepts/flows/) — tulis flow orkestrasi untuk pack Anda

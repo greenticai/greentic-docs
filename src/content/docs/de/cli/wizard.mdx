@@ -1,0 +1,277 @@
+---
+title: gtc wizard
+description: Neue Greentic-Bundles mit dem Wizard-Befehl erstellen
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Überblick
+
+Der Befehl `gtc wizard` erstellt neue Greentic-Bundles aus Wizard-Antworten. Er erzeugt die komplette Bundle-Struktur inklusive Konfigurationsdateien, Provider-Setups und App-Vorlagen.
+
+## Verwendung
+
+```bash
+gtc wizard [OPTIONS]
+```
+
+## Optionen
+
+| Option | Beschreibung |
+|--------|-------------|
+| `--answers <FILE \| URL>` | Pfad oder URL zur Wizard-Answer-Datei (JSON oder YAML). Unterstützt lokale Pfade und entfernte `http://`- / `https://`-URLs. |
+| `--dry-run` | Generierte Dateien in der Vorschau anzeigen, ohne sie zu schreiben |
+| `--output <DIR>` | Ausgabeverzeichnis (Standard: aktuelles Verzeichnis) |
+| `--template <NAME>` | Eine bestimmte Vorlage verwenden |
+| `-v, --verbose` | Ausführliche Ausgabe aktivieren |
+
+## Wizard-Answer-Datei
+
+### JSON-Format
+
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0",
+    "description": "Customer support digital worker"
+  },
+  "providers": {
+    "messaging": ["telegram", "slack"],
+    "events": ["webhook", "timer"]
+  },
+  "apps": [
+    {
+      "name": "support-bot",
+      "template": "customer-service"
+    }
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [
+        {
+          "id": "default",
+          "channels": ["telegram", "slack"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### YAML-Format
+
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+  description: Customer support digital worker
+
+providers:
+  messaging:
+    - telegram
+    - slack
+  events:
+    - webhook
+    - timer
+
+apps:
+  - name: support-bot
+    template: customer-service
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - telegram
+          - slack
+```
+
+## Generierte Struktur
+
+Beim Ausführen des Wizard wird Folgendes erzeugt:
+
+```
+my-digital-worker/
+├── greentic.demo.yaml          # Main configuration
+├── providers/
+│   ├── messaging/
+│   │   ├── messaging-telegram.gtpack
+│   │   └── messaging-slack.gtpack
+│   └── events/
+│       ├── events-webhook.gtpack
+│       └── events-timer.gtpack
+├── apps/
+│   └── support-bot/
+│       ├── app.yaml
+│       └── flows/
+│           └── on_message.ygtc
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## Beispiele
+
+### Grundlegende Verwendung
+
+```bash
+# Interactive mode
+gtc wizard
+
+# With answers file
+gtc wizard --answers wizard-answers.yaml
+```
+
+### Vorschau-Modus
+
+```bash
+# See what would be generated
+gtc wizard --answers wizard-answers.yaml --dry-run
+```
+
+### Entfernte Answer-Datei
+
+Das Flag `--answers` akzeptiert `http://`- und `https://`-URLs. Dadurch ist es unkompliziert,
+gemeinsam genutzte Answer-Dokumente zentral zu speichern und aus CI/CD-Pipelines darauf zu verweisen.
+
+```bash
+# Fetch answers from a remote URL
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
+
+# Combine with dry-run to preview before generating
+gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
+```
+
+<Aside type="tip">
+Die Unterstützung entfernter URLs ist nützlich in CI/CD-Pipelines, in denen Wizard-Antworten in einem gemeinsamen Repository oder Artifakt-Server gespeichert und zur Build-Zeit abgerufen werden.
+</Aside>
+
+### Benutzerdefiniertes Ausgabeverzeichnis
+
+```bash
+gtc wizard --answers wizard-answers.yaml --output ./my-project
+```
+
+### Vorlagen verwenden
+
+```bash
+# List available templates
+gtc wizard --list-templates
+
+# Use specific template
+gtc wizard --template customer-service --answers answers.yaml
+```
+
+## Verfügbare Vorlagen
+
+| Template | Beschreibung |
+|----------|-------------|
+| `minimal` | Minimales Bundle mit einem Provider |
+| `customer-service` | FAQ-Bot mit Eskalation |
+| `helpdesk` | IT-Support mit Ticket-Integration |
+| `multi-channel` | Mehrere Messaging-Kanäle |
+
+## Workflow
+
+<Steps>
+
+1. **Answer-Datei erstellen**
+
+   Definiere deine Projektkonfiguration in JSON oder YAML.
+
+2. **Wizard ausführen**
+
+   ```bash
+   gtc wizard --answers wizard-answers.yaml
+   ```
+
+3. **Generierte Dateien prüfen**
+
+   Überprüfe die generierte Bundle-Struktur.
+
+4. **Provider konfigurieren**
+
+   ```bash
+   gtc setup ./my-digital-worker
+   ```
+
+5. **Runtime starten**
+
+   ```bash
+   gtc start ./my-digital-worker
+   ```
+
+</Steps>
+
+## Generierte Flows anpassen
+
+Der Wizard generiert grundlegende Flow-Vorlagen. Passe sie nach der Generierung an:
+
+```yaml title="apps/support-bot/flows/on_message.ygtc"
+name: on_message
+version: "1.0"
+description: Handle incoming messages
+
+nodes:
+  # Add your custom nodes here
+  - id: analyze
+    type: llm
+    config:
+      model: "gpt-4"
+      prompt: "Analyze: {{message}}"
+    next: respond
+
+  - id: respond
+    type: reply
+    config:
+      message: "{{analysis_result}}"
+
+triggers:
+  - type: message
+    target: analyze
+```
+
+<Aside type="tip">
+Verwende zuerst `--dry-run`, um die generierte Struktur in der Vorschau zu prüfen, bevor sie auf die Festplatte geschrieben wird.
+</Aside>
+
+## Fehlerbehebung
+
+### Ungültige Answer-Datei
+
+```
+Error: Failed to parse answers file
+```
+
+Stelle sicher, dass dein JSON/YAML gültig ist. Verwende einen Linter, um die Syntax zu prüfen.
+
+### Erforderliche Felder fehlen
+
+```
+Error: Missing required field: project.name
+```
+
+Prüfe, ob alle erforderlichen Felder in deiner Answer-Datei vorhanden sind.
+
+### Vorlage nicht gefunden
+
+```
+Error: Template 'unknown' not found
+```
+
+Verwende `gtc wizard --list-templates`, um die verfügbaren Vorlagen anzuzeigen.
+
+## Nächste Schritte
+
+- [gtc setup](/de/cli/setup/) - Provider konfigurieren
+- [gtc start](/de/cli/start/) - Die Runtime ausführen
+- [Schnellstart](/de/getting-started/quick-start/) - Vollständiger Workflow

@@ -1,0 +1,181 @@
+---
+title: GTC CLI 概要
+description: Greentic platform のコマンドラインインターフェース
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## はじめに
+
+**GTC CLI** (`gtc`) は Greentic platform の主要なコマンドラインインターフェースです。次のためのコマンドを提供します:
+
+- bundles の作成と管理
+- providers のセットアップ
+- runtime server の実行
+- packs/flows のビルドと検証
+
+## インストール
+
+<Tabs>
+<TabItem label="Cargo">
+
+```bash
+cargo install greentic-cli
+```
+
+</TabItem>
+<TabItem label="From Source">
+
+```bash
+git clone https://github.com/greenticai/greentic.git
+cd greentic/greentic
+cargo build --release
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+</TabItem>
+</Tabs>
+
+インストールを確認します:
+
+```bash
+gtc --version
+```
+
+## CLI アーキテクチャ
+
+`gtc` バイナリは複数の repo から subcommands を構成します:
+
+| Command | Source Repo | 用途 |
+|---------|-------------|---------|
+| `gtc wizard` | `greentic-dev` | Bundle 作成ウィザード |
+| `gtc setup` | `greentic-setup` | Provider のセットアップ/設定 |
+| `gtc start` | `greentic-start` | Runtime server |
+| `gtc pack` | `greentic-pack` | Pack のビルド |
+| `gtc flow` | `greentic-flow` | Flow の検証 |
+
+## コマンドリファレンス
+
+### グローバルオプション
+
+```bash
+gtc [OPTIONS] <COMMAND>
+
+Options:
+  -v, --verbose     Enable verbose output
+  -q, --quiet       Suppress non-essential output
+  --config <PATH>   Path to config file
+  -h, --help        Print help
+  -V, --version     Print version
+```
+
+### コマンド
+
+| Command | 説明 |
+|---------|-------------|
+| `wizard` | ウィザードの回答から新しい bundle を作成する |
+| `setup` | bundle 内の providers を設定する |
+| `start` | runtime server を起動する |
+| `pack` | Pack 管理（build、verify、publish） |
+| `flow` | Flow 管理（validate、doctor） |
+
+## よくあるワークフロー
+
+### 新しいプロジェクトを作成して実行する
+
+```bash
+# 1. Create bundle from wizard
+gtc wizard --answers wizard-answers.yaml
+
+# 2. Setup providers (interactive)
+gtc setup ./my-bundle
+
+# 3. Start the runtime
+gtc start ./my-bundle
+```
+
+### 開発ワークフロー
+
+```bash
+# Validate flows
+gtc flow doctor ./my-bundle/apps/my-app/flows/
+
+# Build a pack
+gtc pack build ./my-pack/
+
+# Start with verbose logging
+gtc start ./my-bundle --verbose
+
+# Start with ngrok tunnel
+gtc start ./my-bundle --ngrok on
+```
+
+### 本番デプロイ
+
+```bash
+# Setup with answers file (non-interactive)
+gtc setup --answers production-answers.json ./my-bundle
+
+# Start without tunnels
+gtc start ./my-bundle --cloudflared off --ngrok off
+```
+
+## 設定ファイル
+
+GTC は設定ファイル（`greentic.toml`）を使用できます:
+
+```toml title="greentic.toml"
+[runtime]
+host = "0.0.0.0"
+port = 8080
+
+[nats]
+enabled = true
+url = "nats://localhost:4222"
+
+[logging]
+level = "info"
+format = "json"
+
+[telemetry]
+enabled = true
+otlp_endpoint = "http://localhost:4317"
+```
+
+## 環境変数
+
+| Variable | 説明 | Default |
+|----------|-------------|---------|
+| `GREENTIC_LOG_LEVEL` | ログの詳細度 | `info` |
+| `GREENTIC_CONFIG` | 設定ファイルのパス | `greentic.toml` |
+| `GREENTIC_NATS_URL` | NATS server URL | `nats://localhost:4222` |
+| `GREENTIC_REDIS_URL` | Redis URL | `redis://localhost:6379` |
+
+## 終了コード
+
+| Code | 意味 |
+|------|---------|
+| `0` | 成功 |
+| `1` | 一般的なエラー |
+| `2` | 設定エラー |
+| `3` | runtime エラー |
+| `4` | 検証エラー |
+
+## ヘルプの取得
+
+```bash
+# General help
+gtc --help
+
+# Command-specific help
+gtc wizard --help
+gtc setup --help
+gtc start --help
+```
+
+## 次のステップ
+
+- [gtc wizard](/ja/cli/wizard/) - Bundle 作成
+- [gtc setup](/ja/cli/setup/) - Provider のセットアップ
+- [gtc start](/ja/cli/start/) - Runtime server
+- [Building Packs](/ja/cli/building-packs/) - Pack 管理

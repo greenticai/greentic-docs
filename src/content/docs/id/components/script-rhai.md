@@ -1,13 +1,13 @@
 ---
 title: Script (Rhai)
-description: Rhai scripting component for custom logic
+description: Komponen scripting Rhai untuk logika kustom
 ---
 
-## Overview
+## Gambaran Umum
 
-The **Script** component enables custom logic using the Rhai scripting language, a simple yet powerful embedded scripting language for Rust.
+Komponen **Script** memungkinkan logika kustom menggunakan bahasa scripting Rhai, bahasa scripting embedded untuk Rust yang sederhana namun kuat.
 
-## Basic Usage
+## Penggunaan Dasar
 
 ```yaml
 - id: calculate
@@ -22,9 +22,9 @@ The **Script** component enables custom logic using the Rhai scripting language,
   output: calculated_total
 ```
 
-## Rhai Syntax
+## Sintaks Rhai
 
-### Variables
+### Variabel
 
 ```js
 let x = 42;
@@ -33,7 +33,7 @@ let items = [1, 2, 3];
 let user = #{ name: "Bob", age: 30 };
 ```
 
-### Functions
+### Function
 
 ```js
 fn greet(name) {
@@ -64,7 +64,7 @@ while condition {
 }
 ```
 
-### Working with Objects
+### Bekerja dengan Object
 
 ```js
 let user = #{
@@ -76,9 +76,9 @@ let name = user.name;
 user.age = 25;
 ```
 
-## Flow Integration
+## Integrasi Flow
 
-### Access Context
+### Akses Context
 
 ```yaml
 - id: process
@@ -100,7 +100,7 @@ user.age = 25;
       }
 ```
 
-### Conditional Logic
+### Logika Bersyarat
 
 ```yaml
 - id: validate
@@ -125,7 +125,7 @@ user.age = 25;
     default: show_error
 ```
 
-### Data Transformation
+### Transformasi Data
 
 ```yaml
 - id: transform
@@ -146,9 +146,9 @@ user.age = 25;
       transformed
 ```
 
-## Built-in Functions
+## Function Bawaan
 
-### String Functions
+### Function String
 
 ```js
 let s = "Hello World";
@@ -162,7 +162,7 @@ s.trim()          // Remove whitespace
 s.sub_string(0,5) // "Hello"
 ```
 
-### Array Functions
+### Function Array
 
 ```js
 let arr = [1, 2, 3, 4, 5];
@@ -176,7 +176,7 @@ arr.map(|x| x * 2)     // [2, 4, 6, 8, 10]
 arr.reduce(|a, b| a + b, 0)  // 15
 ```
 
-### Object Functions
+### Function Object
 
 ```js
 let obj = #{ a: 1, b: 2 };
@@ -186,7 +186,7 @@ obj.values()      // [1, 2]
 obj.contains("a") // true
 ```
 
-## Error Handling
+## Penanganan Error
 
 ```js
 try {
@@ -198,7 +198,7 @@ try {
 }
 ```
 
-## Example: Order Processing
+## Contoh: Pemrosesan Pesanan
 
 ```yaml
 - id: process_order
@@ -238,7 +238,7 @@ try {
       }
 ```
 
-## Next Steps
+## Langkah Berikutnya
 
-- [Templates Component](/components/templates/)
-- [LLM OpenAI](/components/llm-openai/)
+- [Komponen Templates](/id/components/templates/)
+- [LLM OpenAI](/id/components/llm-openai/)

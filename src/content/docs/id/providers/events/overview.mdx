@@ -1,0 +1,162 @@
+---
+title: Ringkasan Provider Event
+description: Tangani event dan trigger di digital worker Anda
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Pendahuluan
+
+**Events Providers** memungkinkan digital worker Anda merespons trigger eksternal di luar messaging. Provider ini menangani:
+
+- Webhook dari layanan eksternal
+- Tugas terjadwal (timer/cron)
+- Notifikasi email
+- Notifikasi SMS
+
+## Provider yang Tersedia
+
+<CardGrid>
+  <LinkCard
+    title="Webhook"
+    href="/id/providers/events/webhook/"
+    description="Menerima webhook HTTP dari layanan eksternal"
+  />
+  <LinkCard
+    title="Timer"
+    href="/id/providers/events/timer/"
+    description="Menjadwalkan tugas dengan ekspresi cron"
+  />
+  <LinkCard
+    title="Email (SendGrid)"
+    href="/id/providers/events/email-sendgrid/"
+    description="Kirim email transaksional melalui SendGrid"
+  />
+  <LinkCard
+    title="SMS (Twilio)"
+    href="/id/providers/events/sms-twilio/"
+    description="Kirim pesan SMS melalui Twilio"
+  />
+</CardGrid>
+
+## Arsitektur
+
+```
+External Service / Timer
+    │
+    ▼ HTTP / Schedule
+┌─────────────────────────────────────────┐
+│           Events Ingress                │
+│     (Process incoming event)            │
+└─────────────────────────────────────────┘
+    │
+    ▼ Normalized Event
+┌─────────────────────────────────────────┐
+│              NATS Bus                   │
+│    greentic.events.{env}.{tenant}.{type}│
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│           Flow Executor                 │
+│      (Process with event flows)         │
+└─────────────────────────────────────────┘
+```
+
+## Normalisasi Event
+
+Semua event dinormalisasi ke format umum:
+
+```rust
+pub struct Event {
+    pub id: String,
+    pub event_type: String,
+    pub source: String,
+    pub timestamp: u64,
+    pub payload: Value,
+    pub metadata: Option<Value>,
+}
+```
+
+## Konfigurasi
+
+### Di Bundle
+
+```yaml title="greentic.demo.yaml"
+providers:
+  events-webhook:
+    pack: "providers/events/events-webhook.gtpack"
+
+  events-timer:
+    pack: "providers/events/events-timer.gtpack"
+```
+
+### Event Flow
+
+```yaml title="flows/on_event.ygtc"
+name: handle_event
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        // Process the event
+        let payload = event.payload;
+        process_payload(payload)
+    next: respond
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+## Subject NATS
+
+Event mengalir melalui NATS:
+
+| Subject | Tujuan |
+|---------|--------|
+| `greentic.events.{env}.{tenant}.{type}` | Notifikasi event |
+| `greentic.events.{env}.{tenant}.{type}.result` | Hasil pemrosesan event |
+
+## Pola Umum
+
+### Notifikasi Berbasis Event
+
+```yaml
+nodes:
+  - id: on_order
+    type: branch
+    config:
+      conditions:
+        - expression: "event.event_type == 'order.created'"
+          next: send_confirmation
+        - expression: "event.event_type == 'order.shipped'"
+          next: send_tracking
+```
+
+### Tugas Terjadwal
+
+```yaml
+nodes:
+  - id: daily_report
+    type: http
+    config:
+      method: GET
+      url: "https://api.example.com/reports/daily"
+    next: send_email
+
+triggers:
+  - type: timer
+    cron: "0 9 * * *"  # 9 AM daily
+    target: daily_report
+```
+
+## Langkah Berikutnya
+
+- [Provider Webhook](/id/providers/events/webhook/)
+- [Provider Timer](/id/providers/events/timer/)
+- [Panduan Flows](/id/concepts/flows/)

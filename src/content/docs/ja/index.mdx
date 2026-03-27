@@ -1,0 +1,48 @@
+---
+title: Greentic Platform
+description: AI 駆動の digital worker を構築するための、WASM-component-based な multi-tenant platform
+template: splash
+hero:
+  tagline: WebAssembly を使って autonomous agentic automation pipeline を構築し、実行する
+  actions:
+    - text: はじめる
+      link: /ja/getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub で見る
+      link: https://github.com/greenticai
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 主な特徴
+
+<CardGrid stagger>
+	<Card title="WASM Components" icon="puzzle">
+		WebAssembly（WASI Preview 2）による portable かつ sandboxed execution。1 度ビルドすれば、どこでも実行できます。
+	</Card>
+	<Card title="Multi-Tenant" icon="setting">
+		安全でスケーラブルな deployment のために、`TenantCtx` による tenant isolation を標準で備えています。
+	</Card>
+	<Card title="Flow-Based Orchestration" icon="random">
+		YAML ベースの flow graph（`.ygtc` files）で automation pipeline を定義します。
+	</Card>
+	<Card title="Provider Ecosystem" icon="external">
+		WASM provider packs を通じて Slack、Teams、Telegram、WhatsApp などに接続できます。
+	</Card>
+</CardGrid>
+
+## アーキテクチャのハイライト
+
+- **Flows** - WASM component node のオーケストレーション graph を YAML で定義
+- **Packs** - flows、components、assets を含む署名付き `.gtpack` archive
+- **Components** - Greentic WIT interface を実装する portable な WASM building block
+- **Providers** - 外部 service（messaging、events、secrets）を橋渡しする WASM component
+
+## クイックリンク
+
+- [Quick Start Guide](/ja/getting-started/quick-start/) - 数分で起動して実行する
+- [Core Concepts](/ja/concepts/architecture/) - platform architecture を理解する
+- [GTC CLI Reference](/ja/cli/overview/) - command-line tools を使いこなす
+- [Messaging Providers](/ja/providers/messaging/overview/) - messaging channel を接続する

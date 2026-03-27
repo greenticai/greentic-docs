@@ -1,0 +1,145 @@
+---
+title: Correo electrónico
+description: Envía y recibe correos electrónicos como mensajes
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+El provider de mensajería Email permite que tu trabajador digital se comunique por correo electrónico. Soporta:
+
+- Envío de correos electrónicos
+- Recepción de correos electrónicos (mediante webhooks)
+- Formato HTML
+- Adjuntos
+
+## Configuración
+
+<Steps>
+
+1. **Configura los ajustes de SMTP**
+
+   ```json title="answers.json"
+   {
+     "messaging-email": {
+       "enabled": true,
+       "smtp_host": "smtp.example.com",
+       "smtp_port": 587,
+       "smtp_user": "your-email@example.com",
+       "smtp_password": "your-password",
+       "from_address": "support@example.com",
+       "from_name": "Support Bot"
+     }
+   }
+   ```
+
+2. **Configura la entrada (opcional)**
+
+   Para recibir correos electrónicos, configura un webhook con tu provider de correo:
+   - SendGrid Inbound Parse
+   - Mailgun Routes
+   - AWS SES
+
+3. **Ejecuta la configuración**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Opciones de configuración
+
+| Opción | Requerido | Descripción |
+|--------|----------|-------------|
+| `enabled` | Sí | Habilita/deshabilita el provider |
+| `smtp_host` | Sí | Hostname del servidor SMTP |
+| `smtp_port` | Sí | Puerto SMTP (normalmente 587 o 465) |
+| `smtp_user` | Sí | Nombre de usuario SMTP |
+| `smtp_password` | Sí | Contraseña SMTP |
+| `from_address` | Sí | Dirección predeterminada del remitente |
+| `from_name` | No | Nombre mostrado para la dirección del remitente |
+| `webhook_url` | No | Endpoint del webhook entrante |
+
+## Funcionalidades
+
+### Enviar texto plano
+
+```yaml
+- id: send_email
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Your Support Request"
+    message: "Thank you for contacting us. We'll get back to you shortly."
+```
+
+### Enviar HTML
+
+```yaml
+- id: send_html_email
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Welcome!"
+    html: |
+      <html>
+        <body>
+          <h1>Welcome to Our Service!</h1>
+          <p>Thank you for signing up.</p>
+          <a href="https://example.com/start">Get Started</a>
+        </body>
+      </html>
+```
+
+### Con adjuntos
+
+```yaml
+- id: send_with_attachment
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Your Report"
+    message: "Please find your report attached."
+    attachments:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+```
+
+### CC y BCC
+
+```yaml
+- id: send_copy
+  type: reply
+  config:
+    to: "{{user_email}}"
+    cc: "manager@example.com"
+    bcc: "archive@example.com"
+    subject: "Support Update"
+    message: "Your ticket has been resolved."
+```
+
+## Manejo de correo entrante
+
+```yaml title="flows/on_email.ygtc"
+name: handle_email
+version: "1.0"
+
+nodes:
+  - id: process
+    type: reply
+    config:
+      to: "{{from_address}}"
+      subject: "Re: {{subject}}"
+      message: "Thank you for your email. We've received your message."
+
+triggers:
+  - type: email
+    target: process
+```
+
+## Próximos pasos
+
+- [Provider de eventos SendGrid](/es/providers/events/email-sendgrid/)
+- [Guía de Flows](/es/concepts/flows/)

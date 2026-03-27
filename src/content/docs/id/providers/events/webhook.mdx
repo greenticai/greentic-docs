@@ -1,0 +1,238 @@
+---
+title: Webhook
+description: Menerima webhook HTTP dari layanan eksternal
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+Provider event Webhook memungkinkan digital worker Anda menerima webhook HTTP dari layanan eksternal seperti GitHub, Stripe, Shopify, dan sebagainya.
+
+## Penyiapan
+
+<Steps>
+
+1. **Konfigurasikan Provider**
+
+   ```json title="answers.json"
+   {
+     "events-webhook": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app"
+     }
+   }
+   ```
+
+2. **Jalankan Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **Daftarkan Webhook**
+
+   Gunakan URL webhook yang dihasilkan di layanan eksternal Anda:
+   ```
+   https://your-domain.com/events/webhook/{tenant}/{event_type}
+   ```
+
+</Steps>
+
+## Opsi Konfigurasi
+
+| Opsi | Wajib | Deskripsi |
+|------|-------|-----------|
+| `enabled` | Ya | Aktifkan/nonaktifkan provider |
+| `public_base_url` | Ya | URL publik untuk webhook |
+| `secret_header` | Tidak | Nama header untuk validasi signature |
+| `secret_key` | Tidak | Secret key untuk validasi signature |
+
+## Format URL Webhook
+
+```
+POST https://your-domain.com/events/webhook/{tenant}/{event_type}
+```
+
+Contoh:
+```
+POST https://your-domain.com/events/webhook/demo/order.created
+```
+
+## Menangani Webhook
+
+### Handler Dasar
+
+```yaml title="flows/on_webhook.ygtc"
+name: handle_webhook
+version: "1.0"
+
+nodes:
+  - id: process
+    type: script
+    config:
+      script: |
+        let data = event.payload;
+        // Process webhook data
+        data
+    next: respond
+
+  - id: respond
+    type: http_response
+    config:
+      status: 200
+      body:
+        success: true
+
+triggers:
+  - type: event
+    event_type: "order.created"
+    target: process
+```
+
+### Webhook GitHub
+
+```yaml
+nodes:
+  - id: check_event
+    type: branch
+    config:
+      conditions:
+        - expression: "headers['x-github-event'] == 'push'"
+          next: handle_push
+        - expression: "headers['x-github-event'] == 'pull_request'"
+          next: handle_pr
+      default: ignore
+
+  - id: handle_push
+    type: script
+    config:
+      script: |
+        let commits = event.payload.commits;
+        format!("Received {} commits", commits.len())
+
+triggers:
+  - type: event
+    event_type: "github"
+    target: check_event
+```
+
+### Webhook Stripe
+
+```yaml
+nodes:
+  - id: handle_stripe
+    type: branch
+    config:
+      conditions:
+        - expression: "event.payload.type == 'payment_intent.succeeded'"
+          next: payment_success
+        - expression: "event.payload.type == 'payment_intent.failed'"
+          next: payment_failed
+
+triggers:
+  - type: event
+    event_type: "stripe"
+    target: handle_stripe
+```
+
+## Validasi Signature
+
+<Aside type="caution">
+Selalu validasi signature webhook di production untuk mencegah request yang tidak sah.
+</Aside>
+
+### Validasi HMAC
+
+```json title="answers.json"
+{
+  "events-webhook": {
+    "enabled": true,
+    "public_base_url": "https://your-domain.com",
+    "signatures": {
+      "github": {
+        "header": "X-Hub-Signature-256",
+        "algorithm": "sha256",
+        "secret": "your-github-secret"
+      },
+      "stripe": {
+        "header": "Stripe-Signature",
+        "algorithm": "stripe",
+        "secret": "whsec_xxx"
+      }
+    }
+  }
+}
+```
+
+## Penanganan Respons
+
+### Respons Langsung
+
+Sebagian besar provider webhook mengharapkan respons cepat:
+
+```yaml
+- id: ack
+  type: http_response
+  config:
+    status: 200
+  next: async_process  # Process async after responding
+```
+
+### Pemrosesan Async
+
+Untuk tugas yang berjalan lama, kirim acknowledgment terlebih dahulu:
+
+```yaml
+nodes:
+  - id: acknowledge
+    type: http_response
+    config:
+      status: 202
+      body:
+        message: "Processing"
+    next: process_async
+
+  - id: process_async
+    type: async
+    config:
+      flow: "process_webhook_data"
+      payload: "{{event.payload}}"
+```
+
+## Menguji Webhook
+
+### Menggunakan curl
+
+```bash
+curl -X POST https://your-domain.com/events/webhook/demo/test \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello from webhook"}'
+```
+
+### Menggunakan inspector ngrok
+
+```bash
+ngrok http 8080
+# Visit http://localhost:4040 to inspect requests
+```
+
+## Troubleshooting
+
+### Webhook Tidak Diterima
+
+1. Periksa apakah URL sudah benar
+2. Pastikan URL publik dapat diakses
+3. Periksa firewall/security group
+4. Tinjau log layanan eksternal
+
+### Validasi Signature Gagal
+
+1. Pastikan secret key sesuai
+2. Periksa apakah nama header benar
+3. Pastikan body mentah digunakan untuk validasi
+
+## Langkah Berikutnya
+
+- [Provider Timer](/id/providers/events/timer/)
+- [Panduan Flows](/id/concepts/flows/)

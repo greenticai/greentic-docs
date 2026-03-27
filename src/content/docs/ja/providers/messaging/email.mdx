@@ -1,0 +1,145 @@
+---
+title: Email
+description: メッセージとして email を送受信する
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+Email messaging provider を使うと、digital worker は email 経由でやり取りできます。次をサポートします:
+
+- email の送信
+- email の受信（webhook 経由）
+- HTML formatting
+- 添付ファイル
+
+## セットアップ
+
+<Steps>
+
+1. **SMTP 設定を構成する**
+
+   ```json title="answers.json"
+   {
+     "messaging-email": {
+       "enabled": true,
+       "smtp_host": "smtp.example.com",
+       "smtp_port": 587,
+       "smtp_user": "your-email@example.com",
+       "smtp_password": "your-password",
+       "from_address": "support@example.com",
+       "from_name": "Support Bot"
+     }
+   }
+   ```
+
+2. **Inbound を設定する（任意）**
+
+   email を受信するには、email provider 側で webhook を設定します:
+   - SendGrid Inbound Parse
+   - Mailgun Routes
+   - AWS SES
+
+3. **セットアップを実行する**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## 設定オプション
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | provider を有効/無効にする |
+| `smtp_host` | Yes | SMTP server hostname |
+| `smtp_port` | Yes | SMTP port（通常は 587 または 465） |
+| `smtp_user` | Yes | SMTP username |
+| `smtp_password` | Yes | SMTP password |
+| `from_address` | Yes | デフォルトの送信元 address |
+| `from_name` | No | 送信元 address の表示名 |
+| `webhook_url` | No | Inbound webhook endpoint |
+
+## 機能
+
+### プレーンテキスト送信
+
+```yaml
+- id: send_email
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Your Support Request"
+    message: "Thank you for contacting us. We'll get back to you shortly."
+```
+
+### HTML 送信
+
+```yaml
+- id: send_html_email
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Welcome!"
+    html: |
+      <html>
+        <body>
+          <h1>Welcome to Our Service!</h1>
+          <p>Thank you for signing up.</p>
+          <a href="https://example.com/start">Get Started</a>
+        </body>
+      </html>
+```
+
+### 添付ファイル付き
+
+```yaml
+- id: send_with_attachment
+  type: reply
+  config:
+    to: "{{user_email}}"
+    subject: "Your Report"
+    message: "Please find your report attached."
+    attachments:
+      - url: "https://example.com/report.pdf"
+        filename: "report.pdf"
+```
+
+### CC と BCC
+
+```yaml
+- id: send_copy
+  type: reply
+  config:
+    to: "{{user_email}}"
+    cc: "manager@example.com"
+    bcc: "archive@example.com"
+    subject: "Support Update"
+    message: "Your ticket has been resolved."
+```
+
+## Inbound Email の処理
+
+```yaml title="flows/on_email.ygtc"
+name: handle_email
+version: "1.0"
+
+nodes:
+  - id: process
+    type: reply
+    config:
+      to: "{{from_address}}"
+      subject: "Re: {{subject}}"
+      message: "Thank you for your email. We've received your message."
+
+triggers:
+  - type: email
+    target: process
+```
+
+## 次のステップ
+
+- [SendGrid Events Provider](/ja/providers/events/email-sendgrid/)
+- [Flows Guide](/ja/concepts/flows/)
