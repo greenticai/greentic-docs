@@ -42,6 +42,20 @@ The CLI will prompt for:
 
 ## Non-Interactive Setup
 
+### Demo Flows
+
+Extensible demo created with `gtc wizard`:
+
+```bash
+gtc setup ./crates/cloud-deploy-demo/bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+```
+
+End-to-end demo from a published bundle:
+
+```bash
+gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+```
+
 ### Generate Answers Template
 
 First, generate a template with all required fields:
