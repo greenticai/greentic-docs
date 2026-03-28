@@ -121,6 +121,26 @@ my-digital-worker/
 
 ## Examples
 
+### Extensible Demo Bundle
+
+Use the published demo answers to create a local directory bundle that developers can extend afterwards:
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-create-answers.json
+```
+
+This creates a local bundle at:
+
+```text
+./crates/cloud-deploy-demo/bundle
+```
+
+Then continue with setup:
+
+```bash
+gtc setup ./crates/cloud-deploy-demo/bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+```
+
 ### Basic Usage
 
 ```bash
