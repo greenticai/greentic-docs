@@ -3,7 +3,7 @@ title: gtc wizard
 description: Create new Greentic bundles with the wizard command
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Overview
 
@@ -200,6 +200,95 @@ gtc wizard --template customer-service --answers answers.yaml
 | `customer-service` | FAQ bot with escalation |
 | `helpdesk` | IT support with ticket integration |
 | `multi-channel` | Multiple messaging channels |
+
+## Bundle Capabilities
+
+The wizard prompts for optional bundle capabilities that enable additional features. Each capability unlocks a specific set of assets and behaviors in the generated bundle.
+
+### Interactive Prompts
+
+When running `gtc wizard` interactively, you will see:
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+### Capability Reference
+
+| Prompt | Capability ID | What It Does |
+|--------|---------------|-------------|
+| Enable bundle-level assets | `greentic.cap.bundle_assets.read.v1` | Creates the `./assets/` directory and scaffolds default skin files from provider packs into per-tenant directories |
+| Enable OAuth login for WebChat GUI | `greentic.cap.webchat.oauth.v1` | Adds OAuth/OIDC authentication provider configuration to tenant config files |
+| Enable multi-language for WebChat GUI | `greentic.cap.webchat.i18n.v1` | Enables the locale picker in WebChat and scaffolds locale JSON files under `./assets/` |
+| Enable embeddable WebChat widget | `greentic.cap.webchat.embed.v1` | Generates embed HTML snippets (fullpage link, inline iframe, chat bubble) per tenant |
+
+### Setting Capabilities in the Answers File
+
+Instead of answering prompts interactively, you can set capabilities directly in the answers file by adding a `capabilities` array:
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Capabilities are additive. Enabling `greentic.cap.webchat.embed.v1` implicitly requires `greentic.cap.bundle_assets.read.v1` because the embed snippets are written to the `./assets/` directory. The wizard handles this dependency automatically.
+</Aside>
+
+For full details on capabilities, scaffold behavior, and the overlay mechanism, see [Bundle Assets](/greentic-docs/concepts/bundle-assets/).
 
 ## Workflow
 

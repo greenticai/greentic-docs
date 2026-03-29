@@ -3,7 +3,7 @@ title: WebChat
 description: Embed a chat widget in your website
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Overview
 
@@ -71,24 +71,50 @@ User's Browser
 
 4. **Embed in Website**
 
-   Add the widget to your HTML:
+   There are three ways to embed WebChat. Choose the one that fits your use case:
+
+   <Tabs>
+     <TabItem label="Fullpage Link">
+   Link directly to the hosted fullpage chat UI:
 
    ```html
-   <script src="https://your-domain.com/webchat/widget.js"></script>
+   <a href="https://your-domain.com/webchat/gui/demo/default">
+     Open Support Chat
+   </a>
+   ```
+     </TabItem>
+     <TabItem label="Inline Iframe">
+   Embed the chat in a specific area of your page:
+
+   ```html
+   <iframe
+     src="https://your-domain.com/webchat/gui/demo/default"
+     width="400"
+     height="600"
+     style="border: none; border-radius: 8px;"
+     title="Support Chat"
+   ></iframe>
+   ```
+     </TabItem>
+     <TabItem label="Chat Bubble">
+   Add a floating chat bubble to every page:
+
+   ```html
+   <script src="https://your-domain.com/webchat/embed.js"></script>
    <script>
-     GreenticWebChat.init({
-       directLine: {
-         domain: 'https://your-domain.com/webchat',
-         webSocket: true
-       },
+     greenticChat.init({
+       baseUrl: 'https://your-domain.com',
        tenant: 'demo',
-       team: 'default',
-       theme: {
-         primaryColor: '#0078D4'
-       }
+       team: 'default'
      });
    </script>
    ```
+     </TabItem>
+   </Tabs>
+
+   <Aside type="tip">
+   When the `greentic.cap.webchat.embed.v1` capability is enabled, embed snippets are auto-generated in `assets/webchat-gui/embed/{tenant}.html`. See the [WebChat Embedding guide](/greentic-docs/providers/messaging/webchat-embedding/) for full configuration reference and the public JavaScript API.
+   </Aside>
 
 </Steps>
 
@@ -386,6 +412,51 @@ GreenticWebChat.init({
 });
 ```
 
+## Bundle Assets & Skin Customization
+
+When the `greentic.cap.bundle_assets.read.v1` capability is enabled, the wizard scaffolds a per-tenant skin directory under `./assets/` in your bundle. You can edit these files to customize the WebChat appearance without rebuilding the provider pack.
+
+### How Skin Overlay Works
+
+The runtime resolves asset files using an overlay strategy: bundle files override pack defaults on a per-file basis. If you customize `skin.json` in your bundle, the runtime uses your version. If you leave `page.css` untouched, the pack's built-in default is used.
+
+This means you can selectively override only the files you need to change.
+
+### File Reference
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `skin.json` | `assets/webchat-gui/skins/{tenant}/skin.json` | Theme config: colors, title, logo, feature flags |
+| `index.html` | `assets/webchat-gui/skins/{tenant}/fullpage/index.html` | Fullpage chat HTML template |
+| `page.css` | `assets/webchat-gui/skins/{tenant}/fullpage/page.css` | Fullpage custom styles |
+| `bubble.css` | `assets/webchat-gui/skins/{tenant}/embed/bubble.css` | Chat bubble custom styles |
+| `en.json` | `assets/webchat-gui/skins/{tenant}/i18n/en.json` | English locale strings |
+| `id.json` | `assets/webchat-gui/skins/{tenant}/i18n/id.json` | Indonesian locale strings |
+| `{tenant}.html` | `assets/webchat-gui/embed/{tenant}.html` | Auto-generated embed snippets |
+
+### Example: Changing the Theme
+
+Edit `skin.json` to update colors and branding:
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "subtitle": "We are here to help",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE",
+  "showLocalePicker": true,
+  "showOAuthLogin": true,
+  "embedEnabled": true
+}
+```
+
+No rebuild or restart is needed -- the runtime picks up the changes on the next request.
+
+<Aside type="tip">
+For the full capability system and scaffold details, see [Bundle Assets](/greentic-docs/concepts/bundle-assets/). For embed types and the chat bubble configuration reference, see [WebChat Embedding](/greentic-docs/providers/messaging/webchat-embedding/).
+</Aside>
+
 ## Multi-Language Support
 
 The WebChat GUI includes a built-in locale picker that lets users switch languages at runtime. The locale picker appears in the chat header, allowing users to select their preferred language without reloading the page.
@@ -662,6 +733,14 @@ When OAuth is enabled:
 
 ## Next Steps
 
+<<<<<<< Updated upstream
 - [Adaptive Cards](/components/cards2pack/) - Create rich cards
 - [Theming Guide](/reference/webchat-theming/) - Advanced customization
 - [Flows Guide](/concepts/flows/) - Build conversation flows
+=======
+- [WebChat Embedding](/greentic-docs/providers/messaging/webchat-embedding/) - Embed types, chat bubble config, and public JS API
+- [Bundle Assets](/greentic-docs/concepts/bundle-assets/) - Capability system and skin overlay mechanism
+- [Adaptive Cards](/greentic-docs/components/cards2pack/) - Create rich cards
+- [Theming Guide](/greentic-docs/reference/webchat-theming/) - Advanced customization
+- [Flows Guide](/greentic-docs/concepts/flows/) - Build conversation flows
+>>>>>>> Stashed changes
