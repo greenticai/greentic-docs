@@ -1,0 +1,301 @@
+---
+title: Incrustación de WebChat
+description: Tres formas de incrustar el widget WebChat de Greentic en su sitio web
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Descripción General
+
+El widget WebChat de Greentic puede incrustarse en su sitio web de tres formas, cada una adecuada para diferentes casos de uso:
+
+| Tipo de Incrustación | Mejor Para | Esfuerzo de Integración |
+|---------------------|-----------|------------------------|
+| **Enlace de Página Completa** | Páginas de soporte dedicadas, portales de chat independientes | Mínimo -- solo un enlace |
+| **Iframe en Línea** | Incrustar chat en un área específica de una página | Bajo -- una etiqueta `<iframe>` |
+| **Burbuja de Chat** | Botón de chat persistente en cada página, overlays de soporte al cliente | Medio -- etiqueta script + configuración |
+
+Los tres tipos se generan automáticamente como snippets de incrustación cuando la capability `greentic.cap.webchat.embed.v1` está habilitada. Puede encontrar los snippets generados en `assets/webchat-gui/embed/{tenant}.html` después de ejecutar el wizard o setup.
+
+## Enlace de Página Completa
+
+La opción más sencilla. El provider WebChat sirve una UI de chat en página completa en una ruta dedicada. Solo necesita enlazarla.
+
+```html
+<!-- Enlace al WebChat en página completa -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+
+La vista de página completa usa los archivos de skin del tenant (colores, logo, título) de `assets/webchat-gui/skins/{tenant}/fullpage/`. Puede personalizar `index.html` y `page.css` allí.
+
+<Aside type="tip">
+El enlace de página completa es útil para firmas de correo electrónico, códigos QR o cualquier contexto donde desee enviar a los usuarios directamente a una sesión de chat sin incrustar nada.
+</Aside>
+
+## Iframe en Línea
+
+Incruste el chat en un área específica de su página usando un `<iframe>`. Esto le da control sobre el tamaño y la ubicación mientras mantiene el chat aislado.
+
+```html
+<!-- Incrustación de iframe en línea -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: 1px solid #e0e0e0; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+
+### Iframe Responsivo
+
+Para diseños responsivos, envuelva el iframe en un contenedor:
+
+```html
+<div style="width: 100%; max-width: 480px; height: 70vh; min-height: 400px;">
+  <iframe
+    src="https://your-domain.com/webchat/gui/demo/default"
+    style="width: 100%; height: 100%; border: none; border-radius: 8px;"
+    allow="microphone; camera"
+    title="Support Chat"
+  ></iframe>
+</div>
+```
+
+## Burbuja de Chat
+
+La burbuja de chat coloca un botón flotante en su página. Al hacer clic, abre un overlay de chat. Esta es la opción más común para sitios web orientados al cliente donde desea que el chat esté disponible en cada página.
+
+### Configuración Básica
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### Con Configuración Completa
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default',
+
+    // Apariencia
+    title: 'Acme Support',
+    subtitle: 'We usually reply within minutes',
+    logo: 'https://example.com/logo.png',
+    primaryColor: '#E63946',
+    backgroundColor: '#F1FAEE',
+    position: 'bottom-right',
+    offsetX: 20,
+    offsetY: 20,
+    bubbleSize: 60,
+    bubbleIcon: 'chat',
+    zIndex: 9999,
+
+    // Comportamiento
+    startOpen: false,
+    greetingMessage: 'Hello! How can we help you today?',
+    greetingDelay: 3000,
+    showUnreadBadge: true,
+    persistSession: true,
+
+    // Tamaño
+    width: 400,
+    height: 600,
+    mobileFullscreen: true
+  });
+</script>
+```
+
+## Referencia de Configuración
+
+La función `greenticChat.init()` acepta las siguientes opciones:
+
+### Opciones Requeridas
+
+| Opción | Tipo | Descripción |
+|--------|------|-------------|
+| `baseUrl` | `string` | URL base del runtime de Greentic (por ejemplo, `https://your-domain.com`) |
+| `tenant` | `string` | Identificador del tenant |
+| `team` | `string` | Identificador del team |
+
+### Opciones de Apariencia
+
+| Opción | Tipo | Predeterminado | Descripción |
+|--------|------|---------------|-------------|
+| `title` | `string` | De `skin.json` | Título de la ventana de chat mostrado en el encabezado |
+| `subtitle` | `string` | `undefined` | Texto de subtítulo debajo del título |
+| `logo` | `string` | De `skin.json` | URL de la imagen del logo mostrada en el encabezado |
+| `primaryColor` | `string` | De `skin.json` | Color de acento principal (hex, por ejemplo, `#0078D4`) |
+| `backgroundColor` | `string` | `#ffffff` | Color de fondo de la ventana de chat |
+| `position` | `string` | `bottom-right` | Posición de la burbuja: `bottom-right` o `bottom-left` |
+| `offsetX` | `number` | `20` | Desplazamiento horizontal desde el borde en píxeles |
+| `offsetY` | `number` | `20` | Desplazamiento vertical desde la parte inferior en píxeles |
+| `bubbleSize` | `number` | `60` | Diámetro del botón de burbuja flotante en píxeles |
+| `bubbleIcon` | `string` | `chat` | Icono dentro de la burbuja: `chat`, `help`, `support` o una URL SVG personalizada |
+| `zIndex` | `number` | `9999` | CSS z-index para el overlay de chat y la burbuja |
+
+### Opciones de Comportamiento
+
+| Opción | Tipo | Predeterminado | Descripción |
+|--------|------|---------------|-------------|
+| `startOpen` | `boolean` | `false` | Abrir la ventana de chat inmediatamente al cargar la página |
+| `greetingMessage` | `string` | `undefined` | Saludo proactivo mostrado en un tooltip sobre la burbuja |
+| `greetingDelay` | `number` | `3000` | Retraso en milisegundos antes de mostrar el saludo |
+| `showUnreadBadge` | `boolean` | `true` | Mostrar insignia de conteo de mensajes no leídos en la burbuja |
+| `persistSession` | `boolean` | `true` | Persistir la sesión de chat entre navegaciones de página usando `localStorage` |
+
+### Opciones de Tamaño
+
+| Opción | Tipo | Predeterminado | Descripción |
+|--------|------|---------------|-------------|
+| `width` | `number` | `400` | Ancho de la ventana de chat en píxeles |
+| `height` | `number` | `600` | Alto de la ventana de chat en píxeles |
+| `mobileFullscreen` | `boolean` | `true` | Usar modo pantalla completa en dispositivos móviles (ancho del viewport < 768px) |
+
+## Detección Automática desde el Skin
+
+Cuando opciones como `title`, `primaryColor` o `logo` no se proporcionan explícitamente en la llamada a `greenticChat.init()`, el script de incrustación carga automáticamente los valores predeterminados del archivo `skin.json` del tenant. Esto significa que su burbuja de chat hereda la configuración de su marca sin duplicarla en el código de incrustación.
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE"
+}
+```
+
+El orden de resolución es:
+
+1. Opciones explícitas pasadas a `greenticChat.init()` (prioridad más alta)
+2. Valores del `skin.json` del tenant
+3. Valores predeterminados integrados del pack
+
+## API Pública de JavaScript
+
+Después de la inicialización, el objeto `greenticChat` expone métodos para controlar la burbuja de chat programáticamente:
+
+```javascript
+// Abrir la ventana de chat
+greenticChat.open();
+
+// Cerrar la ventana de chat
+greenticChat.close();
+
+// Alternar abrir/cerrar
+greenticChat.toggle();
+
+// Verificar si la ventana de chat está abierta
+const isOpen = greenticChat.isOpen();
+
+// Destruir el widget y limpiar
+greenticChat.destroy();
+```
+
+### Ejemplo: Abrir Chat al Hacer Clic en un Botón
+
+```html
+<button onclick="greenticChat.open()">
+  Need help? Chat with us
+</button>
+```
+
+### Ejemplo: Abrir Chat Después de un Retraso
+
+```javascript
+setTimeout(() => {
+  if (!greenticChat.isOpen()) {
+    greenticChat.open();
+  }
+}, 10000); // Abrir después de 10 segundos
+```
+
+### Ejemplo: Alternar desde un Botón Personalizado
+
+```javascript
+document.getElementById('my-chat-button').addEventListener('click', () => {
+  greenticChat.toggle();
+});
+```
+
+## Comportamiento Responsivo en Móviles
+
+La burbuja de chat se adapta a dispositivos móviles automáticamente:
+
+- **Viewport < 768px**: Cuando `mobileFullscreen` es `true` (predeterminado), la ventana de chat se abre en modo de pantalla completa, cubriendo todo el viewport. Un botón de retroceso/cerrar reemplaza el icono de cierre del encabezado.
+- **Viewport >= 768px**: La ventana de chat se abre como un panel flotante junto a la burbuja, dimensionado según `width` y `height`.
+- **Cambios de orientación**: El widget detecta cambios de orientación y se re-renderiza al tamaño correcto.
+- **Interacciones táctiles**: El botón de burbuja responde a eventos táctiles con objetivos de toque apropiados (mínimo 44x44px siguiendo las pautas de accesibilidad).
+
+## Scaffold: Snippets de Incrustación Generados Automáticamente
+
+Cuando la capability `greentic.cap.webchat.embed.v1` está habilitada, ejecutar `gtc wizard` o `gtc setup` genera snippets de incrustación listos para usar en:
+
+```
+assets/webchat-gui/embed/{tenant}.html
+```
+
+El archivo generado contiene los tres tipos de incrustación con configuración pre-llenada:
+
+<Tabs>
+  <TabItem label="Enlace de Página Completa">
+```html title="Snippet de enlace de página completa"
+<!-- Fullpage Link -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+  </TabItem>
+  <TabItem label="Iframe en Línea">
+```html title="Snippet de iframe en línea"
+<!-- Inline Iframe -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: none; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+  </TabItem>
+  <TabItem label="Burbuja de Chat">
+```html title="Snippet de burbuja de chat"
+<!-- Chat Bubble -->
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+  </TabItem>
+</Tabs>
+
+Estos snippets usan la `public_base_url` de la configuración de su provider. Si usa ngrok o Cloudflare Tunnel, `gtc start` reemplaza la URL automáticamente.
+
+<Aside type="caution">
+Los snippets generados son plantillas. En producción, siempre establezca `allowed_origins` en la configuración de su provider WebChat para restringir qué dominios pueden incrustar el widget.
+</Aside>
+
+## Siguientes Pasos
+
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- configuración completa, OAuth y características
+- [Activos del Bundle](/greentic-docs/concepts/bundle-assets/) -- sistema de capabilities y overlay de skins
+- [gtc wizard](/greentic-docs/cli/wizard/) -- establecer capabilities en el archivo de respuestas

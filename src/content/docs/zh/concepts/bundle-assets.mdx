@@ -1,0 +1,231 @@
+---
+title: Bundle 资产
+description: 用于皮肤、模板和可扩展文件覆盖的通用 bundle 级别资产能力机制
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概述
+
+Bundle 资产是一种通用的、基于能力（capability）的机制，允许 bundle 在标准的 `./assets/` 目录中携带自己的文件（皮肤、模板、嵌入片段、语言环境文件）。需要访问这些文件的 pack 声明一个 capability，运行时在加载时授予只读访问权限。
+
+<Aside type="tip">
+这遵循了 Maarten 的核心设计原则：**通用机制，而非特定解决方案。** Greentic 不是为每个用例硬编码像 `/template/demo/` 这样的路径，而是提供一个客户可以以意想不到的方式扩展的单一 `./assets/` 模式。特定路径会造成维护噩梦；通用 capability 模式可以扩展。
+</Aside>
+
+## 工作原理
+
+Bundle 资产系统有三个组成部分：
+
+1. **Capability 声明** -- bundle 的 answers 文件（或 wizard 提示）声明启用哪些资产 capability。
+2. **脚手架（Scaffold）** -- `gtc wizard` 或 `gtc setup` 自动将 provider pack 中的默认文件复制到 bundle 的 `./assets/` 目录中，调整租户引用。
+3. **覆盖（Overlay）** -- 在运行时，bundle 的 `./assets/` 目录中的文件会覆盖 pack 内置默认值中的对应文件。这使您可以自定义皮肤、模板和语言环境字符串，而无需修改 pack 本身。
+
+## Capabilities
+
+每个 capability 解锁一组特定的资产和行为。Capability 遵循 `greentic.cap.{category}.v{N}` 的命名约定。
+
+| Capability ID | 用途 | 启用的功能 |
+|---------------|------|-----------|
+| `greentic.cap.bundle_assets.read.v1` | Bundle 级别资产目录 | 创建 `./assets/` 目录结构并从 provider pack 脚手架生成默认皮肤文件 |
+| `greentic.cap.webchat.oauth.v1` | WebChat 的 OAuth 认证 | 向租户配置文件添加 OAuth 认证 provider 配置 |
+| `greentic.cap.webchat.i18n.v1` | 多语言 WebChat | 启用语言选择器并在 `./assets/` 下脚手架生成语言环境 JSON 文件 |
+| `greentic.cap.webchat.embed.v1` | 可嵌入的 WebChat 组件 | 为每个租户生成嵌入 HTML 片段（全页链接、内联 iframe、聊天气泡） |
+
+<Aside>
+Capability 是累加的。启用 `greentic.cap.webchat.embed.v1` 隐式要求 `greentic.cap.bundle_assets.read.v1`，因为嵌入片段会写入 `./assets/` 目录。
+</Aside>
+
+## Wizard 提示
+
+运行 `gtc wizard` 时，wizard 会为每个 capability 进行提示：
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+对某个 capability 回答 "yes" 会将其添加到生成的 bundle 中，并触发相应的脚手架步骤。
+
+您也可以在 answers 文件中直接设置 capability，无需交互式提示（参见下方的[配置](#配置)）。
+
+## 配置
+
+### 在 Answers 文件中
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+### 在 bundle.yaml 中
+
+Capability 也会记录在生成的 `bundle.yaml` 中，以便运行时知道哪些功能处于活动状态：
+
+```yaml title="bundle.yaml"
+name: my-digital-worker
+version: "1.0.0"
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+providers:
+  messaging-webchat:
+    pack: "providers/messaging/messaging-webchat.gtpack"
+    setup_flow: "setup_default"
+```
+
+## 脚手架工作原理
+
+当 capability 被启用时，wizard（或 setup）运行脚手架步骤，用默认文件填充 bundle 的 `./assets/` 目录。脚手架过程：
+
+<Steps>
+
+1. **从 provider pack 读取默认文件**
+
+   每个 provider pack 附带一个 `skins/default/` 目录，包含基线皮肤文件（HTML 模板、CSS、JSON 配置、嵌入片段）。
+
+2. **将默认文件复制到 bundle 中**
+
+   脚手架将 `skins/default/` 复制到 `assets/webchat-gui/skins/{tenant}/`，为 bundle 中定义的每个租户创建一个皮肤目录。
+
+3. **替换租户引用**
+
+   复制文件中的占位符标记（如 `{{tenant_id}}` 和 `{{team_id}}`）会被替换为实际的租户和团队标识符。
+
+4. **生成嵌入片段**
+
+   当 `greentic.cap.webchat.embed.v1` 启用时，脚手架会在 `assets/webchat-gui/embed/{tenant}.html` 中生成预填配置的嵌入 HTML 文件（全页链接、内联 iframe、聊天气泡）。
+
+</Steps>
+
+## 脚手架后的目录结构
+
+启用全部四个 capability 并有一个租户 `demo` 时，bundle 如下所示：
+
+```
+my-digital-worker/
+├── bundle.yaml
+├── greentic.demo.yaml
+├── providers/
+│   └── messaging/
+│       ├── messaging-webchat.gtpack
+│       └── messaging-telegram.gtpack
+├── assets/
+│   └── webchat-gui/
+│       ├── skins/
+│       │   └── demo/                    # 每租户皮肤（从 pack 默认值复制）
+│       │       ├── skin.json            # 主题颜色、标题、logo、功能标志
+│       │       ├── fullpage/
+│       │       │   ├── index.html       # 全页聊天 HTML
+│       │       │   └── page.css         # 全页自定义 CSS
+│       │       ├── embed/
+│       │       │   └── bubble.css       # 聊天气泡自定义 CSS
+│       │       └── i18n/
+│       │           ├── en.json          # 英语语言环境字符串
+│       │           └── id.json          # 印尼语语言环境字符串
+│       └── embed/
+│           └── demo.html               # 为租户生成的嵌入片段
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## 覆盖机制
+
+在运行时，Greentic 平台使用覆盖策略解析资产文件：
+
+1. **Bundle 文件优先。** 如果文件存在于 `./assets/webchat-gui/skins/{tenant}/skin.json`，则使用它而不是 pack 内置的 `skins/default/skin.json`。
+2. **Pack 默认值是后备。** 如果 bundle 没有覆盖某个文件，则使用 pack 的内置版本。
+3. **覆盖是按文件的。** 您可以覆盖 `skin.json` 同时保留 pack 的默认 `page.css`。没有全有或全无的要求。
+
+这意味着您可以安全地编辑 `./assets/` 中的文件来自定义部署，而无需 fork 或重新构建 pack。
+
+<Aside type="caution">
+当您将 provider pack 升级到新版本时，请检查您覆盖的文件。新的 pack 版本可能会向 `skin.json` 添加字段或更改 HTML 模板结构。您的 bundle 覆盖仍将优先，因此您需要手动合并任何新更改。
+</Aside>
+
+## 示例：自定义 WebChat 皮肤
+
+脚手架之后，编辑皮肤配置以匹配您的品牌：
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "subtitle": "We are here to help",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE",
+  "showLocalePicker": true,
+  "showOAuthLogin": true,
+  "embedEnabled": true
+}
+```
+
+当用户连接到 `demo` 租户的 WebChat 时，运行时会提供此皮肤。无需重新构建 pack。
+
+## 后续步骤
+
+- [WebChat 嵌入](/greentic-docs/providers/messaging/webchat-embedding/) -- 嵌入类型和配置参考
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- 完整的 WebChat 设置和功能
+- [Packs](/greentic-docs/concepts/packs/) -- pack 如何声明和使用 capability
+- [gtc wizard](/greentic-docs/cli/wizard/) -- wizard answers 文件参考

@@ -1,0 +1,301 @@
+---
+title: Embedding WebChat
+description: Tiga cara untuk menyematkan widget WebChat Greentic di website Anda
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Gambaran Umum
+
+Widget WebChat Greentic dapat disematkan di website Anda dengan tiga cara, masing-masing cocok untuk kasus penggunaan yang berbeda:
+
+| Tipe Embed | Cocok Untuk | Tingkat Integrasi |
+|------------|-------------|-------------------|
+| **Fullpage Link** | Halaman dukungan khusus, portal chat mandiri | Minimal -- cukup satu link |
+| **Inline Iframe** | Menyematkan chat di area tertentu pada halaman | Rendah -- satu tag `<iframe>` |
+| **Chat Bubble** | Tombol chat persisten di setiap halaman, overlay dukungan pelanggan | Menengah -- tag script + konfigurasi |
+
+Ketiga tipe di atas di-generate otomatis sebagai embed snippet ketika capability `greentic.cap.webchat.embed.v1` diaktifkan. Anda dapat menemukan snippet yang dihasilkan di `assets/webchat-gui/embed/{tenant}.html` setelah menjalankan wizard atau setup.
+
+## Fullpage Link
+
+Opsi paling sederhana. Provider WebChat menyajikan UI chat fullpage di path khusus. Anda cukup menautkannya.
+
+```html
+<!-- Link ke WebChat fullpage -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+
+Tampilan fullpage menggunakan file skin tenant (warna, logo, judul) dari `assets/webchat-gui/skins/{tenant}/fullpage/`. Anda dapat mengkustomisasi `index.html` dan `page.css` di sana.
+
+<Aside type="tip">
+Fullpage link berguna untuk tanda tangan email, kode QR, atau konteks apa pun di mana Anda ingin mengarahkan pengguna langsung ke sesi chat tanpa menyematkan apa pun.
+</Aside>
+
+## Inline Iframe
+
+Sematkan chat di area tertentu pada halaman Anda menggunakan `<iframe>`. Ini memberi Anda kontrol atas ukuran dan penempatan sambil menjaga chat tetap terisolasi.
+
+```html
+<!-- Embedding inline iframe -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: 1px solid #e0e0e0; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+
+### Iframe Responsif
+
+Untuk layout responsif, bungkus iframe dalam container:
+
+```html
+<div style="width: 100%; max-width: 480px; height: 70vh; min-height: 400px;">
+  <iframe
+    src="https://your-domain.com/webchat/gui/demo/default"
+    style="width: 100%; height: 100%; border: none; border-radius: 8px;"
+    allow="microphone; camera"
+    title="Support Chat"
+  ></iframe>
+</div>
+```
+
+## Chat Bubble
+
+Chat bubble menempatkan tombol mengambang di halaman Anda. Ketika diklik, ia membuka overlay chat. Ini adalah pilihan paling umum untuk website yang menghadap pelanggan di mana Anda ingin chat tersedia di setiap halaman.
+
+### Setup Dasar
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### Dengan Konfigurasi Lengkap
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default',
+
+    // Tampilan
+    title: 'Acme Support',
+    subtitle: 'We usually reply within minutes',
+    logo: 'https://example.com/logo.png',
+    primaryColor: '#E63946',
+    backgroundColor: '#F1FAEE',
+    position: 'bottom-right',
+    offsetX: 20,
+    offsetY: 20,
+    bubbleSize: 60,
+    bubbleIcon: 'chat',
+    zIndex: 9999,
+
+    // Perilaku
+    startOpen: false,
+    greetingMessage: 'Hello! How can we help you today?',
+    greetingDelay: 3000,
+    showUnreadBadge: true,
+    persistSession: true,
+
+    // Ukuran
+    width: 400,
+    height: 600,
+    mobileFullscreen: true
+  });
+</script>
+```
+
+## Referensi Konfigurasi
+
+Fungsi `greenticChat.init()` menerima opsi berikut:
+
+### Opsi Wajib
+
+| Opsi | Tipe | Deskripsi |
+|------|------|-----------|
+| `baseUrl` | `string` | URL dasar dari runtime Greentic (contoh: `https://your-domain.com`) |
+| `tenant` | `string` | Identifier tenant |
+| `team` | `string` | Identifier team |
+
+### Opsi Tampilan
+
+| Opsi | Tipe | Default | Deskripsi |
+|------|------|---------|-----------|
+| `title` | `string` | Dari `skin.json` | Judul jendela chat yang ditampilkan di header |
+| `subtitle` | `string` | `undefined` | Teks subtitle di bawah judul |
+| `logo` | `string` | Dari `skin.json` | URL gambar logo yang ditampilkan di header |
+| `primaryColor` | `string` | Dari `skin.json` | Warna aksen utama (hex, contoh: `#0078D4`) |
+| `backgroundColor` | `string` | `#ffffff` | Warna latar belakang jendela chat |
+| `position` | `string` | `bottom-right` | Posisi bubble: `bottom-right` atau `bottom-left` |
+| `offsetX` | `number` | `20` | Offset horizontal dari tepi dalam piksel |
+| `offsetY` | `number` | `20` | Offset vertikal dari bawah dalam piksel |
+| `bubbleSize` | `number` | `60` | Diameter tombol bubble mengambang dalam piksel |
+| `bubbleIcon` | `string` | `chat` | Ikon di dalam bubble: `chat`, `help`, `support`, atau URL SVG kustom |
+| `zIndex` | `number` | `9999` | CSS z-index untuk overlay chat dan bubble |
+
+### Opsi Perilaku
+
+| Opsi | Tipe | Default | Deskripsi |
+|------|------|---------|-----------|
+| `startOpen` | `boolean` | `false` | Buka jendela chat langsung saat halaman dimuat |
+| `greetingMessage` | `string` | `undefined` | Sapaan proaktif yang ditampilkan di tooltip di atas bubble |
+| `greetingDelay` | `number` | `3000` | Delay dalam milidetik sebelum menampilkan sapaan |
+| `showUnreadBadge` | `boolean` | `true` | Tampilkan badge jumlah pesan belum dibaca di bubble |
+| `persistSession` | `boolean` | `true` | Pertahankan sesi chat saat navigasi halaman menggunakan `localStorage` |
+
+### Opsi Ukuran
+
+| Opsi | Tipe | Default | Deskripsi |
+|------|------|---------|-----------|
+| `width` | `number` | `400` | Lebar jendela chat dalam piksel |
+| `height` | `number` | `600` | Tinggi jendela chat dalam piksel |
+| `mobileFullscreen` | `boolean` | `true` | Gunakan mode fullscreen di perangkat mobile (lebar viewport < 768px) |
+
+## Deteksi Otomatis dari Skin
+
+Ketika opsi seperti `title`, `primaryColor`, atau `logo` tidak disediakan secara eksplisit dalam panggilan `greenticChat.init()`, script embed secara otomatis memuat default dari file `skin.json` tenant. Ini berarti chat bubble Anda mewarisi konfigurasi brand tanpa menduplikasinya di kode embed.
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE"
+}
+```
+
+Urutan resolusi:
+
+1. Opsi eksplisit yang diteruskan ke `greenticChat.init()` (prioritas tertinggi)
+2. Nilai dari `skin.json` tenant
+3. Default bawaan dari pack
+
+## API JavaScript Publik
+
+Setelah inisialisasi, objek `greenticChat` menyediakan method untuk mengontrol chat bubble secara programatik:
+
+```javascript
+// Buka jendela chat
+greenticChat.open();
+
+// Tutup jendela chat
+greenticChat.close();
+
+// Toggle buka/tutup
+greenticChat.toggle();
+
+// Periksa apakah jendela chat terbuka
+const isOpen = greenticChat.isOpen();
+
+// Hancurkan widget dan bersihkan
+greenticChat.destroy();
+```
+
+### Contoh: Buka Chat saat Klik Tombol
+
+```html
+<button onclick="greenticChat.open()">
+  Need help? Chat with us
+</button>
+```
+
+### Contoh: Buka Chat Setelah Delay
+
+```javascript
+setTimeout(() => {
+  if (!greenticChat.isOpen()) {
+    greenticChat.open();
+  }
+}, 10000); // Buka setelah 10 detik
+```
+
+### Contoh: Toggle dari Tombol Kustom
+
+```javascript
+document.getElementById('my-chat-button').addEventListener('click', () => {
+  greenticChat.toggle();
+});
+```
+
+## Perilaku Responsif Mobile
+
+Chat bubble beradaptasi dengan perangkat mobile secara otomatis:
+
+- **Viewport < 768px**: Ketika `mobileFullscreen` bernilai `true` (default), jendela chat terbuka dalam mode fullscreen, menutupi seluruh viewport. Tombol back/close menggantikan ikon close di header.
+- **Viewport >= 768px**: Jendela chat terbuka sebagai panel mengambang di samping bubble, berukuran sesuai `width` dan `height`.
+- **Perubahan orientasi**: Widget mendeteksi perubahan orientasi dan me-render ulang pada ukuran yang benar.
+- **Interaksi sentuh**: Tombol bubble merespons event sentuh dengan target sentuh yang sesuai (minimum 44x44px mengikuti panduan aksesibilitas).
+
+## Scaffold: Embed Snippet yang Di-generate Otomatis
+
+Ketika capability `greentic.cap.webchat.embed.v1` diaktifkan, menjalankan `gtc wizard` atau `gtc setup` menghasilkan embed snippet siap pakai di:
+
+```
+assets/webchat-gui/embed/{tenant}.html
+```
+
+File yang dihasilkan berisi ketiga tipe embed dengan konfigurasi yang sudah terisi:
+
+<Tabs>
+  <TabItem label="Fullpage Link">
+```html title="Fullpage link snippet"
+<!-- Fullpage Link -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+  </TabItem>
+  <TabItem label="Inline Iframe">
+```html title="Inline iframe snippet"
+<!-- Inline Iframe -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: none; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+  </TabItem>
+  <TabItem label="Chat Bubble">
+```html title="Chat bubble snippet"
+<!-- Chat Bubble -->
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+  </TabItem>
+</Tabs>
+
+Snippet ini menggunakan `public_base_url` dari konfigurasi provider Anda. Jika Anda menggunakan ngrok atau Cloudflare Tunnel, `gtc start` akan mengganti URL secara otomatis.
+
+<Aside type="caution">
+Snippet yang dihasilkan adalah template. Di production, selalu atur `allowed_origins` di konfigurasi provider WebChat Anda untuk membatasi domain mana yang dapat menyematkan widget.
+</Aside>
+
+## Langkah Selanjutnya
+
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- setup lengkap, OAuth, dan fitur
+- [Bundle Assets](/greentic-docs/concepts/bundle-assets/) -- sistem capability dan skin overlay
+- [gtc wizard](/greentic-docs/cli/wizard/) -- mengatur capability di file answers

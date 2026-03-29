@@ -1,0 +1,301 @@
+---
+title: WebChat 嵌入
+description: 将 Greentic WebChat 组件嵌入您网站的三种方式
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概述
+
+Greentic WebChat 组件可以通过三种方式嵌入您的网站，每种方式适合不同的使用场景：
+
+| 嵌入类型 | 最适合 | 集成工作量 |
+|---------|-------|-----------|
+| **全页链接** | 专用支持页面、独立聊天门户 | 最少 -- 只需一个链接 |
+| **内联 Iframe** | 在页面特定区域嵌入聊天 | 低 -- 一个 `<iframe>` 标签 |
+| **聊天气泡** | 每个页面上的持久聊天按钮、客户支持覆盖层 | 中等 -- script 标签 + 配置 |
+
+当 `greentic.cap.webchat.embed.v1` capability 启用时，这三种类型都会作为嵌入片段自动生成。运行 wizard 或 setup 后，您可以在 `assets/webchat-gui/embed/{tenant}.html` 中找到生成的片段。
+
+## 全页链接
+
+最简单的选项。WebChat provider 在专用路径上提供全页聊天 UI。您只需链接到它。
+
+```html
+<!-- 链接到全页 WebChat -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+
+全页视图使用来自 `assets/webchat-gui/skins/{tenant}/fullpage/` 的租户皮肤文件（颜色、logo、标题）。您可以在那里自定义 `index.html` 和 `page.css`。
+
+<Aside type="tip">
+全页链接适用于电子邮件签名、二维码，或任何您希望将用户直接发送到聊天会话而不嵌入任何内容的场景。
+</Aside>
+
+## 内联 Iframe
+
+使用 `<iframe>` 在页面的特定区域嵌入聊天。这使您可以控制大小和位置，同时保持聊天隔离。
+
+```html
+<!-- 内联 iframe 嵌入 -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: 1px solid #e0e0e0; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+
+### 响应式 Iframe
+
+对于响应式布局，将 iframe 包裹在容器中：
+
+```html
+<div style="width: 100%; max-width: 480px; height: 70vh; min-height: 400px;">
+  <iframe
+    src="https://your-domain.com/webchat/gui/demo/default"
+    style="width: 100%; height: 100%; border: none; border-radius: 8px;"
+    allow="microphone; camera"
+    title="Support Chat"
+  ></iframe>
+</div>
+```
+
+## 聊天气泡
+
+聊天气泡在您的页面上放置一个浮动按钮。点击后会打开聊天覆盖层。对于希望在每个页面上都能使用聊天的面向客户的网站，这是最常见的选择。
+
+### 基本设置
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### 完整配置
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default',
+
+    // 外观
+    title: 'Acme Support',
+    subtitle: 'We usually reply within minutes',
+    logo: 'https://example.com/logo.png',
+    primaryColor: '#E63946',
+    backgroundColor: '#F1FAEE',
+    position: 'bottom-right',
+    offsetX: 20,
+    offsetY: 20,
+    bubbleSize: 60,
+    bubbleIcon: 'chat',
+    zIndex: 9999,
+
+    // 行为
+    startOpen: false,
+    greetingMessage: 'Hello! How can we help you today?',
+    greetingDelay: 3000,
+    showUnreadBadge: true,
+    persistSession: true,
+
+    // 尺寸
+    width: 400,
+    height: 600,
+    mobileFullscreen: true
+  });
+</script>
+```
+
+## 配置参考
+
+`greenticChat.init()` 函数接受以下选项：
+
+### 必填选项
+
+| 选项 | 类型 | 说明 |
+|-----|------|------|
+| `baseUrl` | `string` | Greentic 运行时的基础 URL（例如：`https://your-domain.com`） |
+| `tenant` | `string` | 租户标识符 |
+| `team` | `string` | 团队标识符 |
+
+### 外观选项
+
+| 选项 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `title` | `string` | 来自 `skin.json` | 显示在头部的聊天窗口标题 |
+| `subtitle` | `string` | `undefined` | 标题下方的副标题文本 |
+| `logo` | `string` | 来自 `skin.json` | 显示在头部的 logo 图片 URL |
+| `primaryColor` | `string` | 来自 `skin.json` | 主要强调色（hex，例如：`#0078D4`） |
+| `backgroundColor` | `string` | `#ffffff` | 聊天窗口背景色 |
+| `position` | `string` | `bottom-right` | 气泡位置：`bottom-right` 或 `bottom-left` |
+| `offsetX` | `number` | `20` | 距边缘的水平偏移量（像素） |
+| `offsetY` | `number` | `20` | 距底部的垂直偏移量（像素） |
+| `bubbleSize` | `number` | `60` | 浮动气泡按钮的直径（像素） |
+| `bubbleIcon` | `string` | `chat` | 气泡内的图标：`chat`、`help`、`support` 或自定义 SVG URL |
+| `zIndex` | `number` | `9999` | 聊天覆盖层和气泡的 CSS z-index |
+
+### 行为选项
+
+| 选项 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `startOpen` | `boolean` | `false` | 页面加载时立即打开聊天窗口 |
+| `greetingMessage` | `string` | `undefined` | 在气泡上方的工具提示中显示的主动问候语 |
+| `greetingDelay` | `number` | `3000` | 显示问候语前的延迟（毫秒） |
+| `showUnreadBadge` | `boolean` | `true` | 在气泡上显示未读消息计数徽章 |
+| `persistSession` | `boolean` | `true` | 使用 `localStorage` 在页面导航间保持聊天会话 |
+
+### 尺寸选项
+
+| 选项 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `width` | `number` | `400` | 聊天窗口宽度（像素） |
+| `height` | `number` | `600` | 聊天窗口高度（像素） |
+| `mobileFullscreen` | `boolean` | `true` | 在移动设备上使用全屏模式（视口宽度 < 768px） |
+
+## 从皮肤自动检测
+
+当 `greenticChat.init()` 调用中未显式提供 `title`、`primaryColor` 或 `logo` 等选项时，嵌入脚本会自动从租户的 `skin.json` 文件加载默认值。这意味着您的聊天气泡会继承品牌配置，而无需在嵌入代码中重复。
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE"
+}
+```
+
+解析顺序：
+
+1. 传递给 `greenticChat.init()` 的显式选项（最高优先级）
+2. 来自租户 `skin.json` 的值
+3. pack 的内置默认值
+
+## 公共 JavaScript API
+
+初始化后，`greenticChat` 对象公开了以编程方式控制聊天气泡的方法：
+
+```javascript
+// 打开聊天窗口
+greenticChat.open();
+
+// 关闭聊天窗口
+greenticChat.close();
+
+// 切换打开/关闭
+greenticChat.toggle();
+
+// 检查聊天窗口是否打开
+const isOpen = greenticChat.isOpen();
+
+// 销毁组件并清理
+greenticChat.destroy();
+```
+
+### 示例：点击按钮打开聊天
+
+```html
+<button onclick="greenticChat.open()">
+  Need help? Chat with us
+</button>
+```
+
+### 示例：延迟后打开聊天
+
+```javascript
+setTimeout(() => {
+  if (!greenticChat.isOpen()) {
+    greenticChat.open();
+  }
+}, 10000); // 10 秒后打开
+```
+
+### 示例：从自定义按钮切换
+
+```javascript
+document.getElementById('my-chat-button').addEventListener('click', () => {
+  greenticChat.toggle();
+});
+```
+
+## 移动端响应式行为
+
+聊天气泡自动适配移动设备：
+
+- **视口 < 768px**：当 `mobileFullscreen` 为 `true`（默认）时，聊天窗口以全屏模式打开，覆盖整个视口。返回/关闭按钮替代头部的关闭图标。
+- **视口 >= 768px**：聊天窗口作为浮动面板在气泡旁边打开，大小根据 `width` 和 `height` 确定。
+- **方向变化**：组件检测方向变化并以正确的尺寸重新渲染。
+- **触摸交互**：气泡按钮以适当的点击目标响应触摸事件（遵循无障碍指南最小 44x44px）。
+
+## 脚手架：自动生成的嵌入片段
+
+当 `greentic.cap.webchat.embed.v1` capability 启用时，运行 `gtc wizard` 或 `gtc setup` 会在以下位置生成即用的嵌入片段：
+
+```
+assets/webchat-gui/embed/{tenant}.html
+```
+
+生成的文件包含所有三种嵌入类型及预填配置：
+
+<Tabs>
+  <TabItem label="全页链接">
+```html title="全页链接片段"
+<!-- Fullpage Link -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+  </TabItem>
+  <TabItem label="内联 Iframe">
+```html title="内联 iframe 片段"
+<!-- Inline Iframe -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: none; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+  </TabItem>
+  <TabItem label="聊天气泡">
+```html title="聊天气泡片段"
+<!-- Chat Bubble -->
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+  </TabItem>
+</Tabs>
+
+这些片段使用您 provider 配置中的 `public_base_url`。如果您使用 ngrok 或 Cloudflare Tunnel，`gtc start` 会自动替换 URL。
+
+<Aside type="caution">
+生成的片段是模板。在生产环境中，请务必在 WebChat provider 配置中设置 `allowed_origins` 以限制哪些域名可以嵌入该组件。
+</Aside>
+
+## 后续步骤
+
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- 完整设置、OAuth 和功能
+- [Bundle 资产](/greentic-docs/concepts/bundle-assets/) -- capability 系统和皮肤覆盖
+- [gtc wizard](/greentic-docs/cli/wizard/) -- 在 answers 文件中设置 capability

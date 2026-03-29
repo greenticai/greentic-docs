@@ -1,0 +1,231 @@
+---
+title: バンドルアセット
+description: スキン、テンプレート、拡張可能なファイルオーバーレイのための汎用バンドルレベルアセットケイパビリティ
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概要
+
+バンドルアセットは、バンドルが独自のファイル（スキン、テンプレート、エンベッドスニペット、ロケール）を標準の `./assets/` ディレクトリに格納できるようにする、汎用的なケイパビリティベースのメカニズムです。これらのファイルへのアクセスが必要なパックはケイパビリティを宣言し、ランタイムがロード時に読み取り専用アクセスを付与します。
+
+<Aside type="tip">
+これはMaartenのコア設計原則に従っています：**汎用メカニズム、特定のソリューションではなく。** ユースケースごとに `/template/demo/` のようなパスをハードコーディングするのではなく、Greenticは顧客が予期しない方法で拡張できる単一の `./assets/` パターンを提供します。特定のパスはメンテナンスの悪夢を生みます。汎用ケイパビリティパターンはスケールします。
+</Aside>
+
+## 仕組み
+
+バンドルアセットシステムには3つの構成要素があります：
+
+1. **ケイパビリティ宣言** -- バンドルのアンサーファイル（またはウィザードプロンプト）が、どのアセットケイパビリティを有効にするかを宣言します。
+2. **スキャフォールド** -- `gtc wizard` または `gtc setup` が、プロバイダーパックからデフォルトファイルをバンドルの `./assets/` ディレクトリに自動的にコピーし、テナント参照を調整します。
+3. **オーバーレイ** -- ランタイム時に、バンドルの `./assets/` ディレクトリ内のファイルがパックの組み込みデフォルトの対応するファイルをオーバーライドします。これにより、パック自体を変更することなく、スキン、テンプレート、ロケール文字列をカスタマイズできます。
+
+## ケイパビリティ
+
+各ケイパビリティは、特定のアセットと動作のセットを解放します。ケイパビリティは `greentic.cap.{category}.v{N}` の命名規則に従います。
+
+| ケイパビリティID | 目的 | 有効になる機能 |
+|-----------------|------|---------------|
+| `greentic.cap.bundle_assets.read.v1` | バンドルレベルアセットディレクトリ | `./assets/` ディレクトリ構造を作成し、プロバイダーパックからデフォルトスキンファイルをスキャフォールドします |
+| `greentic.cap.webchat.oauth.v1` | WebChatのOAuth認証 | テナント設定ファイルにOAuth認証プロバイダーの設定を追加します |
+| `greentic.cap.webchat.i18n.v1` | 多言語WebChat | ロケールピッカーを有効にし、`./assets/` 配下にロケールJSONファイルをスキャフォールドします |
+| `greentic.cap.webchat.embed.v1` | 埋め込み可能なWebChatウィジェット | テナントごとにエンベッドHTMLスニペット（フルページリンク、インラインiframe、チャットバブル）を生成します |
+
+<Aside>
+ケイパビリティは加算的です。`greentic.cap.webchat.embed.v1` を有効にすると、エンベッドスニペットが `./assets/` ディレクトリに書き込まれるため、暗黙的に `greentic.cap.bundle_assets.read.v1` が必要になります。
+</Aside>
+
+## ウィザードプロンプト
+
+`gtc wizard` を実行すると、各ケイパビリティについてプロンプトが表示されます：
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+ケイパビリティに「yes」と回答すると、生成されるバンドルに追加され、対応するスキャフォールドステップがトリガーされます。
+
+インタラクティブプロンプトなしでアンサーファイルに直接ケイパビリティを設定することもできます（下記の[設定](#設定)を参照）。
+
+## 設定
+
+### アンサーファイル内
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+### bundle.yaml内
+
+ケイパビリティは、ランタイムがどの機能がアクティブかを把握できるよう、生成された `bundle.yaml` にも記録されます：
+
+```yaml title="bundle.yaml"
+name: my-digital-worker
+version: "1.0.0"
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+providers:
+  messaging-webchat:
+    pack: "providers/messaging/messaging-webchat.gtpack"
+    setup_flow: "setup_default"
+```
+
+## スキャフォールドの仕組み
+
+ケイパビリティが有効になると、ウィザード（またはセットアップ）がスキャフォールドステップを実行し、バンドルの `./assets/` ディレクトリにデフォルトファイルを配置します。スキャフォールドプロセス：
+
+<Steps>
+
+1. **プロバイダーパックからデフォルトファイルを読み取る**
+
+   各プロバイダーパックには、ベースラインスキンファイル（HTMLテンプレート、CSS、JSON設定、エンベッドスニペット）を含む `skins/default/` ディレクトリが付属しています。
+
+2. **デフォルトをバンドルにコピーする**
+
+   スキャフォールドは `skins/default/` を `assets/webchat-gui/skins/{tenant}/` にコピーし、バンドルで定義されたテナントごとに1つのスキンディレクトリを作成します。
+
+3. **テナント参照を置換する**
+
+   コピーされたファイル内の `{{tenant_id}}` や `{{team_id}}` などのプレースホルダートークンが、実際のテナントおよびチーム識別子に置換されます。
+
+4. **エンベッドスニペットを生成する**
+
+   `greentic.cap.webchat.embed.v1` が有効な場合、スキャフォールドは事前設定された構成で `assets/webchat-gui/embed/{tenant}.html` にエンベッドHTMLファイル（フルページリンク、インラインiframe、チャットバブル）を生成します。
+
+</Steps>
+
+## スキャフォールド後のディレクトリ構造
+
+4つのケイパビリティすべてを有効にし、テナント `demo` が1つの場合、バンドルは次のようになります：
+
+```
+my-digital-worker/
+├── bundle.yaml
+├── greentic.demo.yaml
+├── providers/
+│   └── messaging/
+│       ├── messaging-webchat.gtpack
+│       └── messaging-telegram.gtpack
+├── assets/
+│   └── webchat-gui/
+│       ├── skins/
+│       │   └── demo/                    # テナントごとのスキン（パックデフォルトからコピー）
+│       │       ├── skin.json            # テーマカラー、タイトル、ロゴ、フィーチャーフラグ
+│       │       ├── fullpage/
+│       │       │   ├── index.html       # フルページチャットHTML
+│       │       │   └── page.css         # フルページカスタムCSS
+│       │       ├── embed/
+│       │       │   └── bubble.css       # チャットバブルカスタムCSS
+│       │       └── i18n/
+│       │           ├── en.json          # 英語ロケール文字列
+│       │           └── id.json          # インドネシア語ロケール文字列
+│       └── embed/
+│           └── demo.html               # テナント用に生成されたエンベッドスニペット
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## オーバーレイメカニズム
+
+ランタイム時に、Greenticプラットフォームはオーバーレイ戦略を使用してアセットファイルを解決します：
+
+1. **バンドルファイルが優先されます。** `./assets/webchat-gui/skins/{tenant}/skin.json` にファイルが存在する場合、パックの組み込み `skins/default/skin.json` の代わりにそれが使用されます。
+2. **パックのデフォルトがフォールバックです。** バンドルがファイルをオーバーライドしない場合、パックの組み込みバージョンが使用されます。
+3. **オーバーレイはファイル単位です。** パックのデフォルト `page.css` を維持しながら `skin.json` をオーバーライドできます。全か無かの要件はありません。
+
+つまり、パックをフォークしたりリビルドしたりすることなく、`./assets/` 内のファイルを安全に編集してデプロイメントをカスタマイズできます。
+
+<Aside type="caution">
+プロバイダーパックを新しいバージョンにアップグレードする際は、オーバーライドしたファイルを確認してください。新しいパックバージョンは `skin.json` にフィールドを追加したり、HTMLテンプレートの構造を変更する場合があります。バンドルのオーバーレイは引き続き優先されるため、新しい変更を手動でマージする必要があります。
+</Aside>
+
+## 例：WebChatスキンのカスタマイズ
+
+スキャフォールド後、ブランドに合わせてスキン設定を編集します：
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "subtitle": "We are here to help",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE",
+  "showLocalePicker": true,
+  "showOAuthLogin": true,
+  "embedEnabled": true
+}
+```
+
+ランタイムは、ユーザーが `demo` テナントのWebChatに接続する際にこのスキンを提供します。パックのリビルドは不要です。
+
+## 次のステップ
+
+- [WebChat Embedding](/greentic-docs/providers/messaging/webchat-embedding/) -- エンベッドタイプと設定リファレンス
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- WebChatの完全なセットアップと機能
+- [Packs](/greentic-docs/concepts/packs/) -- パックがケイパビリティを宣言・消費する方法
+- [gtc wizard](/greentic-docs/cli/wizard/) -- ウィザードアンサーファイルリファレンス
