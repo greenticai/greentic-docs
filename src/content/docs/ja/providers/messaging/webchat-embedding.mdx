@@ -1,0 +1,301 @@
+---
+title: WebChatの埋め込み
+description: Greentic WebChatウィジェットをウェブサイトに埋め込む3つの方法
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## 概要
+
+Greentic WebChatウィジェットは、3つの方法でウェブサイトに埋め込むことができ、それぞれ異なるユースケースに適しています：
+
+| エンベッドタイプ | 最適な用途 | 統合の手間 |
+|----------------|-----------|-----------|
+| **フルページリンク** | 専用サポートページ、スタンドアロンチャットポータル | 最小限 -- リンクのみ |
+| **インラインIframe** | ページの特定領域にチャットを埋め込む | 低 -- `<iframe>` タグ1つ |
+| **チャットバブル** | 全ページの永続的なチャットボタン、カスタマーサポートオーバーレイ | 中 -- scriptタグ + 設定 |
+
+3つのタイプすべてが、`greentic.cap.webchat.embed.v1` ケイパビリティが有効な場合にエンベッドスニペットとして自動生成されます。ウィザードまたはセットアップの実行後、`assets/webchat-gui/embed/{tenant}.html` に生成されたスニペットがあります。
+
+## フルページリンク
+
+最もシンプルなオプションです。WebChatプロバイダーは専用パスでフルページチャットUIを提供します。リンクするだけです。
+
+```html
+<!-- フルページWebChatへのリンク -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+
+フルページビューは、`assets/webchat-gui/skins/{tenant}/fullpage/` のテナントスキンファイル（色、ロゴ、タイトル）を使用します。そこで `index.html` と `page.css` をカスタマイズできます。
+
+<Aside type="tip">
+フルページリンクは、メールの署名、QRコード、またはユーザーを何も埋め込まずにチャットセッションに直接送りたいあらゆるコンテキストで便利です。
+</Aside>
+
+## インラインIframe
+
+`<iframe>` を使用して、ページの特定領域にチャットを埋め込みます。チャットを分離したまま、サイズと配置を制御できます。
+
+```html
+<!-- インラインiframe埋め込み -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: 1px solid #e0e0e0; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+
+### レスポンシブIframe
+
+レスポンシブレイアウトの場合、iframeをコンテナでラップします：
+
+```html
+<div style="width: 100%; max-width: 480px; height: 70vh; min-height: 400px;">
+  <iframe
+    src="https://your-domain.com/webchat/gui/demo/default"
+    style="width: 100%; height: 100%; border: none; border-radius: 8px;"
+    allow="microphone; camera"
+    title="Support Chat"
+  ></iframe>
+</div>
+```
+
+## チャットバブル
+
+チャットバブルは、ページにフローティングボタンを配置します。クリックすると、チャットオーバーレイが開きます。全ページでチャットを利用できるようにしたい顧客向けウェブサイトで最も一般的な選択肢です。
+
+### 基本セットアップ
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+
+### 完全な設定
+
+```html
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default',
+
+    // 外観
+    title: 'Acme Support',
+    subtitle: 'We usually reply within minutes',
+    logo: 'https://example.com/logo.png',
+    primaryColor: '#E63946',
+    backgroundColor: '#F1FAEE',
+    position: 'bottom-right',
+    offsetX: 20,
+    offsetY: 20,
+    bubbleSize: 60,
+    bubbleIcon: 'chat',
+    zIndex: 9999,
+
+    // 動作
+    startOpen: false,
+    greetingMessage: 'Hello! How can we help you today?',
+    greetingDelay: 3000,
+    showUnreadBadge: true,
+    persistSession: true,
+
+    // サイズ
+    width: 400,
+    height: 600,
+    mobileFullscreen: true
+  });
+</script>
+```
+
+## 設定リファレンス
+
+`greenticChat.init()` 関数は以下のオプションを受け付けます：
+
+### 必須オプション
+
+| オプション | 型 | 説明 |
+|-----------|------|------|
+| `baseUrl` | `string` | GreenticランタイムのベースURL（例：`https://your-domain.com`） |
+| `tenant` | `string` | テナント識別子 |
+| `team` | `string` | チーム識別子 |
+
+### 外観オプション
+
+| オプション | 型 | デフォルト | 説明 |
+|-----------|------|-----------|------|
+| `title` | `string` | `skin.json` から | ヘッダーに表示されるチャットウィンドウタイトル |
+| `subtitle` | `string` | `undefined` | タイトル下のサブタイトルテキスト |
+| `logo` | `string` | `skin.json` から | ヘッダーに表示されるロゴ画像のURL |
+| `primaryColor` | `string` | `skin.json` から | プライマリアクセントカラー（hex、例：`#0078D4`） |
+| `backgroundColor` | `string` | `#ffffff` | チャットウィンドウの背景色 |
+| `position` | `string` | `bottom-right` | バブルの位置：`bottom-right` または `bottom-left` |
+| `offsetX` | `number` | `20` | 端からの水平オフセット（ピクセル） |
+| `offsetY` | `number` | `20` | 下部からの垂直オフセット（ピクセル） |
+| `bubbleSize` | `number` | `60` | フローティングバブルボタンの直径（ピクセル） |
+| `bubbleIcon` | `string` | `chat` | バブル内のアイコン：`chat`、`help`、`support`、またはカスタムSVG URL |
+| `zIndex` | `number` | `9999` | チャットオーバーレイとバブルのCSS z-index |
+
+### 動作オプション
+
+| オプション | 型 | デフォルト | 説明 |
+|-----------|------|-----------|------|
+| `startOpen` | `boolean` | `false` | ページロード時にチャットウィンドウを即座に開く |
+| `greetingMessage` | `string` | `undefined` | バブル上のツールチップに表示されるプロアクティブな挨拶 |
+| `greetingDelay` | `number` | `3000` | 挨拶を表示するまでの遅延（ミリ秒） |
+| `showUnreadBadge` | `boolean` | `true` | バブルに未読メッセージ数バッジを表示 |
+| `persistSession` | `boolean` | `true` | `localStorage` を使用してページナビゲーション間でチャットセッションを維持 |
+
+### サイズオプション
+
+| オプション | 型 | デフォルト | 説明 |
+|-----------|------|-----------|------|
+| `width` | `number` | `400` | チャットウィンドウの幅（ピクセル） |
+| `height` | `number` | `600` | チャットウィンドウの高さ（ピクセル） |
+| `mobileFullscreen` | `boolean` | `true` | モバイルデバイスでフルスクリーンモードを使用（ビューポート幅 < 768px） |
+
+## スキンからの自動検出
+
+`greenticChat.init()` の呼び出しで `title`、`primaryColor`、`logo` などのオプションが明示的に指定されていない場合、エンベッドスクリプトはテナントの `skin.json` ファイルからデフォルトを自動的にロードします。つまり、チャットバブルはエンベッドコードで複製することなく、ブランド設定を継承します。
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE"
+}
+```
+
+解決順序：
+
+1. `greenticChat.init()` に渡された明示的なオプション（最高優先度）
+2. テナントの `skin.json` からの値
+3. パックの組み込みデフォルト
+
+## パブリックJavaScript API
+
+初期化後、`greenticChat` オブジェクトはチャットバブルをプログラムで制御するメソッドを公開します：
+
+```javascript
+// チャットウィンドウを開く
+greenticChat.open();
+
+// チャットウィンドウを閉じる
+greenticChat.close();
+
+// 開閉をトグル
+greenticChat.toggle();
+
+// チャットウィンドウが開いているか確認
+const isOpen = greenticChat.isOpen();
+
+// ウィジェットを破棄してクリーンアップ
+greenticChat.destroy();
+```
+
+### 例：ボタンクリックでチャットを開く
+
+```html
+<button onclick="greenticChat.open()">
+  Need help? Chat with us
+</button>
+```
+
+### 例：遅延後にチャットを開く
+
+```javascript
+setTimeout(() => {
+  if (!greenticChat.isOpen()) {
+    greenticChat.open();
+  }
+}, 10000); // 10秒後に開く
+```
+
+### 例：カスタムボタンからトグル
+
+```javascript
+document.getElementById('my-chat-button').addEventListener('click', () => {
+  greenticChat.toggle();
+});
+```
+
+## モバイルレスポンシブ動作
+
+チャットバブルはモバイルデバイスに自動的に適応します：
+
+- **ビューポート < 768px**：`mobileFullscreen` が `true`（デフォルト）の場合、チャットウィンドウはフルスクリーンモードで開き、ビューポート全体を覆います。戻る/閉じるボタンがヘッダーの閉じるアイコンに代わります。
+- **ビューポート >= 768px**：チャットウィンドウは `width` と `height` に応じたサイズのフローティングパネルとしてバブルの横に開きます。
+- **向きの変更**：ウィジェットは向きの変更を検出し、正しいサイズで再レンダリングします。
+- **タッチ操作**：バブルボタンは適切なヒットターゲット（アクセシビリティガイドラインに従い最小44x44px）でタッチイベントに応答します。
+
+## スキャフォールド：自動生成エンベッドスニペット
+
+`greentic.cap.webchat.embed.v1` ケイパビリティが有効な場合、`gtc wizard` または `gtc setup` を実行すると、すぐに使えるエンベッドスニペットが以下に生成されます：
+
+```
+assets/webchat-gui/embed/{tenant}.html
+```
+
+生成されたファイルには、事前設定された構成の3つのエンベッドタイプすべてが含まれます：
+
+<Tabs>
+  <TabItem label="フルページリンク">
+```html title="フルページリンクスニペット"
+<!-- Fullpage Link -->
+<a href="https://your-domain.com/webchat/gui/demo/default">
+  Open Support Chat
+</a>
+```
+  </TabItem>
+  <TabItem label="インラインIframe">
+```html title="インラインiframeスニペット"
+<!-- Inline Iframe -->
+<iframe
+  src="https://your-domain.com/webchat/gui/demo/default"
+  width="400"
+  height="600"
+  style="border: none; border-radius: 8px;"
+  allow="microphone; camera"
+  title="Support Chat"
+></iframe>
+```
+  </TabItem>
+  <TabItem label="チャットバブル">
+```html title="チャットバブルスニペット"
+<!-- Chat Bubble -->
+<script src="https://your-domain.com/webchat/embed.js"></script>
+<script>
+  greenticChat.init({
+    baseUrl: 'https://your-domain.com',
+    tenant: 'demo',
+    team: 'default'
+  });
+</script>
+```
+  </TabItem>
+</Tabs>
+
+これらのスニペットはプロバイダー設定の `public_base_url` を使用します。ngrokまたはCloudflare Tunnelを使用している場合、`gtc start` がURLを自動的に置換します。
+
+<Aside type="caution">
+生成されたスニペットはテンプレートです。本番環境では、ウィジェットを埋め込めるドメインを制限するために、WebChatプロバイダー設定で必ず `allowed_origins` を設定してください。
+</Aside>
+
+## 次のステップ
+
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- 完全なセットアップ、OAuth、機能
+- [バンドルアセット](/greentic-docs/concepts/bundle-assets/) -- ケイパビリティシステムとスキンオーバーレイ
+- [gtc wizard](/greentic-docs/cli/wizard/) -- アンサーファイルでケイパビリティを設定

@@ -1,0 +1,231 @@
+---
+title: Bundle Assets
+description: Mekanisme aset generik berbasis capability untuk skin, template, dan overlay file yang extensible
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Gambaran Umum
+
+Bundle Assets adalah mekanisme generik berbasis capability yang memungkinkan bundle membawa file-nya sendiri (skin, template, embed snippet, locale) dalam direktori standar `./assets/`. Pack yang membutuhkan akses ke file-file ini mendeklarasikan sebuah capability, dan runtime memberikan akses read-only saat load time.
+
+<Aside type="tip">
+Ini mengikuti prinsip desain inti Maarten: **mekanisme generik, bukan solusi spesifik.** Alih-alih hard-coding path seperti `/template/demo/` untuk setiap kasus penggunaan, Greentic menyediakan satu pola `./assets/` yang dapat diperluas pelanggan dengan cara yang tak terduga. Path spesifik menciptakan masalah pemeliharaan; pola capability generik dapat diskalakan.
+</Aside>
+
+## Cara Kerja
+
+Sistem bundle assets memiliki tiga bagian utama:
+
+1. **Deklarasi capability** -- file answers bundle (atau prompt wizard) mendeklarasikan capability aset mana yang diaktifkan.
+2. **Scaffold** -- `gtc wizard` atau `gtc setup` secara otomatis menyalin file default dari provider pack ke dalam direktori `./assets/` bundle, menyesuaikan referensi tenant.
+3. **Overlay** -- saat runtime, file dalam direktori `./assets/` bundle menimpa file yang cocok dari default bawaan pack. Ini memungkinkan Anda mengkustomisasi skin, template, dan string locale tanpa memodifikasi pack itu sendiri.
+
+## Capabilities
+
+Setiap capability membuka kumpulan aset dan perilaku tertentu. Capability mengikuti konvensi penamaan `greentic.cap.{category}.v{N}`.
+
+| Capability ID | Tujuan | Apa yang Diaktifkan |
+|---------------|--------|---------------------|
+| `greentic.cap.bundle_assets.read.v1` | Direktori aset level bundle | Membuat struktur direktori `./assets/` dan scaffold file skin default dari provider pack |
+| `greentic.cap.webchat.oauth.v1` | Autentikasi OAuth untuk WebChat | Menambahkan konfigurasi auth provider OAuth ke file konfigurasi tenant |
+| `greentic.cap.webchat.i18n.v1` | WebChat multi-bahasa | Mengaktifkan locale picker dan scaffold file JSON locale di bawah `./assets/` |
+| `greentic.cap.webchat.embed.v1` | Widget WebChat yang dapat di-embed | Menghasilkan embed HTML snippet (fullpage link, inline iframe, chat bubble) per tenant |
+
+<Aside>
+Capability bersifat aditif. Mengaktifkan `greentic.cap.webchat.embed.v1` secara implisit memerlukan `greentic.cap.bundle_assets.read.v1` karena embed snippet ditulis ke direktori `./assets/`.
+</Aside>
+
+## Prompt Wizard
+
+Ketika Anda menjalankan `gtc wizard`, wizard akan meminta konfirmasi untuk setiap capability:
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+Menjawab "yes" pada sebuah capability akan menambahkannya ke bundle yang dihasilkan dan memicu langkah scaffold yang sesuai.
+
+Anda juga dapat mengatur capability langsung di file answers tanpa prompt interaktif (lihat [Konfigurasi](#konfigurasi) di bawah).
+
+## Konfigurasi
+
+### Di File Answers
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+### Di bundle.yaml
+
+Capability juga dicatat dalam `bundle.yaml` yang dihasilkan agar runtime mengetahui fitur mana yang aktif:
+
+```yaml title="bundle.yaml"
+name: my-digital-worker
+version: "1.0.0"
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+providers:
+  messaging-webchat:
+    pack: "providers/messaging/messaging-webchat.gtpack"
+    setup_flow: "setup_default"
+```
+
+## Cara Kerja Scaffold
+
+Ketika sebuah capability diaktifkan, wizard (atau setup) menjalankan langkah scaffold yang mengisi direktori `./assets/` bundle dengan file default. Proses scaffold:
+
+<Steps>
+
+1. **Membaca file default dari provider pack**
+
+   Setiap provider pack menyertakan direktori `skins/default/` yang berisi file skin dasar (template HTML, CSS, konfigurasi JSON, embed snippet).
+
+2. **Menyalin default ke dalam bundle**
+
+   Scaffold menyalin `skins/default/` ke `assets/webchat-gui/skins/{tenant}/`, membuat satu direktori skin per tenant yang didefinisikan dalam bundle.
+
+3. **Mengganti referensi tenant**
+
+   Token placeholder seperti `{{tenant_id}}` dan `{{team_id}}` di file yang disalin diganti dengan identifier tenant dan team yang sebenarnya.
+
+4. **Menghasilkan embed snippet**
+
+   Ketika `greentic.cap.webchat.embed.v1` diaktifkan, scaffold menghasilkan file embed HTML (fullpage link, inline iframe, chat bubble) di `assets/webchat-gui/embed/{tenant}.html` dengan konfigurasi yang sudah terisi.
+
+</Steps>
+
+## Struktur Direktori Setelah Scaffold
+
+Dengan keempat capability diaktifkan dan satu tenant `demo`, bundle akan terlihat seperti ini:
+
+```
+my-digital-worker/
+├── bundle.yaml
+├── greentic.demo.yaml
+├── providers/
+│   └── messaging/
+│       ├── messaging-webchat.gtpack
+│       └── messaging-telegram.gtpack
+├── assets/
+│   └── webchat-gui/
+│       ├── skins/
+│       │   └── demo/                    # Skin per-tenant (disalin dari default pack)
+│       │       ├── skin.json            # Warna tema, judul, logo, feature flag
+│       │       ├── fullpage/
+│       │       │   ├── index.html       # HTML chat fullpage
+│       │       │   └── page.css         # CSS kustom fullpage
+│       │       ├── embed/
+│       │       │   └── bubble.css       # CSS kustom chat bubble
+│       │       └── i18n/
+│       │           ├── en.json          # String locale bahasa Inggris
+│       │           └── id.json          # String locale bahasa Indonesia
+│       └── embed/
+│           └── demo.html               # Embed snippet yang dihasilkan untuk tenant
+├── tenants/
+│   └── demo/
+│       ├── tenant.gmap
+│       └── teams/
+│           └── default/
+│               └── team.gmap
+└── seeds.yaml
+```
+
+## Mekanisme Overlay
+
+Saat runtime, platform Greentic menyelesaikan file aset menggunakan strategi overlay:
+
+1. **File bundle memiliki prioritas.** Jika file ada di `./assets/webchat-gui/skins/{tenant}/skin.json`, file tersebut digunakan alih-alih `skins/default/skin.json` bawaan pack.
+2. **Default pack adalah fallback.** Jika bundle tidak menimpa sebuah file, versi bawaan pack yang digunakan.
+3. **Overlay bersifat per-file.** Anda dapat menimpa `skin.json` sambil tetap menggunakan `page.css` default pack. Tidak ada persyaratan semua-atau-tidak-sama-sekali.
+
+Ini berarti Anda dapat dengan aman mengedit file di `./assets/` untuk mengkustomisasi deployment Anda tanpa fork atau rebuild pack.
+
+<Aside type="caution">
+Saat Anda mengupgrade provider pack ke versi baru, tinjau file yang Anda timpa. Versi pack baru mungkin menambahkan field ke `skin.json` atau mengubah struktur template HTML. Overlay bundle Anda tetap akan memiliki prioritas, jadi Anda perlu merge perubahan baru secara manual.
+</Aside>
+
+## Contoh: Mengkustomisasi Skin WebChat
+
+Setelah scaffold, edit konfigurasi skin agar sesuai dengan brand Anda:
+
+```json title="assets/webchat-gui/skins/demo/skin.json"
+{
+  "title": "Acme Support",
+  "subtitle": "We are here to help",
+  "logo": "/assets/webchat-gui/skins/demo/logo.png",
+  "primaryColor": "#E63946",
+  "backgroundColor": "#F1FAEE",
+  "showLocalePicker": true,
+  "showOAuthLogin": true,
+  "embedEnabled": true
+}
+```
+
+Runtime menyajikan skin ini ketika pengguna terhubung ke WebChat untuk tenant `demo`. Tidak perlu rebuild pack.
+
+## Langkah Selanjutnya
+
+- [WebChat Embedding](/greentic-docs/providers/messaging/webchat-embedding/) -- tipe embed dan referensi konfigurasi
+- [WebChat Provider](/greentic-docs/providers/messaging/webchat/) -- setup lengkap dan fitur WebChat
+- [Packs](/greentic-docs/concepts/packs/) -- bagaimana pack mendeklarasikan dan mengonsumsi capability
+- [gtc wizard](/greentic-docs/cli/wizard/) -- referensi file answers wizard
