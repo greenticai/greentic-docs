@@ -201,6 +201,31 @@ ngrok http 8080
 gtc start ./my-bundle --cloudflared on
 ```
 
+## Bundle Capabilities
+
+The `bundle.yaml` file can declare capabilities that unlock additional behavior during setup. Capabilities are listed as an array of capability identifiers.
+
+### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
+
+When the `greentic.cap.bundle_assets.read.v1` capability is present in `bundle.yaml`, `gtc setup` creates an `assets/` directory at the bundle root and scaffolds asset files from provider packs into it.
+
+```yaml title="bundle.yaml"
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+```
+
+Specifically, assets from provider packs (such as `assets/webchat-gui/` entries) are copied into the bundle-level `assets/` directory. This gives you a place to customize provider assets -- for example, webchat-gui skins and configuration files -- without modifying the original pack contents.
+
+**How it works:**
+
+- During setup, provider packs that include asset directories (e.g., `assets/webchat-gui/`) have those files scaffolded into the bundle root `assets/` directory.
+- You can then edit these files freely. Bundle-level asset files override pack defaults at runtime.
+- This is useful for customizing the look and feel of webchat widgets, adjusting configuration, or applying branded skins.
+
+<Aside type="tip">
+After setup scaffolds the assets, you can safely modify them. Your bundle-level customizations take precedence over the pack defaults when the runtime loads assets.
+</Aside>
+
 ## Setup Flow Execution
 
 When you run `gtc setup`, it:

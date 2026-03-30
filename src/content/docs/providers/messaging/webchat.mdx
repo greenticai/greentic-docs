@@ -606,6 +606,59 @@ gtc setup ./my-bundle
 
 The wizard detects when `oauth_enabled` is set to `true` and presents follow-up questions only for the selected `oauth_provider`, so you only see fields relevant to your chosen identity provider.
 
+## WebChat GUI Embed
+
+The `messaging-webchat-gui` provider includes a full web UI served at `/v1/web/webchat/{tenant}/`.
+
+### Embed Widget
+
+Add a floating chat bubble to any website:
+
+```html
+<script>
+  window.greenticChatConfig = {
+    tenant: 'demo',
+    bubble: { color: '#10B981', label: 'Chat with us' },
+    window: { title: 'Support Assistant' }
+  };
+</script>
+<script src="https://your-domain.com/v1/web/webchat/demo/embed.js" defer></script>
+```
+
+**Public API:**
+- `greenticChat.open()` / `.close()` / `.toggle()` / `.isOpen()`
+
+### Skins
+
+Skins control the fullpage layout and branding. Each skin is a directory under `assets/webchat-gui/skins/{name}/`:
+
+```
+skins/{name}/
+  skin.json              # Branding, colors, logo, mode
+  fullpage/index.html    # Landing page HTML
+  fullpage/page.css      # Landing page styles
+  webchat/styleOptions.json
+  webchat/hostconfig.json
+  webchat/hooks.js
+  assets/logo.svg
+  assets/favicon.ico
+```
+
+### Bundle Assets Overlay
+
+When `greentic.cap.bundle_assets.read.v1` capability is enabled, the runtime scaffolds webchat-gui assets into the bundle's `assets/` directory. Files placed there override the provider pack defaults -- allowing custom skins without rebuilding the pack.
+
+### Token Endpoint
+
+The runtime provides a native JWT token endpoint at:
+```
+GET /v1/messaging/webchat/{tenant}/token
+```
+
+Returns: `{"token": "<jwt>", "expires_in": 1800, "conversationId": ""}`
+
+The token is signed with the `jwt_signing_key` secret configured during setup.
+
 ## Security
 
 <Aside type="caution">
