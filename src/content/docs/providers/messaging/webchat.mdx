@@ -677,6 +677,264 @@ gtc setup ./my-bundle
 
 The wizard detects when `oauth_enabled` is set to `true` and presents follow-up questions only for the selected `oauth_provider`, so you only see fields relevant to your chosen identity provider.
 
+## WebChat GUI Embed
+
+The `messaging-webchat-gui` provider includes a full web UI served at `/v1/web/webchat/{tenant}/` and a chat bubble widget that can be embedded on any website.
+
+### Quick Start
+
+Add a floating chat bubble to any page with two script tags:
+
+```html
+<script>
+  window.greenticChatConfig = {
+    tenant: 'demo',
+    baseUrl: 'https://your-domain.com',
+    bubble: { color: '#10B981', label: 'Chat with us' },
+    window: { title: 'Support Assistant' }
+  };
+</script>
+<script src="https://your-domain.com/v1/web/webchat/demo/embed.js" defer></script>
+```
+
+The `baseUrl` is auto-detected from the script `src` if not provided.
+
+### Full Configuration Reference
+
+```javascript
+window.greenticChatConfig = {
+  // ── Required ──
+  tenant: 'demo',                         // tenant ID — determines skin and routes
+
+  // ── Base ──
+  baseUrl: 'https://your-domain.com',     // auto-detected from script src
+  fontFamily: 'Inter,system-ui,sans-serif', // font for all widget UI elements
+  locale: '',                              // language passed to iframe (?lang=id)
+
+  // ── Bubble ──
+  bubble: {
+    color: '#10B981',           // bubble background color (skin brand.primary)
+    hoverColor: '#059669',      // color on hover
+    position: 'bottom-right',   // bottom-right | bottom-left
+    size: 56,                   // diameter in px
+    offset: 20,                 // distance from edge in px
+    offsetBottom: 20,           // distance from bottom in px
+    icon: null,                 // custom icon URL (replaces default chat SVG)
+    iconSize: 28,               // icon size in px
+    label: 'Chat with us',     // tooltip text on hover
+    borderRadius: '50%',        // '50%' = circle, '12px' = rounded square
+    badge: true,                // show unread message counter
+    badgeColor: '#ef4444',      // badge background color
+    greeting: '',               // proactive message above bubble
+    greetingDelay: 3000,        // ms before greeting appears (0 = immediate)
+  },
+
+  // ── Chat Window ──
+  window: {
+    width: 400,                 // window width in px
+    height: 620,                // window height in px
+    borderRadius: 12,           // corner radius in px
+    header: true,               // show header bar
+    headerColor: '#064e3b',     // header background color
+    headerTextColor: '#ffffff', // header text color
+    title: 'Greentic Assistant', // header title (skin brand.name)
+    logo: null,                 // header logo URL (skin brand.logo)
+    logoSize: 24,               // logo size in px
+    shadow: '0 8px 40px rgba(0,0,0,0.2)',
+  },
+
+  // ── Behavior ──
+  openOnLoad: false,            // auto-open on page load
+  openDelay: 0,                 // delay in ms before auto-open
+  closeOnEscape: true,          // close with Escape key
+  mobileFullscreen: true,       // fullscreen on viewports < 480px
+  persist: false,               // remember open/close state across pages
+  zIndex: 2147483646,           // z-index for all widget elements
+  sound: false,                 // play sound on new bot message
+  soundUrl: '',                 // custom sound URL (default: built-in beep)
+  animation: true,              // pop-in entrance animation on mount
+
+  // ── Event Callbacks ──
+  onOpen: function () {},               // chat window opened
+  onClose: function () {},              // chat window closed
+  onMessage: function (data) {},        // bot message received
+  onUserMessage: function (data) {},    // user sent a message
+};
+```
+
+**Priority:** explicit config > `skin.json` defaults > hardcoded defaults. For example, if you don't set `bubble.color`, it falls back to `skin.json` → `brand.primary` → `#10B981`.
+
+### Public API
+
+After the widget mounts, a global `greenticChat` object is available:
+
+```javascript
+greenticChat.open()       // open the chat window
+greenticChat.close()      // close the chat window
+greenticChat.toggle()     // toggle open/close
+greenticChat.isOpen()     // returns boolean
+greenticChat.hide()       // completely hide bubble + window
+greenticChat.show()       // show bubble again
+greenticChat.resetBadge() // clear unread message counter
+```
+
+### Unread Badge
+
+When `badge: true` (default), a red counter appears on the bubble when the bot sends messages while the widget is closed. The badge automatically resets when the user opens the chat.
+
+### Greeting Bubble
+
+Show a proactive message above the bubble to increase engagement:
+
+```javascript
+bubble: {
+  greeting: 'Hi! Need help? Ask me anything.',
+  greetingDelay: 2000,  // show after 2 seconds
+}
+```
+
+The greeting dismisses when the user clicks it (opens chat) or clicks the close button. It only appears once per page load.
+
+### Sound Notifications
+
+Play a notification sound when a bot message arrives while the widget is closed:
+
+```javascript
+{
+  sound: true,                    // enable with built-in beep
+  // or
+  sound: true,
+  soundUrl: '/assets/notify.mp3', // custom sound file
+}
+```
+
+The built-in sound is a short sine-wave beep generated via the Web Audio API — no external files needed.
+
+### Locale
+
+Pass a language to the webchat iframe:
+
+```javascript
+{
+  locale: 'id',  // loads iframe with ?lang=id
+}
+```
+
+The webchat GUI picks up the `lang` query parameter and loads the corresponding i18n strings.
+
+### Persist State
+
+Keep the widget open across page navigation within the same session:
+
+```javascript
+{
+  persist: true,  // uses sessionStorage
+}
+```
+
+### Entrance Animation
+
+By default, the bubble appears with a pop-in animation. Disable it with:
+
+```javascript
+{
+  animation: false,
+}
+```
+
+### Event Callbacks
+
+React to widget events on the host page:
+
+```javascript
+{
+  onOpen: function () {
+    analytics.track('chat_opened');
+  },
+  onClose: function () {
+    analytics.track('chat_closed');
+  },
+  onMessage: function (data) {
+    console.log('Bot said:', data);
+  },
+  onUserMessage: function (data) {
+    console.log('User said:', data);
+  },
+}
+```
+
+### Complete Example
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>My Website</title></head>
+<body>
+  <h1>Welcome to My Website</h1>
+
+  <script>
+    window.greenticChatConfig = {
+      tenant: 'demo',
+      fontFamily: "'Segoe UI', Roboto, sans-serif",
+      locale: 'en',
+      bubble: {
+        color: '#059669',
+        hoverColor: '#047857',
+        label: 'Need help?',
+        badge: true,
+        greeting: 'Hi! I can help you get started.',
+        greetingDelay: 2000,
+      },
+      window: {
+        width: 420,
+        height: 640,
+        headerColor: '#064e3b',
+        title: 'Support Assistant',
+      },
+      persist: true,
+      sound: true,
+      animation: true,
+      zIndex: 9999,
+      onOpen: function () { console.log('Chat opened'); },
+      onMessage: function (data) { console.log('Bot:', data); },
+    };
+  </script>
+  <script src="https://your-domain.com/v1/web/webchat/demo/embed.js" defer></script>
+</body>
+</html>
+```
+
+### Skins
+
+Skins control the fullpage layout and branding. Each skin is a directory under `assets/webchat-gui/skins/{name}/`:
+
+```
+skins/{name}/
+  skin.json              # Branding, colors, logo, mode
+  fullpage/index.html    # Landing page HTML
+  fullpage/page.css      # Landing page styles
+  webchat/styleOptions.json
+  webchat/hostconfig.json
+  webchat/hooks.js
+  assets/logo.svg
+  assets/favicon.ico
+```
+
+### Bundle Assets Overlay
+
+When `greentic.cap.bundle_assets.read.v1` capability is enabled, the runtime scaffolds webchat-gui assets into the bundle's `assets/` directory. Files placed there override the provider pack defaults -- allowing custom skins without rebuilding the pack.
+
+### Token Endpoint
+
+The runtime provides a native JWT token endpoint at:
+```
+GET /v1/messaging/webchat/{tenant}/token
+```
+
+Returns: `{"token": "<jwt>", "expires_in": 1800, "conversationId": ""}`
+
+The token is signed with the `jwt_signing_key` secret configured during setup.
+
 ## Security
 
 <Aside type="caution">

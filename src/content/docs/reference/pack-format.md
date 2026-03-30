@@ -129,6 +129,12 @@ Standard capability identifiers:
 | `greentic.cap.events.provider.v1` | Events provider |
 | `greentic.cap.component.v1` | Reusable component |
 | `greentic.cap.tool.v1` | MCP tool |
+| `greentic.cap.bundle_assets.read.v1` | Bundle-level shared assets — packs can read from bundle `./assets/` directory (e.g. custom skins, config) |
+| `greentic.cap.oauth.broker.v1` | OAuth broker — initiate auth, await result, get/refresh access tokens |
+| `greentic.cap.oauth.card.v1` | OAuth card rendering — login gate UI for webchat providers |
+| `greentic.cap.oauth.token_validation.v1` | OAuth token validation — verify and extract claims from bearer tokens |
+| `greentic.cap.op_hook.pre` | Pre-operation hook — intercept operations before execution |
+| `greentic.cap.op_hook.post` | Post-operation hook — intercept operations after execution |
 
 ## Content Hashing
 

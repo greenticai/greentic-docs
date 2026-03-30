@@ -91,6 +91,28 @@ tenants:
           - slack
 ```
 
+### Capabilities
+
+The `capabilities` array in the wizard answers file controls bundle-level features that are enabled when the bundle is created. Capabilities determine what additional scaffolding the wizard performs beyond the standard bundle structure.
+
+```json title="create-answers.json"
+{
+  "capabilities": ["greentic.cap.bundle_assets.read.v1"]
+}
+```
+
+**Available capabilities:**
+
+| Capability | Description |
+|------------|-------------|
+| `greentic.cap.bundle_assets.read.v1` | Enables bundle-level asset overrides. When present, the wizard auto-scaffolds webchat-gui skin assets from provider packs into the bundle's `assets/` directory. |
+
+When `greentic.cap.bundle_assets.read.v1` is included, the generated bundle will contain an `assets/` directory with files copied from provider packs (e.g., webchat-gui skins and configuration). These bundle-level files can be customized and will override pack defaults at runtime.
+
+<Aside type="tip">
+The `capabilities` array is written into `bundle.yaml` and is also respected by `gtc setup` when configuring the bundle later. See the [gtc setup capabilities section](/cli/setup/#bundle-capabilities) for details on runtime behavior.
+</Aside>
+
 ## Generated Structure
 
 Running the wizard generates:
