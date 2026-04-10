@@ -3,11 +3,11 @@ title: gtc wizard
 description: Crea nuevos bundles de Greentic con el comando wizard
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Resumen
 
-El comando `gtc wizard` crea nuevos bundles de Greentic a partir de las respuestas del asistente. Genera la estructura completa del bundle, incluyendo archivos de configuración, configuraciones de providers y plantillas de apps.
+El comando `gtc wizard` crea nuevos bundles de Greentic a partir de respuestas del wizard. Genera la estructura completa del bundle, incluidos archivos de configuración, configuraciones de proveedores y plantillas de aplicaciones.
 
 ## Uso
 
@@ -19,13 +19,13 @@ gtc wizard [OPTIONS]
 
 | Opción | Descripción |
 |--------|-------------|
-| `--answers <FILE \| URL>` | Ruta o URL del archivo de respuestas del asistente (JSON o YAML). Admite rutas locales y URLs remotas `http://` / `https://`. |
+| `--answers <FILE \| URL>` | Ruta o URL al archivo de respuestas del wizard (JSON o YAML). Admite rutas locales y URLs remotas `http://` / `https://`. |
 | `--dry-run` | Previsualiza los archivos generados sin escribirlos |
-| `--output <DIR>` | Directorio de salida (por defecto: directorio actual) |
+| `--output <DIR>` | Directorio de salida (predeterminado: directorio actual) |
 | `--template <NAME>` | Usa una plantilla específica |
 | `-v, --verbose` | Habilita salida detallada |
 
-## Archivo de respuestas del asistente
+## Archivo de Respuestas del Wizard
 
 ### Formato JSON
 
@@ -91,9 +91,31 @@ tenants:
           - slack
 ```
 
-## Estructura generada
+### Capacidades
 
-Ejecutar el asistente genera:
+El array `capabilities` en el archivo de respuestas del wizard controla las funciones a nivel de bundle que se habilitan cuando se crea el bundle. Las capacidades determinan qué generación adicional realiza el wizard más allá de la estructura estándar del bundle.
+
+```json title="create-answers.json"
+{
+  "capabilities": ["greentic.cap.bundle_assets.read.v1"]
+}
+```
+
+**Capacidades disponibles:**
+
+| Capacidad | Descripción |
+|------------|-------------|
+| `greentic.cap.bundle_assets.read.v1` | Habilita reemplazos de assets a nivel de bundle. Cuando está presente, el wizard genera automáticamente los assets de skin de webchat-gui desde los provider packs en el directorio `assets/` del bundle. |
+
+Cuando se incluye `greentic.cap.bundle_assets.read.v1`, el bundle generado contendrá un directorio `assets/` con archivos copiados desde provider packs (por ejemplo, skins y configuración de webchat-gui). Estos archivos a nivel de bundle pueden personalizarse y reemplazarán los valores predeterminados del pack en tiempo de ejecución.
+
+<Aside type="tip">
+El array `capabilities` se escribe en `bundle.yaml` y `gtc setup` también lo respeta al configurar el bundle más tarde. Consulta la [sección de capacidades de gtc setup](/es/cli/setup/#bundle-capabilities) para conocer los detalles del comportamiento en tiempo de ejecución.
+</Aside>
+
+## Estructura Generada
+
+Al ejecutar el wizard se genera:
 
 ```
 my-digital-worker/
@@ -121,7 +143,28 @@ my-digital-worker/
 
 ## Ejemplos
 
-### Uso básico
+### Bundles del Catálogo de Demos
+
+El repositorio [`greentic-demo`](https://github.com/greenticai/greentic-demo) publica un `*-create-answers.json` y un `*-setup-answers.json` para cada demo en sus artefactos de release. Úsalos directamente para crear un bundle local que puedas seguir editando después:
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+```
+
+Luego continúa con la configuración y el arranque:
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+Sustituye el ID de la demo por cualquiera de las demos publicadas (`quickstart`, `quickstart-event`, `hr-onboarding`, `helpdesk-itsm`, `sales-crm`, `supply-chain`, `incident`, `redbutton`, `cloud-deploy-demo`, `weather-mcp-demo`, ...). El catálogo completo con descripciones y credenciales requeridas está en la página [Ejecutar Demos](/es/getting-started/running-demos/).
+
+<Aside type="tip">
+El wizard realiza **resolución de dependencias basada en capacidades**. Cuando el documento create-answers de la demo hace referencia a un proveedor que declara `required_capabilities` (por ejemplo, proveedores de mensajería que necesitan `greentic:state/state-store`), el wizard añade automáticamente un pack que lo satisface, como `state-memory`, al bundle generado; no tienes que listarlo manualmente.
+</Aside>
+
+### Uso Básico
 
 ```bash
 # Interactive mode
@@ -131,16 +174,16 @@ gtc wizard
 gtc wizard --answers wizard-answers.yaml
 ```
 
-### Modo de previsualización
+### Modo de Previsualización
 
 ```bash
 # See what would be generated
 gtc wizard --answers wizard-answers.yaml --dry-run
 ```
 
-### Archivo de respuestas remoto
+### Archivo de Respuestas Remoto
 
-La opción `--answers` acepta URLs `http://` y `https://`, lo que facilita
+La bandera `--answers` acepta URLs `http://` y `https://`, lo que facilita
 almacenar documentos de respuestas compartidos en una ubicación central y referenciarlos desde pipelines de CI/CD.
 
 ```bash
@@ -152,16 +195,16 @@ gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yam
 ```
 
 <Aside type="tip">
-El soporte para URLs remotas es útil en pipelines de CI/CD donde las respuestas del asistente se almacenan en un repositorio compartido o en un servidor de artefactos y se descargan en tiempo de build.
+El soporte para URLs remotas es útil en pipelines de CI/CD donde las respuestas del wizard se almacenan en un repositorio compartido o en un servidor de artefactos y se descargan en tiempo de build.
 </Aside>
 
-### Directorio de salida personalizado
+### Directorio de Salida Personalizado
 
 ```bash
 gtc wizard --answers wizard-answers.yaml --output ./my-project
 ```
 
-### Usar plantillas
+### Uso de Plantillas
 
 ```bash
 # List available templates
@@ -171,34 +214,123 @@ gtc wizard --list-templates
 gtc wizard --template customer-service --answers answers.yaml
 ```
 
-## Plantillas disponibles
+## Plantillas Disponibles
 
 | Plantilla | Descripción |
-|-----------|-------------|
-| `minimal` | Bundle mínimo con un provider |
-| `customer-service` | Bot de FAQ con escalación |
-| `helpdesk` | Soporte IT con integración de tickets |
+|----------|-------------|
+| `minimal` | Bundle básico con un proveedor |
+| `customer-service` | Bot de FAQ con escalado |
+| `helpdesk` | Soporte de IT con integración de tickets |
 | `multi-channel` | Múltiples canales de mensajería |
 
-## Flujo de trabajo
+## Capacidades del Bundle
+
+El wizard solicita capacidades opcionales del bundle que habilitan funciones adicionales. Cada capacidad desbloquea un conjunto específico de assets y comportamientos en el bundle generado.
+
+### Prompts Interactivos
+
+Al ejecutar `gtc wizard` de forma interactiva, verás:
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+### Referencia de Capacidades
+
+| Prompt | ID de Capacidad | Qué Hace |
+|--------|-----------------|-----------|
+| Enable bundle-level assets | `greentic.cap.bundle_assets.read.v1` | Crea el directorio `./assets/` y genera archivos de skin predeterminados desde provider packs en directorios por tenant |
+| Enable OAuth login for WebChat GUI | `greentic.cap.webchat.oauth.v1` | Añade configuración de proveedor de autenticación OAuth/OIDC a los archivos de configuración del tenant |
+| Enable multi-language for WebChat GUI | `greentic.cap.webchat.i18n.v1` | Habilita el selector de idioma en WebChat y genera archivos JSON de locale en `./assets/` |
+| Enable embeddable WebChat widget | `greentic.cap.webchat.embed.v1` | Genera fragmentos HTML de embed (enlace de página completa, iframe inline, burbuja de chat) por tenant |
+
+### Definir Capacidades en el Archivo de Respuestas
+
+En lugar de responder prompts de forma interactiva, puedes definir capacidades directamente en el archivo de respuestas añadiendo un array `capabilities`:
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Las capacidades son aditivas. Habilitar `greentic.cap.webchat.embed.v1` requiere implícitamente `greentic.cap.bundle_assets.read.v1` porque los fragmentos de embed se escriben en el directorio `./assets/`. El wizard gestiona esta dependencia automáticamente.
+</Aside>
+
+Para ver todos los detalles sobre capacidades, comportamiento de generación y el mecanismo de overlay, consulta [Bundle Assets](/es/greentic-docs/concepts/bundle-assets/).
+
+## Flujo de Trabajo
 
 <Steps>
 
-1. **Crear el archivo de respuestas**
+1. **Crear archivo de respuestas**
 
    Define la configuración de tu proyecto en JSON o YAML.
 
-2. **Ejecutar el asistente**
+2. **Ejecutar wizard**
 
    ```bash
    gtc wizard --answers wizard-answers.yaml
    ```
 
-3. **Revisar los archivos generados**
+3. **Revisar archivos generados**
 
    Comprueba la estructura del bundle generado.
 
-4. **Configurar providers**
+4. **Configurar proveedores**
 
    ```bash
    gtc setup ./my-digital-worker
@@ -212,9 +344,9 @@ gtc wizard --template customer-service --answers answers.yaml
 
 </Steps>
 
-## Personalizar los flows generados
+## Personalizar los Flujos Generados
 
-El asistente genera plantillas básicas de flow. Personalízalas después de la generación:
+El wizard genera plantillas de flujo básicas. Personalízalas después de la generación:
 
 ```yaml title="apps/support-bot/flows/on_message.ygtc"
 name: on_message
@@ -241,12 +373,12 @@ triggers:
 ```
 
 <Aside type="tip">
-Usa `--dry-run` primero para previsualizar la estructura generada antes de escribirla en disco.
+Usa primero `--dry-run` para previsualizar la estructura generada antes de escribirla en disco.
 </Aside>
 
-## Solución de problemas
+## Solución de Problemas
 
-### Archivo de respuestas no válido
+### Archivo de Respuestas Inválido
 
 ```
 Error: Failed to parse answers file
@@ -254,7 +386,7 @@ Error: Failed to parse answers file
 
 Asegúrate de que tu JSON/YAML sea válido. Usa un linter para comprobar la sintaxis.
 
-### Faltan campos requeridos
+### Faltan Campos Requeridos
 
 ```
 Error: Missing required field: project.name
@@ -262,7 +394,7 @@ Error: Missing required field: project.name
 
 Comprueba que todos los campos requeridos estén presentes en tu archivo de respuestas.
 
-### Plantilla no encontrada
+### Plantilla No Encontrada
 
 ```
 Error: Template 'unknown' not found
@@ -270,8 +402,8 @@ Error: Template 'unknown' not found
 
 Usa `gtc wizard --list-templates` para ver las plantillas disponibles.
 
-## Siguientes pasos
+## Próximos Pasos
 
-- [gtc setup](/es/cli/setup/) - Configurar providers
+- [gtc setup](/es/cli/setup/) - Configurar proveedores
 - [gtc start](/es/cli/start/) - Ejecutar el runtime
-- [Inicio rápido](/es/getting-started/quick-start/) - Flujo de trabajo completo
+- [Inicio Rápido](/es/getting-started/quick-start/) - Flujo de trabajo completo

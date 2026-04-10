@@ -3,67 +3,81 @@ title: Mulai Cepat
 description: Jalankan digital worker Greentic pertama Anda dalam hitungan menit
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Panduan ini akan membantu Anda menjalankan digital worker Greentic dasar secara lokal.
+Panduan ini membawa Anda dari nol hingga menjalankan digital worker Greentic dalam beberapa menit. Jalur tercepat adalah menjalankan salah satu demo yang dipublikasikan dari katalog [`greentic-demo`](https://github.com/greenticai/greentic-demo). Setiap demo menggunakan alur tiga langkah yang sama.
+
+<Aside type="tip">
+Ingin menelusuri semua demo yang tersedia dan melihat dengan tepat apa yang dilakukan masing-masing? Langsung ke [Menjalankan Demo](/id/getting-started/running-demos/).
+</Aside>
 
 ## Prasyarat
 
 Sebelum memulai, pastikan Anda memiliki:
 
-- **Rust** 1.90 atau lebih baru (`rustup default 1.90`)
-- **Node.js** 18+ (untuk tool frontend)
-- **Git** untuk meng-clone repositori
+- **`gtc` CLI** terinstal — lihat [Instalasi](/id/getting-started/installation/)
+- **Rust** 1.91 atau lebih baru (hanya diperlukan jika Anda build dari source)
+- **URL publik** untuk provider webhook (misalnya `ngrok` atau `cloudflared`) — tidak diperlukan untuk quickstart yang hanya memakai WebChat
 
-## Instalasi
+## Jalankan demo quickstart
+
+Demo `quickstart` adalah bundle end-to-end paling kecil: kartu sambutan, kartu tentang, dan interaksi echo melalui WebChat. Demo ini tidak memerlukan akun eksternal.
 
 <Steps>
 
-1. **Instal GTC CLI**
+1. **Buat bundle** dari dokumen create-answers yang dipublikasikan:
 
    ```bash
-   cargo install greentic-cli
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
    ```
 
-   Atau build dari source:
+   Wizard mengunduh demo pack, menyelesaikan dependensi capability (misalnya menarik `state-memory` secara otomatis karena provider WebChat memerlukan `greentic:state/state-store`), lalu menulis direktori bundle lokal.
+
+2. **Konfigurasikan provider** dengan dokumen setup-answers yang dipublikasikan:
 
    ```bash
-   git clone https://github.com/greenticai/greentic.git
-   cd greentic/greentic
-   cargo build --release
+   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
    ```
 
-2. **Buat bundle baru**
+   Setup mendeteksi tenant bundle secara otomatis, menyimpan secret per provider, dan memvalidasi bahwa setiap capability yang dibutuhkan sudah terpenuhi.
 
-   Gunakan wizard untuk membuat bundle baru dengan konfigurasi yang diinginkan:
+3. **Mulai runtime**:
 
    ```bash
-   gtc wizard --answers wizard-answers.yaml
+   gtc start ./quickstart-demo-bundle
    ```
 
-   Atau jalankan secara interaktif:
+   Runner mencetak URL publik WebChat. Buka URL tersebut di browser dan Anda seharusnya melihat kartu sambutan.
+
+</Steps>
+
+<Aside type="note">
+Alur tiga langkah yang sama berlaku untuk setiap demo di katalog. Untuk mencoba demo lain, cukup ganti ID demonya, misalnya `helpdesk-itsm`, `hr-onboarding`, atau `weather-mcp-demo`. Lihat [Menjalankan Demo](/id/getting-started/running-demos/) untuk daftar lengkapnya.
+</Aside>
+
+## Membangun bundle Anda sendiri
+
+Saat Anda siap melangkah lebih jauh dari katalog yang dipublikasikan, tiga perintah yang sama tetap berlaku. Bedanya, perintah tersebut menggunakan file Anda sendiri, bukan URL release:
+
+<Steps>
+
+1. **Buat bundle** dengan wizard. Anda dapat menjalankannya secara interaktif atau dengan dokumen jawaban lokal:
 
    ```bash
    gtc wizard
+   # or
+   gtc wizard --answers ./my-create-answers.json
    ```
 
-3. **Konfigurasi provider**
-
-   Siapkan provider messaging Anda (contoh: Telegram, Slack):
+2. **Konfigurasikan provider**, sekali lagi baik secara interaktif maupun non-interaktif:
 
    ```bash
    gtc setup ./my-bundle
+   # or
+   gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-   Untuk setup non-interaktif, gunakan file jawaban:
-
-   ```bash
-   gtc setup --answers answers.json ./my-bundle
-   ```
-
-4. **Jalankan runtime**
-
-   Luncurkan digital worker Anda:
+3. **Mulai runtime**:
 
    ```bash
    gtc start ./my-bundle
@@ -71,20 +85,22 @@ Sebelum memulai, pastikan Anda memiliki:
 
 </Steps>
 
-## Contoh: Flow Hello World
+Lihat [gtc wizard](/id/cli/wizard/) dan [gtc setup](/id/cli/setup/) untuk referensi lengkap, termasuk flag capability dan skema dokumen answers.
+
+## Contoh: Hello World Flow
 
 Buat flow sederhana yang merespons pesan:
 
 ```yaml title="flows/hello.ygtc"
 name: hello_world
 version: "1.0"
-description: Flow sapaan sederhana
+description: A simple greeting flow
 
 nodes:
   - id: greet
     type: reply
     config:
-      message: "Halo! Saya digital worker Anda."
+      message: "Hello! I'm your digital worker."
 
 triggers:
   - type: message
@@ -94,11 +110,11 @@ triggers:
 
 ## Struktur Bundle
 
-Bundle Greentic tipikal terlihat seperti ini:
+Bundle Greentic yang umum terlihat seperti ini:
 
 ```
 my-bundle/
-├── greentic.demo.yaml      # Konfigurasi utama
+├── greentic.demo.yaml      # Main configuration
 ├── providers/
 │   └── messaging/
 │       └── messaging-telegram.gtpack
@@ -106,7 +122,7 @@ my-bundle/
 │   └── my-app/
 │       └── flows/
 │           └── on_message.ygtc
-└── seeds.yaml              # Data seed (opsional)
+└── seeds.yaml              # Seed data (optional)
 ```
 
 ## File Konfigurasi
@@ -137,11 +153,11 @@ tenants:
             provider: messaging-telegram
 ```
 
-## Langkah Selanjutnya
+## Langkah Berikutnya
 
-Setelah setup dasar berjalan:
+Sekarang setelah setup dasar Anda berjalan:
 
-- [Pelajari tentang Flow](/id/concepts/flows/) - Pahami definisi flow
-- [Konfigurasi Telegram](/id/providers/messaging/telegram/) - Siapkan bot Telegram
-- [Konfigurasi Slack](/id/providers/messaging/slack/) - Hubungkan ke workspace Slack
+- [Pelajari Flows](/id/concepts/flows/) - Pahami definisi flow
+- [Konfigurasikan Telegram](/id/providers/messaging/telegram/) - Siapkan bot Telegram
+- [Konfigurasikan Slack](/id/providers/messaging/slack/) - Hubungkan ke workspace Slack
 - [Bangun komponen kustom](/id/concepts/components/) - Buat komponen WASM Anda sendiri

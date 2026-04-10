@@ -1,0 +1,313 @@
+---
+title: Demos の実行
+description: 公開されている demo catalog を使って Greentic を end-to-end で試す。どの demo も同じ 3 ステップの flow に従います。
+---
+
+import { Aside, Card, CardGrid, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) repository には、すぐに実行できる demos の catalog があります。各 demo は完全な bundle（messaging providers、flows、adaptive cards、MCP tools）であり、`.gtpack` としてパッケージされ、2 つの公開された answers document によってオーケストレーションされます。1 つは create wizard 用、もう 1 つは setup 用です。
+
+手動で何かを scaffold する必要はありません。すべての demo は同じ 3 つのコマンドで起動できます。
+
+## 3 ステップの Flow
+
+<Steps>
+
+1. **bundle を作成する**。公開されている create-answers document を使います:
+
+   ```bash
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/<demo>-create-answers.json
+   ```
+
+   これにより、answers document で参照されている pack がダウンロードされ、capability dependencies が解決され（例: messaging provider が `greentic:state/state-store` を必要とすると宣言している場合、`state-memory` が自動的に取り込まれます）、ローカル bundle directory が生成されます。
+
+2. **provider を設定する**。公開されている setup-answers document を使います:
+
+   ```bash
+   gtc setup ./<demo>-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/<demo>-setup-answers.json
+   ```
+
+   setup は bundle の `tenants/` directory から実際の tenant を検出し、provider ごとに secret を保存し、必要な capability がまだ満たされていない場合は警告します。
+
+3. **runtime を起動する**:
+
+   ```bash
+   gtc start ./<demo>-bundle
+   ```
+
+   起動時に、`gtc start` は pack dependencies を再度検証し、各 provider の `setup_webhook` WASM op を通じて webhook を登録し（tunnel URL が変わった場合は自動的に再登録します）、public ingress paths（例: `https://<tunnel>/v1/web/webchat/demo/`）を表示します。
+
+</Steps>
+
+<Aside type="tip">
+`<demo>` は以下の catalog にある demo ID の 1 つに置き換えてください。ステップ 1 で作成される bundle directory は demo 名に基づいて命名されます（例: `quickstart-demo-bundle`）。
+</Aside>
+
+## Prerequisites
+
+どの demo を実行する前にも、以下を確認してください:
+
+- **`gtc` CLI** — [Installation](/ja/getting-started/installation/) を参照
+- webhook provider 用の **public URL** — `ngrok` または `cloudflared`（[Public URL Configuration](/ja/cli/setup/#public-url-configuration) を参照）
+- demo が使う third-party messaging または MCP integration 向けの **provider credentials**（Slack tokens、Telegram bot token、Atlassian OAuth など）。必要な secrets は setup-answers document に記載されています
+
+多くの demos は、外部アカウント不要の **WebChat GUI** と `state-memory` だけで実行できます。
+
+## Demo Catalog
+
+`greentic-demo` の各 release は、`.gtpack`、`*-create-answers.json`、`*-setup-answers.json` を [latest release](https://github.com/greenticai/greentic-demo/releases/latest) に公開します。上で示した 3 つのコマンドに demo ID を代入してください。
+
+### quickstart
+
+最小の Greentic 体験です。welcome card、about card、基本的な echo interaction を含みます。toolchain、tunnel、WebChat front-end が end-to-end で動いているかを確認する smoke test として有用です。
+
+- **Channels:** WebChat GUI
+- **External services:** none
+- **Demo ID:** `quickstart`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+### quickstart-event
+
+1 つの bundle であらゆる event provider を試します。webhooks、cron timers、SendGrid 経由の transactional email、Twilio 経由の SMS が含まれます。
+
+- **Channels:** WebChat GUI
+- **External services:** SendGrid（任意）、Twilio（任意）、incoming webhook
+- **Demo ID:** `quickstart-event`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
+gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
+gtc start ./quickstart-event-demo-bundle --ngrok on
+```
+
+### hr-onboarding
+
+task tracking、document collection、access provisioning を備えた対話型の employee onboarding wizard です。複数ステップにまたがって session state を保持します。
+
+- **Channels:** WebChat GUI（必須）、Slack（任意）
+- **External services:** 必須なし（state は in-memory に保存）
+- **Demo ID:** `hr-onboarding`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/hr-onboarding-create-answers.json
+gtc setup ./hr-onboarding-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/hr-onboarding-setup-answers.json
+gtc start ./hr-onboarding-demo-bundle
+```
+
+### helpdesk-itsm
+
+Atlassian OAuth と MCP tools を介して Jira と統合された IT helpdesk assistant です。ticket 作成、status 確認、knowledge base 検索、escalation を行います。
+
+- **Channels:** WebChat GUI
+- **External services:** Atlassian / Jira（OAuth credentials は setup-answers に記載）
+- **Demo ID:** `helpdesk-itsm`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/helpdesk-itsm-create-answers.json
+gtc setup ./helpdesk-itsm-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/helpdesk-itsm-setup-answers.json
+gtc start ./helpdesk-itsm-demo-bundle
+```
+
+### sales-crm
+
+Salesforce と OAuth および MCP で接続された sales assistant です。lead qualification、pipeline visualization、deal tracking、meeting scheduling を行います。
+
+- **Channels:** WebChat GUI
+- **External services:** Salesforce（OAuth credentials は setup-answers に記載）
+- **Demo ID:** `sales-crm`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/sales-crm-create-answers.json
+gtc setup ./sales-crm-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/sales-crm-setup-answers.json
+gtc start ./sales-crm-demo-bundle
+```
+
+### supply-chain
+
+inventory と supply-chain 向け assistant です。stock checks、order tracking、low-stock alerts、reorder approval workflow、supplier directory を備えます。
+
+- **Channels:** WebChat GUI（必須）、Slack（任意）
+- **External services:** 必須なし
+- **Demo ID:** `supply-chain`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
+gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
+gtc start ./supply-chain-demo-bundle
+```
+
+### incident
+
+WebChat と Webex を対象にした adaptive-card ベースの incident 作成 flow で、Better Stack 上に incident を作成します。
+
+- **Channels:** WebChat GUI、Webex
+- **External services:** Better Stack（setup-answers 内の `betterstack_token`）
+- **Demo ID:** `incident`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
+gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
+gtc start ./incident-demo-bundle
+```
+
+### redbutton
+
+red-button event シナリオです。webhook ingress が flow を起動し、ランダムな branch を選び、必要に応じて HTTP endpoint を呼び出し、ローカル audio を再生し、Better Stack incident を作成します。
+
+- **Channels:** event-driven（chat surface は不要）
+- **External services:** Better Stack
+- **Demo ID:** `redbutton`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/redbutton-create-answers.json
+gtc setup ./redbutton-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/redbutton-setup-answers.json
+gtc start ./redbutton-demo-bundle --ngrok on
+```
+
+flow の起動方法:
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/events/ingress/webhook/demo/default \
+  -H 'content-type: application/json' \
+  -d '{"source":"red-button","pressed":true}'
+```
+
+### cloud-deploy-demo
+
+messaging、events、state に加えて Terraform deploy provider を試す、よりリッチな bundle 構成です。cloud-deployment integrations の検証に有用です。
+
+- **Channels:** WebChat GUI
+- **External services:** Terraform-compatible cloud provider（setup-answers で設定）
+- **Demo ID:** `cloud-deploy-demo`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-create-answers.json
+gtc setup ./cloud-deploy-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+gtc start ./cloud-deploy-demo-bundle
+```
+
+### weather-mcp-demo
+
+WeatherAPI を MCP tool 経由で利用して現在の天気と予報を取得し、その結果を adaptive cards として描画する weather assistant です。
+
+- **Channels:** WebChat GUI
+- **External services:** [weatherapi.com](https://www.weatherapi.com/) API key
+- **Demo ID:** `weather-mcp-demo`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/weather-mcp-demo-create-answers.json
+gtc setup ./weather-mcp-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/weather-mcp-demo-setup-answers.json
+gtc start ./weather-mcp-demo-bundle
+```
+
+## 裏側で起きていること
+
+3 つのコマンドはシンプルに見えますが、それぞれ platform の重要な処理を実行しています。
+
+### `gtc wizard --answers ...`
+
+- demo の app pack（`*.gtpack`）を解決します。GitHub Releases からダウンロードするか、answers document に記載された OCI から取得します。
+- bundle workspace（`bundle.yaml`、`packs/`、`tenants/`）を materialise します。
+- **capability-based dependency resolution を実行します。** Provider packs は `required_capabilities` を宣言し、wizard は対応する `state-memory`、`state-redis`、OAuth packs などを自動的に追加するため、各 provider の依存関係を覚えておく必要がありません。
+- `greentic.cap.bundle_assets.read.v1`、`greentic.cap.webchat.oauth.v1`、`greentic.cap.webchat.i18n.v1`、`greentic.cap.webchat.embed.v1` のような capability flags を尊重します。これらにより、bundle レベル assets、OAuth provider configuration、locale files、embed snippets を scaffold するかどうかが決まります。
+
+### `gtc setup ./<demo>-bundle --answers ...`
+
+- `bundle/tenants/` から実際の tenant を自動検出します（そのため secret は正しい tenant URI 配下に書き込まれます）。
+- bundle 内の全 pack をまたいで dependency capabilities を検証し、不足があれば警告します。
+- answers document の各値を `secrets://{env}/{tenant}/{team}/{provider}/{key}` 配下の secrets store に保存するため、provider は runtime 時に毎回入力し直さなくても credentials を読めます。
+
+### `gtc start ./<demo>-bundle`
+
+- bundle を読み込み、すべての pack を mount し、HTTP ingress adapters を起動します。
+- capability index を通じて pack dependencies を再確認し、満たされている capability と不足している capability を表示します。
+- public tunnel URL が変わったときは、各 provider の `setup_webhook` WASM op を呼び出します。webhook の再登録は自動です。
+- public route paths（たとえば WebChat URL）を表示するので、すぐに browser で開けます。
+
+## Common Operations
+
+### 別の tunnel を使う
+
+ほとんどの webhook 対応 demo は、どの tunnel でも動作します。以下から選んでください:
+
+<Tabs>
+<TabItem label="ngrok">
+
+```bash
+gtc start ./<demo>-bundle --ngrok on
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+gtc start ./<demo>-bundle --cloudflared on
+```
+
+</TabItem>
+<TabItem label="No tunnel">
+
+```bash
+gtc start ./<demo>-bundle --ngrok off --cloudflared off
+```
+
+`localhost` 上の WebChat だけが必要な場合に使います。
+
+</TabItem>
+</Tabs>
+
+### secret をローテーションした後に setup を再実行する
+
+```bash
+gtc setup ./<demo>-bundle --answers <updated-setup-answers.json>
+```
+
+`gtc setup` は冪等です。secret をその場で上書きし、provider ごとの setup flows を再実行します。
+
+### 起動前に bundle を確認する
+
+```bash
+gtc wizard --answers <create-answers.json> --dry-run
+gtc setup ./<demo>-bundle --dry-run
+```
+
+どちらのコマンドも `--dry-run` をサポートしており、filesystem や secrets store に触れずに出力をプレビューできます。
+
+### 実行中の demo を停止する
+
+```bash
+gtc stop ./<demo>-bundle
+```
+
+これにより、runner と、`gtc start` が起動した補助プロセス（NATS、tunnels）が停止します。
+
+## Troubleshooting
+
+### Wizard says a capability is unsatisfied
+
+不足している capability を提供する pack を create-answers document に追加してください。`greentic:state/state-store` には、`state-memory`（setup 不要）または `state-redis`（Redis instance が必要）が使えます。ほとんどの demos はすでにこの依存関係を宣言しているため、wizard が自動的に取り込みます。
+
+### WebChat opens but cards are blank
+
+bundle の tenant が WebChat URL の tenant と一致していることを確認してください。`gtc setup` は現在 bundle tenant を自動検出しますが、この修正が入る前に setup を実行していた場合は、bundle layout を更新するために `gtc wizard` 実行後にもう一度 setup を実行してください。
+
+### `setup_webhook` keeps failing on startup
+
+provider が必要とする secret が answers file に含まれていることを確認してください（例: `bot_token`、`slack_configuration_token`、`ms_bot_app_password`）。更新した document で `gtc setup` を再実行し、その後 `gtc start` を再起動してください。
+
+### Ingress URL keeps changing
+
+デフォルトでは `ngrok` は再起動のたびに新しい URL を発行します。webhook updater は起動時にその変化を検出し、各 provider の `setup_webhook` op を呼び出して新しい URL を upstream に登録します。ただし、長時間動かす demos では予約済みドメインへのアップグレードを検討するとよいでしょう。
+
+## Next Steps
+
+- [gtc wizard](/ja/cli/wizard/) — create-answers documents と capability flags の完全なリファレンス
+- [gtc setup](/ja/cli/setup/) — provider 設定、認証情報、dry-run の使い方
+- [gtc start](/ja/cli/start/) — runtime options、tunnels、observability
+- [Bundle Assets](/ja/concepts/bundle-assets/) — WebChat skins で使われる asset overlay の仕組み
+- [Multi-Tenancy](/ja/concepts/multi-tenancy/) — tenant isolation が secrets と ingress にどう関わるか

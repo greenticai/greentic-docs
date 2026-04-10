@@ -1,13 +1,13 @@
 ---
 title: gtc wizard
-description: wizard コマンドで新しい Greentic bundles を作成する
+description: wizard コマンドで新しい Greentic bundle を作成する
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## 概要
 
-`gtc wizard` コマンドは、wizard の回答から新しい Greentic bundles を作成します。設定ファイル、provider のセットアップ、app templates を含む完全な bundle 構造を scaffold します。
+`gtc wizard` コマンドは wizard answers から新しい Greentic bundle を作成します。設定ファイル、provider のセットアップ、app templates を含む bundle 全体の構造を scaffold します。
 
 ## 使い方
 
@@ -19,15 +19,15 @@ gtc wizard [OPTIONS]
 
 | Option | 説明 |
 |--------|-------------|
-| `--answers <FILE \| URL>` | wizard の回答ファイル（JSON または YAML）へのパスまたは URL。ローカルパスとリモートの `http://` / `https://` URLs をサポートします。 |
-| `--dry-run` | 書き込まずに生成されるファイルをプレビューする |
-| `--output <DIR>` | 出力ディレクトリ（デフォルト: current directory） |
+| `--answers <FILE \| URL>` | wizard answers file のパスまたは URL（JSON または YAML）。ローカルパスとリモートの `http://` / `https://` URLs をサポートします。 |
+| `--dry-run` | 書き込まずに生成される file をプレビューする |
+| `--output <DIR>` | 出力 directory（デフォルト: current directory） |
 | `--template <NAME>` | 特定の template を使う |
-| `-v, --verbose` | 詳細出力を有効にする |
+| `-v, --verbose` | verbose 出力を有効にする |
 
-## Wizard の回答ファイル
+## Wizard Answers File
 
-### JSON 形式
+### JSON Format
 
 ```json title="wizard-answers.json"
 {
@@ -61,7 +61,7 @@ gtc wizard [OPTIONS]
 }
 ```
 
-### YAML 形式
+### YAML Format
 
 ```yaml title="wizard-answers.yaml"
 project:
@@ -91,9 +91,31 @@ tenants:
           - slack
 ```
 
-## 生成される構造
+### Capabilities
 
-wizard を実行すると、次が生成されます:
+wizard answers file の `capabilities` 配列は、bundle 作成時に有効になる bundle レベルの機能を制御します。Capabilities によって、標準的な bundle 構造に加えて wizard がどの追加 scaffolding を行うかが決まります。
+
+```json title="create-answers.json"
+{
+  "capabilities": ["greentic.cap.bundle_assets.read.v1"]
+}
+```
+
+**利用可能な capabilities:**
+
+| Capability | 説明 |
+|------------|-------------|
+| `greentic.cap.bundle_assets.read.v1` | bundle レベルの asset overrides を有効にします。存在する場合、wizard は provider packs から webchat-gui skin assets を bundle の `assets/` directory に自動で scaffold します。 |
+
+`greentic.cap.bundle_assets.read.v1` を含めると、生成された bundle には provider packs からコピーされた file（例: webchat-gui skins や configuration）を持つ `assets/` directory が含まれます。これらの bundle レベル file はカスタマイズ可能で、runtime 時に pack defaults を上書きします。
+
+<Aside type="tip">
+`capabilities` 配列は `bundle.yaml` に書き込まれ、後から bundle を設定するときに `gtc setup` でも考慮されます。runtime 時の挙動については [gtc setup capabilities section](/ja/cli/setup/#bundle-capabilities) を参照してください。
+</Aside>
+
+## Generated Structure
+
+wizard を実行すると、以下が生成されます:
 
 ```
 my-digital-worker/
@@ -119,9 +141,30 @@ my-digital-worker/
 └── seeds.yaml
 ```
 
-## 例
+## Examples
 
-### 基本的な使い方
+### Demo Catalog Bundles
+
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) repository は、各 demo に対して `*-create-answers.json` と `*-setup-answers.json` を release artifacts として公開しています。これらを直接使って、あとから継続して編集できるローカル bundle を作成できます:
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+```
+
+その後、setup と start を続けます:
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+公開されている任意の demo（`quickstart`, `quickstart-event`, `hr-onboarding`, `helpdesk-itsm`, `sales-crm`, `supply-chain`, `incident`, `redbutton`, `cloud-deploy-demo`, `weather-mcp-demo`, ...）に対して demo ID を置き換えてください。説明と必要な認証情報を含む完全な catalog は [Running Demos](/ja/getting-started/running-demos/) ページにあります。
+
+<Aside type="tip">
+wizard は **capability-based dependency resolution** を実行します。demo の create-answers document が `required_capabilities` を宣言する provider を参照している場合（例: messaging providers が `greentic:state/state-store` を必要とするケース）、wizard は `state-memory` のような要件を満たす pack を自動的に生成 bundle に追加します。手動で列挙する必要はありません。
+</Aside>
+
+### Basic Usage
 
 ```bash
 # Interactive mode
@@ -131,16 +174,16 @@ gtc wizard
 gtc wizard --answers wizard-answers.yaml
 ```
 
-### プレビューモード
+### Preview Mode
 
 ```bash
 # See what would be generated
 gtc wizard --answers wizard-answers.yaml --dry-run
 ```
 
-### リモート回答ファイル
+### Remote Answers File
 
-`--answers` フラグは `http://` と `https://` URLs を受け付けるため、共有の回答ドキュメントを中央の場所に保存し、CI/CD パイプラインから参照しやすくなります。
+`--answers` フラグは `http://` と `https://` URLs を受け付けるため、共有 answer documents を中央の場所に保存し、CI/CD pipelines から参照するのが容易です。
 
 ```bash
 # Fetch answers from a remote URL
@@ -151,16 +194,16 @@ gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yam
 ```
 
 <Aside type="tip">
-リモート URL のサポートは、wizard の回答を共有リポジトリや artifact server に保存し、build 時に取得する CI/CD パイプラインで役立ちます。
+remote URL のサポートは、wizard answers を共有 repository や artifact server に保存し、build 時に取得する CI/CD pipelines で有用です。
 </Aside>
 
-### カスタム出力ディレクトリ
+### Custom Output Directory
 
 ```bash
 gtc wizard --answers wizard-answers.yaml --output ./my-project
 ```
 
-### Templates を使う
+### Using Templates
 
 ```bash
 # List available templates
@@ -170,22 +213,111 @@ gtc wizard --list-templates
 gtc wizard --template customer-service --answers answers.yaml
 ```
 
-## 利用可能な Templates
+## Available Templates
 
 | Template | 説明 |
 |----------|-------------|
 | `minimal` | 1 つの provider を持つ最小構成の bundle |
-| `customer-service` | エスカレーション付き FAQ bot |
-| `helpdesk` | チケット連携付き IT サポート |
+| `customer-service` | escalation 付き FAQ bot |
+| `helpdesk` | ticket integration を備えた IT support |
 | `multi-channel` | 複数の messaging channels |
 
-## ワークフロー
+## Bundle Capabilities
+
+wizard は追加機能を有効にする任意の bundle capabilities を尋ねます。各 capability は、生成された bundle 内の特定の asset と挙動を有効にします。
+
+### Interactive Prompts
+
+`gtc wizard` を対話モードで実行すると、次のように表示されます:
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+### Capability Reference
+
+| Prompt | Capability ID | 役割 |
+|--------|---------------|-------------|
+| Enable bundle-level assets | `greentic.cap.bundle_assets.read.v1` | `./assets/` directory を作成し、provider packs からデフォルト skin files を tenant ごとの directories に scaffold します |
+| Enable OAuth login for WebChat GUI | `greentic.cap.webchat.oauth.v1` | tenant config files に OAuth/OIDC authentication provider configuration を追加します |
+| Enable multi-language for WebChat GUI | `greentic.cap.webchat.i18n.v1` | WebChat の locale picker を有効化し、`./assets/` 配下に locale JSON files を scaffold します |
+| Enable embeddable WebChat widget | `greentic.cap.webchat.embed.v1` | tenant ごとに embed HTML snippets（fullpage link、inline iframe、chat bubble）を生成します |
+
+### Answers File で Capabilities を設定する
+
+対話プロンプトに答える代わりに、`capabilities` 配列を追加して answers file に直接 capabilities を設定できます:
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Capabilities は加算式です。`greentic.cap.webchat.embed.v1` を有効にすると、embed snippets は `./assets/` directory に書き込まれるため、暗黙的に `greentic.cap.bundle_assets.read.v1` も必要になります。wizard はこの依存関係を自動的に処理します。
+</Aside>
+
+capabilities、scaffold の挙動、overlay mechanism の詳細は [Bundle Assets](/ja/concepts/bundle-assets/) を参照してください。
+
+## Workflow
 
 <Steps>
 
-1. **回答ファイルを作成する**
+1. **answers file を作成する**
 
-   JSON または YAML でプロジェクト設定を定義します。
+   JSON または YAML で project configuration を定義します。
 
 2. **wizard を実行する**
 
@@ -193,11 +325,11 @@ gtc wizard --template customer-service --answers answers.yaml
    gtc wizard --answers wizard-answers.yaml
    ```
 
-3. **生成されたファイルを確認する**
+3. **生成された files を確認する**
 
    生成された bundle 構造を確認します。
 
-4. **providers を設定する**
+4. **provider を設定する**
 
    ```bash
    gtc setup ./my-digital-worker
@@ -211,9 +343,9 @@ gtc wizard --template customer-service --answers answers.yaml
 
 </Steps>
 
-## 生成された Flows のカスタマイズ
+## Generated Flows のカスタマイズ
 
-wizard は基本的な flow templates を生成します。生成後に必要に応じてカスタマイズしてください:
+wizard は基本的な flow templates を生成します。生成後にカスタマイズしてください:
 
 ```yaml title="apps/support-bot/flows/on_message.ygtc"
 name: on_message
@@ -236,4 +368,41 @@ nodes:
 
 triggers:
   - type: message
+    target: analyze
 ```
+
+<Aside type="tip">
+disk に書き出す前に、まず `--dry-run` を使って生成される構造をプレビューしてください。
+</Aside>
+
+## Troubleshooting
+
+### Invalid Answers File
+
+```
+Error: Failed to parse answers file
+```
+
+JSON/YAML が有効であることを確認してください。syntax を確認するために linter を使ってください。
+
+### Missing Required Fields
+
+```
+Error: Missing required field: project.name
+```
+
+answers file に必要なフィールドがすべて含まれていることを確認してください。
+
+### Template Not Found
+
+```
+Error: Template 'unknown' not found
+```
+
+利用可能な templates を確認するには `gtc wizard --list-templates` を使ってください。
+
+## Next Steps
+
+- [gtc setup](/ja/cli/setup/) - provider を設定する
+- [gtc start](/ja/cli/start/) - runtime を実行する
+- [Quick Start](/ja/getting-started/quick-start/) - 完全な workflow

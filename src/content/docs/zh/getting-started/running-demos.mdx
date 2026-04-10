@@ -1,0 +1,313 @@
+---
+title: 运行 Demo
+description: 通过已发布的 demo catalog 端到端体验 Greentic，每个 demo 都遵循相同的三步流程。
+---
+
+import { Aside, Card, CardGrid, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) 仓库提供了一组可直接运行的 demo catalog。每个 demo 都是一个完整的 bundle（messaging providers、flows、adaptive cards、MCP tools），打包为一个 `.gtpack`，并由两个已发布的 answers 文档协同驱动，一个用于 create wizard，一个用于 setup。
+
+你不需要手动 scaffold 任何内容。每个 demo 都通过相同的三条命令启动。
+
+## 三步流程
+
+<Steps>
+
+1. **创建 bundle**，使用已发布的 create-answers 文档：
+
+   ```bash
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/<demo>-create-answers.json
+   ```
+
+   该命令会下载 answers 文档中引用的所有 pack，解析 capability 依赖（例如当某个 messaging provider 声明自己需要 `greentic:state/state-store` 时，会自动拉取 `state-memory`），并写出本地 bundle 目录。
+
+2. **配置 providers**，使用已发布的 setup-answers 文档：
+
+   ```bash
+   gtc setup ./<demo>-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/<demo>-setup-answers.json
+   ```
+
+   setup 会从 bundle 的 `tenants/` 目录中检测实际 tenant，按 provider 持久化 secrets，并在任何必需 capability 仍未满足时向你发出警告。
+
+3. **启动 runtime**：
+
+   ```bash
+   gtc start ./<demo>-bundle
+   ```
+
+   启动时，`gtc start` 会再次验证 pack 依赖，通过各 provider 的 `setup_webhook` WASM op 注册 webhook（如果你的 tunnel URL 发生变化，也会自动重新注册），并打印公开 ingress 路径（例如 `https://<tunnel>/v1/web/webchat/demo/`）。
+
+</Steps>
+
+<Aside type="tip">
+将 `<demo>` 替换为下方 catalog 中的任意 demo ID。第 1 步创建的 bundle 目录会以 demo 名称命名（例如 `quickstart-demo-bundle`）。
+</Aside>
+
+## 先决条件
+
+运行任何 demo 之前，请确保你具备：
+
+- **`gtc` CLI**，参见[安装](/zh/getting-started/installation/)
+- 用于 webhook providers 的**公开 URL**，例如 `ngrok` 或 `cloudflared`（参见[公开 URL 配置](/zh/cli/setup/#public-url-configuration)）
+- demo 所用的任意第三方 messaging 或 MCP 集成所需的**provider 凭据**（Slack tokens、Telegram bot token、Atlassian OAuth 等），setup-answers 文档会告诉你需要哪些 secrets
+
+大多数 demo 只需要 **WebChat GUI** 加上 `state-memory`，不需要任何外部账户。
+
+## Demo Catalog
+
+`greentic-demo` 的每个 release 都会将一个 `.gtpack`、一个 `*-create-answers.json` 和一个 `*-setup-answers.json` 发布到[最新版本](https://github.com/greenticai/greentic-demo/releases/latest)。将 demo ID 替换到上面的三条命令中即可。
+
+### quickstart
+
+最简 Greentic 体验。包含 welcome card、about card 和基本 echo 交互，适合作为冒烟测试，用来确认你的工具链、tunnel 和 WebChat 前端已端到端正常工作。
+
+- **Channels:** WebChat GUI
+- **External services:** 无
+- **Demo ID:** `quickstart`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+### quickstart-event
+
+在一个 bundle 中演示所有 event providers：webhooks、cron timers、通过 SendGrid 发送 transactional email，以及通过 Twilio 发送 SMS。
+
+- **Channels:** WebChat GUI
+- **External services:** SendGrid（可选）、Twilio（可选）、incoming webhook
+- **Demo ID:** `quickstart-event`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
+gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
+gtc start ./quickstart-event-demo-bundle --ngrok on
+```
+
+### hr-onboarding
+
+交互式员工入职 wizard，包含任务跟踪、文档收集和权限开通。支持在多步流程之间持久化 session state。
+
+- **Channels:** WebChat GUI（必需）、Slack（可选）
+- **External services:** 无必需项（state 存储在内存中）
+- **Demo ID:** `hr-onboarding`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/hr-onboarding-create-answers.json
+gtc setup ./hr-onboarding-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/hr-onboarding-setup-answers.json
+gtc start ./hr-onboarding-demo-bundle
+```
+
+### helpdesk-itsm
+
+通过 Atlassian OAuth 和 MCP tools 集成 Jira 的 IT helpdesk assistant，可创建工单、检查状态、搜索知识库以及执行升级。
+
+- **Channels:** WebChat GUI
+- **External services:** Atlassian / Jira（setup-answers 中提供 OAuth 凭据）
+- **Demo ID:** `helpdesk-itsm`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/helpdesk-itsm-create-answers.json
+gtc setup ./helpdesk-itsm-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/helpdesk-itsm-setup-answers.json
+gtc start ./helpdesk-itsm-demo-bundle
+```
+
+### sales-crm
+
+通过 OAuth 和 MCP 连接 Salesforce 的销售助手，可进行线索资格评估、销售管道可视化、交易跟踪和会议安排。
+
+- **Channels:** WebChat GUI
+- **External services:** Salesforce（setup-answers 中提供 OAuth 凭据）
+- **Demo ID:** `sales-crm`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/sales-crm-create-answers.json
+gtc setup ./sales-crm-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/sales-crm-setup-answers.json
+gtc start ./sales-crm-demo-bundle
+```
+
+### supply-chain
+
+库存与供应链助手，支持库存检查、订单跟踪、低库存告警、补货审批工作流和供应商目录。
+
+- **Channels:** WebChat GUI（必需）、Slack（可选）
+- **External services:** 无必需项
+- **Demo ID:** `supply-chain`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
+gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
+gtc start ./supply-chain-demo-bundle
+```
+
+### incident
+
+面向 WebChat 和 Webex 的 adaptive-card incident 创建 flow，随后会在 Better Stack 中打开一个 incident。
+
+- **Channels:** WebChat GUI、Webex
+- **External services:** Better Stack（setup-answers 中的 `betterstack_token`）
+- **Demo ID:** `incident`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
+gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
+gtc start ./incident-demo-bundle
+```
+
+### redbutton
+
+一个 red-button 事件场景：某个 webhook ingress 触发一个 flow，随机选择分支，可选调用一个 HTTP endpoint、播放本地音频，并在 Better Stack 中创建 incident。
+
+- **Channels:** event-driven（不需要聊天界面）
+- **External services:** Better Stack
+- **Demo ID:** `redbutton`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/redbutton-create-answers.json
+gtc setup ./redbutton-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/redbutton-setup-answers.json
+gtc start ./redbutton-demo-bundle --ngrok on
+```
+
+使用以下命令触发该 flow：
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/events/ingress/webhook/demo/default \
+  -H 'content-type: application/json' \
+  -d '{"source":"red-button","pressed":true}'
+```
+
+### cloud-deploy-demo
+
+一个更丰富的 bundle 组合，除了 messaging、events 和 state 之外，还演示了 Terraform deploy provider，适合用于验证 cloud-deployment 集成。
+
+- **Channels:** WebChat GUI
+- **External services:** 兼容 Terraform 的 cloud provider（在 setup-answers 中配置）
+- **Demo ID:** `cloud-deploy-demo`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-create-answers.json
+gtc setup ./cloud-deploy-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+gtc start ./cloud-deploy-demo-bundle
+```
+
+### weather-mcp-demo
+
+一个天气助手，通过 MCP tool 使用 WeatherAPI 获取当前天气和天气预报，并将结果渲染为 adaptive cards。
+
+- **Channels:** WebChat GUI
+- **External services:** [weatherapi.com](https://www.weatherapi.com/) API key
+- **Demo ID:** `weather-mcp-demo`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/weather-mcp-demo-create-answers.json
+gtc setup ./weather-mcp-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/weather-mcp-demo-setup-answers.json
+gtc start ./weather-mcp-demo-bundle
+```
+
+## 幕后发生了什么
+
+这三条命令看起来很简单，但每一条都会执行平台中一段并不简单的逻辑。
+
+### `gtc wizard --answers ...`
+
+- 解析 demo 的 app pack（`*.gtpack`），可能是从 GitHub Releases 下载，也可能是按照 answers 文档中的声明从 OCI 拉取。
+- 物化 bundle 工作区（`bundle.yaml`、`packs/`、`tenants/`）。
+- **执行基于 capability 的依赖解析。** Provider packs 会声明 `required_capabilities`；wizard 会自动添加匹配的 `state-memory`、`state-redis`、OAuth packs 等，因此你无需记住每个 provider 依赖什么。
+- 遵循 capability flags，例如 `greentic.cap.bundle_assets.read.v1`、`greentic.cap.webchat.oauth.v1`、`greentic.cap.webchat.i18n.v1` 和 `greentic.cap.webchat.embed.v1`；这些 flag 决定 wizard 是否会 scaffold bundle 级 assets、OAuth provider 配置、locale 文件以及 embed 片段。
+
+### `gtc setup ./<demo>-bundle --answers ...`
+
+- 从 `bundle/tenants/` 自动检测实际 tenant（这样 secrets 就会写入正确的 tenant URI）。
+- 校验 bundle 中所有 packs 的依赖 capabilities，并在缺失时给出警告。
+- 将 answers 文档中的每个值持久化到 secrets store，路径为 `secrets://{env}/{tenant}/{team}/{provider}/{key}`，这样 providers 就能在运行时读取凭据，而无需你重复输入。
+
+### `gtc start ./<demo>-bundle`
+
+- 加载 bundle，挂载每个 pack，并启动 HTTP ingress adapters。
+- 通过 capability index 再次检查 pack 依赖，并打印已满足/缺失的 capabilities。
+- 当公开 tunnel URL 发生变化时，调用每个 provider 的 `setup_webhook` WASM op，webhook 重新注册现已自动完成。
+- 打印公开路由路径（例如 WebChat URL），便于你立即在浏览器中打开。
+
+## 常见操作
+
+### 使用不同的 tunnel
+
+大多数依赖 webhook 的 demo 都可以使用任意 tunnel。选择一种：
+
+<Tabs>
+<TabItem label="ngrok">
+
+```bash
+gtc start ./<demo>-bundle --ngrok on
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+gtc start ./<demo>-bundle --cloudflared on
+```
+
+</TabItem>
+<TabItem label="No tunnel">
+
+```bash
+gtc start ./<demo>-bundle --ngrok off --cloudflared off
+```
+
+仅在你只需要运行在 `localhost` 上的 WebChat 时使用此模式。
+
+</TabItem>
+</Tabs>
+
+### 轮换 secret 后重新运行 setup
+
+```bash
+gtc setup ./<demo>-bundle --answers <updated-setup-answers.json>
+```
+
+`gtc setup` 是幂等的。它会就地覆盖 secrets，并重新运行每个 provider 的 setup flows。
+
+### 启动前检查 bundles
+
+```bash
+gtc wizard --answers <create-answers.json> --dry-run
+gtc setup ./<demo>-bundle --dry-run
+```
+
+这两个命令都支持 `--dry-run`，可在不触碰文件系统或 secrets store 的情况下预览输出。
+
+### 停止正在运行的 demo
+
+```bash
+gtc stop ./<demo>-bundle
+```
+
+这会关闭 runner，以及 `gtc start` 启动的所有辅助进程（NATS、tunnels）。
+
+## 故障排查
+
+### Wizard 提示某个 capability 未满足
+
+更新 create-answers 文档，加入能提供缺失 capability 的 pack。对于 `greentic:state/state-store`，可以使用 `state-memory`（无需 setup）或 `state-redis`（需要一个 Redis 实例）。大多数 demo 已经声明了这项依赖，因此 wizard 通常会自动拉取。
+
+### WebChat 能打开，但 cards 是空白的
+
+请确认 bundle 的 tenant 与 WebChat URL 中的 tenant 一致。`gtc setup` 现在会自动检测 bundle tenant，因此如果你是在这个修复生效前执行的 setup，请在重新执行一次 `gtc wizard` 后再重新运行 setup，以刷新 bundle 布局。
+
+### 启动时 `setup_webhook` 一直失败
+
+检查 provider 所需的 secret 是否存在于 answers 文件中（例如 `bot_token`、`slack_configuration_token`、`ms_bot_app_password`）。使用更新后的文档重新运行 `gtc setup`，然后重新启动 `gtc start`。
+
+### Ingress URL 持续变化
+
+默认情况下，`ngrok` 每次重启都会分配新的 URL。webhook 更新器会在启动时检测这种变化，并调用每个 provider 的 `setup_webhook` op，把新的 URL 重新注册到上游，但如果你要长时间运行 demo，最好升级到保留域名。
+
+## 下一步
+
+- [gtc wizard](/zh/cli/wizard/) - create-answers 文档和 capability flags 的完整参考
+- [gtc setup](/zh/cli/setup/) - provider 配置、凭据和 dry-run 用法
+- [gtc start](/zh/cli/start/) - runtime 选项、tunnels 和 observability
+- [Bundle Assets](/zh/concepts/bundle-assets/) - WebChat skins 所使用的 asset overlay 工作方式
+- [Multi-Tenancy](/zh/concepts/multi-tenancy/) - tenant 隔离如何与 secrets 和 ingress 交互

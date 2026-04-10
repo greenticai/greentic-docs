@@ -1,69 +1,83 @@
 ---
-title: Inicio rápido
-description: Pon en marcha tu primer trabajador digital de Greentic en minutos
+title: Inicio Rápido
+description: Pon en marcha tu primer digital worker de Greentic en minutos
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Esta guía te ayudará a poner en marcha localmente un trabajador digital básico de Greentic.
+Esta guía te lleva de cero a tener un digital worker de Greentic en funcionamiento en pocos minutos. La vía más rápida es lanzar una de las demos publicadas del catálogo [`greentic-demo`](https://github.com/greenticai/greentic-demo): cada demo usa el mismo flujo de tres pasos.
 
-## Requisitos previos
+<Aside type="tip">
+¿Quieres ver todas las demos disponibles y saber exactamente qué hace cada una? Ve a [Ejecutar Demos](/es/getting-started/running-demos/).
+</Aside>
+
+## Prerrequisitos
 
 Antes de empezar, asegúrate de tener:
 
-- **Rust** 1.90 o posterior (`rustup default 1.90`)
-- **Node.js** 18+ (para herramientas de frontend)
-- **Git** para clonar repositorios
+- **`gtc` CLI** instalado; consulta [Instalación](/es/getting-started/installation/)
+- **Rust** 1.91 o posterior (solo si compilas desde el código fuente)
+- Una **URL pública** para proveedores basados en webhook (por ejemplo, `ngrok` o `cloudflared`); no es necesaria para el quickstart solo con WebChat
 
-## Instalación
+## Lanzar la demo quickstart
+
+La demo `quickstart` es el bundle end-to-end más pequeño: una tarjeta de bienvenida, una tarjeta de información y una interacción de eco sobre WebChat. No necesita cuentas externas.
 
 <Steps>
 
-1. **Instala la GTC CLI**
+1. **Crea el bundle** a partir del documento create-answers publicado:
 
    ```bash
-   cargo install greentic-cli
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
    ```
 
-   O compílala desde el código fuente:
+   El wizard descarga el pack de la demo, resuelve dependencias de capacidades (por ejemplo, añade `state-memory` automáticamente porque el proveedor WebChat necesita `greentic:state/state-store`) y escribe un directorio de bundle local.
+
+2. **Configura los proveedores** con el documento setup-answers publicado:
 
    ```bash
-   git clone https://github.com/greenticai/greentic.git
-   cd greentic/greentic
-   cargo build --release
+   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
    ```
 
-2. **Crea un nuevo bundle**
+   La configuración detecta automáticamente el tenant del bundle, guarda secretos por proveedor y valida que cada capacidad requerida esté satisfecha.
 
-   Usa el asistente para crear un nuevo bundle con la configuración que desees:
+3. **Inicia el runtime**:
 
    ```bash
-   gtc wizard --answers wizard-answers.yaml
+   gtc start ./quickstart-demo-bundle
    ```
 
-   O ejecútalo de forma interactiva:
+   El runner imprime la URL pública de WebChat. Ábrela en un navegador y deberías ver la tarjeta de bienvenida.
+
+</Steps>
+
+<Aside type="note">
+El mismo flujo de tres pasos funciona para todas las demos del catálogo. Para probar otra, solo sustituye el ID de la demo, por ejemplo `helpdesk-itsm`, `hr-onboarding` o `weather-mcp-demo`. Consulta [Ejecutar Demos](/es/getting-started/running-demos/) para ver la lista completa.
+</Aside>
+
+## Crear tu propio bundle
+
+Cuando estés listo para ir más allá del catálogo publicado, se aplican los mismos tres comandos; simplemente consumen tus propios archivos en lugar de URLs de release:
+
+<Steps>
+
+1. **Crea un bundle** con el wizard. Puedes ejecutarlo de forma interactiva o con un documento local de respuestas:
 
    ```bash
    gtc wizard
+   # or
+   gtc wizard --answers ./my-create-answers.json
    ```
 
-3. **Configura providers**
-
-   Configura tus providers de mensajería (por ejemplo, Telegram, Slack):
+2. **Configura proveedores**, de nuevo de forma interactiva o no interactiva:
 
    ```bash
    gtc setup ./my-bundle
+   # or
+   gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-   Para una configuración no interactiva, usa un archivo de respuestas:
-
-   ```bash
-   gtc setup --answers answers.json ./my-bundle
-   ```
-
-4. **Inicia el runtime**
-
-   Lanza tu trabajador digital:
+3. **Inicia el runtime**:
 
    ```bash
    gtc start ./my-bundle
@@ -71,9 +85,11 @@ Antes de empezar, asegúrate de tener:
 
 </Steps>
 
-## Ejemplo: flow Hello World
+Consulta [gtc wizard](/es/cli/wizard/) y [gtc setup](/es/cli/setup/) para ver la referencia completa, incluidas las banderas de capacidades y los esquemas de documentos de respuestas.
 
-Crea un flow simple que responda a mensajes:
+## Ejemplo: Flujo Hello World
+
+Crea un flujo sencillo que responda a mensajes:
 
 ```yaml title="flows/hello.ygtc"
 name: hello_world
@@ -92,7 +108,7 @@ triggers:
     target: greet
 ```
 
-## Estructura del bundle
+## Estructura del Bundle
 
 Un bundle típico de Greentic se ve así:
 
@@ -109,9 +125,9 @@ my-bundle/
 └── seeds.yaml              # Seed data (optional)
 ```
 
-## Archivo de configuración
+## Archivo de Configuración
 
-El archivo principal de configuración (`greentic.demo.yaml`) define tu entorno:
+El archivo de configuración principal (`greentic.demo.yaml`) define tu entorno:
 
 ```yaml title="greentic.demo.yaml"
 name: my-digital-worker
@@ -137,11 +153,11 @@ tenants:
             provider: messaging-telegram
 ```
 
-## Siguientes pasos
+## Próximos Pasos
 
-Ahora que ya tienes una configuración básica en ejecución:
+Ahora que ya tienes una configuración básica en funcionamiento:
 
-- [Aprende sobre Flujos](/es/concepts/flows/) - Comprende las definiciones de flows
-- [Configura Telegram](/es/providers/messaging/telegram/) - Configura un bot de Telegram
-- [Configura Slack](/es/providers/messaging/slack/) - Conecta un workspace de Slack
-- [Crea componentes personalizados](/es/concepts/components/) - Crea tus propios componentes WASM
+- [Aprender sobre Flows](/es/concepts/flows/) - Comprender las definiciones de flujos
+- [Configurar Telegram](/es/providers/messaging/telegram/) - Configurar un bot de Telegram
+- [Configurar Slack](/es/providers/messaging/slack/) - Conectar a un workspace de Slack
+- [Crear componentes personalizados](/es/concepts/components/) - Crear tus propios componentes WASM
