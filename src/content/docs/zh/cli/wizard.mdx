@@ -1,13 +1,13 @@
 ---
 title: gtc wizard
-description: 使用 wizard 命令创建新的 Greentic bundles
+description: 使用 wizard 命令创建新的 Greentic bundle
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-## 概述
+## 概览
 
-`gtc wizard` 命令根据 wizard answers 创建新的 Greentic bundles。它会搭建完整的 bundle 结构，包括配置文件、provider 设置和 app 模板。
+`gtc wizard` 命令根据 wizard answers 创建新的 Greentic bundle。它会 scaffold 完整的 bundle 结构，包括配置文件、provider 设置和应用模板。
 
 ## 用法
 
@@ -19,10 +19,10 @@ gtc wizard [OPTIONS]
 
 | 选项 | 说明 |
 |--------|-------------|
-| `--answers <FILE \| URL>` | wizard answers 文件的路径或 URL（JSON 或 YAML）。支持本地路径以及远程 `http://` / `https://` URL。 |
-| `--dry-run` | 预览将生成的文件而不写入 |
+| `--answers <FILE \| URL>` | wizard answers 文件的路径或 URL（JSON 或 YAML）。支持本地路径和远程 `http://` / `https://` URL。 |
+| `--dry-run` | 预览将生成的文件而不实际写入 |
 | `--output <DIR>` | 输出目录（默认：当前目录） |
-| `--template <NAME>` | 使用指定模板 |
+| `--template <NAME>` | 使用特定模板 |
 | `-v, --verbose` | 启用详细输出 |
 
 ## Wizard Answers 文件
@@ -91,6 +91,28 @@ tenants:
           - slack
 ```
 
+### Capabilities
+
+wizard answers 文件中的 `capabilities` 数组控制在创建 bundle 时启用的 bundle 级功能。Capabilities 决定了除了标准 bundle 结构之外，wizard 还会执行哪些额外 scaffold 操作。
+
+```json title="create-answers.json"
+{
+  "capabilities": ["greentic.cap.bundle_assets.read.v1"]
+}
+```
+
+**可用 capabilities：**
+
+| Capability | 说明 |
+|------------|-------------|
+| `greentic.cap.bundle_assets.read.v1` | 启用 bundle 级 asset 覆盖。当该 capability 存在时，wizard 会自动将 provider packs 中的 webchat-gui 皮肤 assets scaffold 到 bundle 的 `assets/` 目录。 |
+
+当包含 `greentic.cap.bundle_assets.read.v1` 时，生成的 bundle 将包含一个 `assets/` 目录，其中包含从 provider packs 复制来的文件（例如 webchat-gui 皮肤和配置）。这些 bundle 级文件可以被自定义，并会在运行时覆盖 pack 的默认值。
+
+<Aside type="tip">
+`capabilities` 数组会被写入 `bundle.yaml`，并且在之后配置 bundle 时也会被 `gtc setup` 识别。运行时行为详情请参见 [gtc setup capability 部分](/zh/cli/setup/#bundle-capabilities)。
+</Aside>
+
 ## 生成的结构
 
 运行 wizard 会生成：
@@ -121,6 +143,27 @@ my-digital-worker/
 
 ## 示例
 
+### Demo Catalog Bundles
+
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) 仓库会在其 release artifacts 中为每个 demo 发布一个 `*-create-answers.json` 和一个 `*-setup-answers.json`。你可以直接使用它们来创建本地 bundle，并在之后继续编辑：
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+```
+
+然后继续执行 setup 和 start：
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+对于任意已发布的 demo，只需替换 demo ID（例如 `quickstart`、`quickstart-event`、`hr-onboarding`、`helpdesk-itsm`、`sales-crm`、`supply-chain`、`incident`、`redbutton`、`cloud-deploy-demo`、`weather-mcp-demo` 等）。完整 catalog、说明以及所需凭据位于[运行 Demo](/zh/getting-started/running-demos/)页面。
+
+<Aside type="tip">
+wizard 会执行**基于 capability 的依赖解析**。当 demo 的 create-answers 文档引用了声明 `required_capabilities` 的 provider 时（例如 messaging providers 需要 `greentic:state/state-store`），wizard 会自动向生成的 bundle 中添加满足条件的 pack，例如 `state-memory`，你无需手动列出。
+</Aside>
+
 ### 基本用法
 
 ```bash
@@ -140,7 +183,7 @@ gtc wizard --answers wizard-answers.yaml --dry-run
 
 ### 远程 Answers 文件
 
-`--answers` 标志支持 `http://` 和 `https://` URL，因此可以轻松地将共享 answers 文档存放在集中位置，并在 CI/CD 流水线中引用它们。
+`--answers` 标志接受 `http://` 和 `https://` URL，因此可以很方便地将共享 answers 文档存放在集中位置，并在 CI/CD 流水线中引用它们。
 
 ```bash
 # Fetch answers from a remote URL
@@ -151,7 +194,7 @@ gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yam
 ```
 
 <Aside type="tip">
-远程 URL 支持在 CI/CD 流水线中很有用，因为 wizard answers 可以存储在共享仓库或制品服务器中，并在构建时拉取。
+当 wizard answers 存储在共享仓库或 artifact server 中，并在构建时拉取时，远程 URL 支持在 CI/CD 流水线中特别有用。
 </Aside>
 
 ### 自定义输出目录
@@ -174,10 +217,99 @@ gtc wizard --template customer-service --answers answers.yaml
 
 | 模板 | 说明 |
 |----------|-------------|
-| `minimal` | 只有一个 provider 的最简 bundle |
+| `minimal` | 仅包含一个 provider 的最小 bundle |
 | `customer-service` | 带升级处理的 FAQ bot |
-| `helpdesk` | 带工单集成的 IT 支持 |
+| `helpdesk` | 集成工单系统的 IT 支持 |
 | `multi-channel` | 多个消息渠道 |
+
+## Bundle Capabilities
+
+wizard 会提示可选的 bundle capabilities，以启用额外功能。每个 capability 都会在生成的 bundle 中解锁一组特定的 assets 和行为。
+
+### 交互式提示
+
+交互式运行 `gtc wizard` 时，你会看到：
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+### Capability 参考
+
+| Prompt | Capability ID | 作用 |
+|--------|---------------|-------------|
+| Enable bundle-level assets | `greentic.cap.bundle_assets.read.v1` | 创建 `./assets/` 目录，并将 provider packs 中的默认皮肤文件 scaffold 到各 tenant 目录中 |
+| Enable OAuth login for WebChat GUI | `greentic.cap.webchat.oauth.v1` | 向 tenant 配置文件添加 OAuth/OIDC authentication provider 配置 |
+| Enable multi-language for WebChat GUI | `greentic.cap.webchat.i18n.v1` | 在 WebChat 中启用语言选择器，并在 `./assets/` 下 scaffold locale JSON 文件 |
+| Enable embeddable WebChat widget | `greentic.cap.webchat.embed.v1` | 为每个 tenant 生成嵌入式 HTML 片段（fullpage link、inline iframe、chat bubble） |
+
+### 在 Answers 文件中设置 Capabilities
+
+除了交互式回答这些提示外，你也可以通过添加 `capabilities` 数组，直接在 answers 文件中设置 capabilities：
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Capabilities 是可叠加的。启用 `greentic.cap.webchat.embed.v1` 会隐式要求 `greentic.cap.bundle_assets.read.v1`，因为 embed 片段会写入 `./assets/` 目录。wizard 会自动处理这一依赖关系。
+</Aside>
+
+有关 capabilities、scaffold 行为和 overlay 机制的完整细节，请参见 [Bundle Assets](/zh/greentic-docs/concepts/bundle-assets/)。
 
 ## 工作流
 
@@ -185,7 +317,7 @@ gtc wizard --template customer-service --answers answers.yaml
 
 1. **创建 answers 文件**
 
-   用 JSON 或 YAML 定义你的项目配置。
+   使用 JSON 或 YAML 定义你的项目配置。
 
 2. **运行 wizard**
 
@@ -195,7 +327,7 @@ gtc wizard --template customer-service --answers answers.yaml
 
 3. **检查生成的文件**
 
-   检查生成的 bundle 结构。
+   查看生成的 bundle 结构。
 
 4. **配置 providers**
 
@@ -213,7 +345,7 @@ gtc wizard --template customer-service --answers answers.yaml
 
 ## 自定义生成的 Flows
 
-wizard 会生成基础 flow 模板。生成后你可以继续自定义：
+wizard 会生成基础 flow 模板。生成后你可以进一步自定义：
 
 ```yaml title="apps/support-bot/flows/on_message.ygtc"
 name: on_message
@@ -240,18 +372,18 @@ triggers:
 ```
 
 <Aside type="tip">
-先使用 `--dry-run` 预览将生成的结构，再决定是否写入磁盘。
+先使用 `--dry-run` 预览生成的结构，再决定是否写入磁盘。
 </Aside>
 
 ## 故障排查
 
-### 无效的 Answers 文件
+### Answers 文件无效
 
 ```
 Error: Failed to parse answers file
 ```
 
-确保你的 JSON/YAML 有效。可以使用 linter 检查语法。
+确认你的 JSON/YAML 有效。可使用 linter 检查语法。
 
 ### 缺少必填字段
 
@@ -259,7 +391,7 @@ Error: Failed to parse answers file
 Error: Missing required field: project.name
 ```
 
-检查 answers 文件中是否包含所有必填字段。
+检查你的 answers 文件是否包含所有必填字段。
 
 ### 找不到模板
 

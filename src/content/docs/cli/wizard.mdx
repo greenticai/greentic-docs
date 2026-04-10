@@ -143,25 +143,26 @@ my-digital-worker/
 
 ## Examples
 
-### Extensible Demo Bundle
+### Demo Catalog Bundles
 
-Use the published demo answers to create a local directory bundle that developers can extend afterwards:
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-create-answers.json
-```
-
-This creates a local bundle at:
-
-```text
-./crates/cloud-deploy-demo/bundle
-```
-
-Then continue with setup:
+The [`greentic-demo`](https://github.com/greenticai/greentic-demo) repository publishes a `*-create-answers.json` and a `*-setup-answers.json` for every demo in its release artifacts. Use them directly to create a local bundle that you can keep editing afterwards:
 
 ```bash
-gtc setup ./crates/cloud-deploy-demo/bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
 ```
+
+Then continue with setup and start:
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+Substitute the demo ID for any of the published demos (`quickstart`, `quickstart-event`, `hr-onboarding`, `helpdesk-itsm`, `sales-crm`, `supply-chain`, `incident`, `redbutton`, `cloud-deploy-demo`, `weather-mcp-demo`, ...). The full catalog with descriptions and required credentials lives on the [Running Demos](/getting-started/running-demos/) page.
+
+<Aside type="tip">
+The wizard performs **capability-based dependency resolution**. When the demo's create-answers document references a provider that declares `required_capabilities` (e.g. messaging providers needing `greentic:state/state-store`), the wizard automatically adds a satisfying pack such as `state-memory` to the generated bundle — you do not have to list it manually.
+</Aside>
 
 ### Basic Usage
 

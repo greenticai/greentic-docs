@@ -1,69 +1,83 @@
 ---
 title: クイックスタート
-description: 最初の Greentic digital worker を数分で起動する
+description: 最初の Greentic digital worker を数分で動かす
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-このガイドは、基本的な Greentic digital worker をローカルで起動するのに役立ちます。
+このガイドでは、ゼロの状態から数分で Greentic digital worker を動かせるところまで進めます。最短ルートは、[`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog から公開済み demo の 1 つを起動することです。どの demo も同じ 3 ステップの flow を使います。
 
-## 前提条件
+<Aside type="tip">
+利用可能な demo をすべて見て、それぞれが何をするのか正確に確認したい場合は、[Running Demos](/ja/getting-started/running-demos/) に進んでください。
+</Aside>
 
-開始前に、次を用意してください:
+## Prerequisites
 
-- **Rust** 1.90 以降 (`rustup default 1.90`)
-- **Node.js** 18+ (frontend tools 用)
-- repository を clone するための **Git**
+開始する前に、以下を確認してください:
 
-## インストール
+- **`gtc` CLI** がインストール済みであること。詳細は [Installation](/ja/getting-started/installation/)
+- **Rust** 1.91 以降（source から build する場合のみ必要）
+- webhook provider 用の **public URL**（例: `ngrok` または `cloudflared`）。WebChat-only quickstart では不要です
+
+## quickstart demo を起動する
+
+`quickstart` demo は最小の end-to-end bundle です。welcome card、about card、WebChat 経由の echo interaction が含まれます。外部アカウントは不要です。
 
 <Steps>
 
-1. **GTC CLI をインストールする**
+1. **bundle を作成する**。公開されている create-answers document を使います:
 
    ```bash
-   cargo install greentic-cli
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
    ```
 
-   または source から build します:
+   wizard は demo pack をダウンロードし、capability dependencies を解決し（例: WebChat provider が `greentic:state/state-store` を必要とするため `state-memory` を自動的に取り込みます）、ローカル bundle directory を書き出します。
+
+2. **provider を設定する**。公開されている setup-answers document を使います:
 
    ```bash
-   git clone https://github.com/greenticai/greentic.git
-   cd greentic/greentic
-   cargo build --release
+   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
    ```
 
-2. **新しい bundle を作成する**
+   setup は bundle の tenant を自動検出し、provider ごとに secret を保存し、必要な capability がすべて満たされていることを検証します。
 
-   wizard を使って、希望する configuration を持つ新しい bundle を作成します:
+3. **runtime を起動する**:
 
    ```bash
-   gtc wizard --answers wizard-answers.yaml
+   gtc start ./quickstart-demo-bundle
    ```
 
-   または対話形式で実行します:
+   runner が public WebChat URL を表示します。browser で開くと welcome card が表示されるはずです。
+
+</Steps>
+
+<Aside type="note">
+catalog 内のすべての demo で同じ 3 ステップの flow が使えます。別の demo を試すには、demo ID を置き換えるだけです。たとえば `helpdesk-itsm`、`hr-onboarding`、`weather-mcp-demo` などです。完全な一覧は [Running Demos](/ja/getting-started/running-demos/) を参照してください。
+</Aside>
+
+## 独自の bundle を作成する
+
+公開 catalog を超えて進む準備ができたら、同じ 3 つのコマンドを使えます。違いは、release URLs の代わりに自分の file を使うことだけです:
+
+<Steps>
+
+1. **wizard で bundle を作成する**。対話モードでも、ローカル answers document を使っても構いません:
 
    ```bash
    gtc wizard
+   # or
+   gtc wizard --answers ./my-create-answers.json
    ```
 
-3. **provider を設定する**
-
-   messaging provider (例: Telegram、Slack) をセットアップします:
+2. **provider を設定する**。これも対話型でも非対話型でも可能です:
 
    ```bash
    gtc setup ./my-bundle
+   # or
+   gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-   非対話の setup では、answers file を使います:
-
-   ```bash
-   gtc setup --answers answers.json ./my-bundle
-   ```
-
-4. **runtime を起動する**
-
-   digital worker を起動します:
+3. **runtime を起動する**:
 
    ```bash
    gtc start ./my-bundle
@@ -71,9 +85,11 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 </Steps>
 
+capability flags や answers-document schemas を含む完全なリファレンスは、[gtc wizard](/ja/cli/wizard/) と [gtc setup](/ja/cli/setup/) を参照してください。
+
 ## 例: Hello World Flow
 
-メッセージに応答する単純な flow を作成します:
+メッセージに応答するシンプルな flow を作成します:
 
 ```yaml title="flows/hello.ygtc"
 name: hello_world
@@ -111,7 +127,7 @@ my-bundle/
 
 ## Configuration File
 
-メインの configuration file (`greentic.demo.yaml`) はセットアップ内容を定義します:
+メイン設定ファイル（`greentic.demo.yaml`）はセットアップを定義します:
 
 ```yaml title="greentic.demo.yaml"
 name: my-digital-worker
@@ -137,11 +153,11 @@ tenants:
             provider: messaging-telegram
 ```
 
-## 次のステップ
+## Next Steps
 
-基本セットアップが動いたら、次に進みます:
+基本セットアップが動いたので、次は以下を参照してください:
 
-- [Flows について学ぶ](/ja/concepts/flows/) - flow definition を理解する
-- [Telegram を設定する](/ja/providers/messaging/telegram/) - Telegram bot をセットアップする
-- [Slack を設定する](/ja/providers/messaging/slack/) - Slack workspace に接続する
-- [カスタム components を構築する](/ja/concepts/components/) - 独自の WASM component を作成する
+- [Learn about Flows](/ja/concepts/flows/) - flow definitions を理解する
+- [Configure Telegram](/ja/providers/messaging/telegram/) - Telegram bot を設定する
+- [Configure Slack](/ja/providers/messaging/slack/) - Slack workspace に接続する
+- [Build custom components](/ja/concepts/components/) - 独自の WASM components を作成する

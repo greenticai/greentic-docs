@@ -1,13 +1,13 @@
 ---
 title: gtc setup
-description: Greentic bundle 内の providers を設定する
+description: Greentic bundle 内の provider を設定する
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## 概要
 
-`gtc setup` コマンドは、Greentic bundle 内の providers を設定します。有効な各 provider の setup flows を実行し、認証情報を収集して webhooks を設定します。
+`gtc setup` コマンドは Greentic bundle 内の provider を設定します。有効になっている各 provider の setup flow を実行し、認証情報を収集して webhook を設定します。
 
 ## 使い方
 
@@ -19,32 +19,52 @@ gtc setup [OPTIONS] <BUNDLE_PATH>
 
 | Option | 説明 |
 |--------|-------------|
-| `--answers <FILE>` | 回答ファイルへのパス（非対話型） |
+| `--answers <FILE>` | answers file のパス（非対話モード） |
 | `--dry-run` | 変更を加えずに setup をプレビューする |
-| `--emit-answers <FILE>` | 回答テンプレートを生成する |
-| `--advanced` | 回答テンプレートに任意フィールドを含める |
-| `--provider <NAME>` | 特定の provider だけを setup する |
+| `--emit-answers <FILE>` | answers テンプレートを生成する |
+| `--advanced` | answers テンプレートに任意フィールドを含める |
+| `--provider <NAME>` | 特定の provider のみ setup する |
 | `--skip <NAME>` | 特定の provider をスキップする |
-| `-v, --verbose` | 詳細出力を有効にする |
+| `-v, --verbose` | verbose 出力を有効にする |
 
 ## 対話型セットアップ
 
-各 provider について順にプロンプトを表示するには、対話型で setup を実行します:
+各 provider について入力を求められる対話モードで setup を実行します:
 
 ```bash
 gtc setup ./my-bundle
 ```
 
-CLI は次の項目を尋ねます:
+CLI は以下を尋ねます:
 - provider の認証情報（API keys、tokens）
-- webhooks 用の公開 URL
+- webhook 用の公開 URL
 - 任意の設定オプション
 
 ## 非対話型セットアップ
 
-### 回答テンプレートを生成する
+### Demo Catalog Flows
 
-まず、必要なすべてのフィールドを含むテンプレートを生成します:
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog 内の各 demo は、pack と一緒に `*-setup-answers.json` ドキュメントを公開しています。これを `gtc wizard` で作成した bundle に適用します:
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+```
+
+同じパターンはどの demo に対しても使えます。demo ID を置き換えるだけです。説明と必要な認証情報を含む完全な catalog は [Running Demos](/ja/getting-started/running-demos/) を参照してください。
+
+`gtc setup` を公開済みの `.gtbundle` artifact に直接向けることもできます:
+
+```bash
+gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+```
+
+<Aside type="note">
+`gtc setup` は `tenants/` directory から bundle の tenant を自動検出するため、bundle がデフォルトの `demo` tenant で作成されていなくても、secret は正しい tenant URI に書き込まれます。また、bundle 内のすべての pack に対して **dependency capability validation** を実行し、必要な capability（例: `greentic:state/state-store`）がまだ満たされていない場合は警告します。
+</Aside>
+
+### Answers Template を生成する
+
+まず、必須フィールドをすべて含むテンプレートを生成します:
 
 ```bash
 # Basic template (required fields only)
@@ -54,7 +74,7 @@ gtc setup --dry-run --emit-answers answers.json ./my-bundle
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 ```
 
-### 回答ファイルの形式
+### Answers File Format
 
 <Tabs>
 <TabItem label="JSON">
@@ -104,13 +124,13 @@ messaging-teams:
 </TabItem>
 </Tabs>
 
-### 回答を適用する
+### Answers を適用する
 
 ```bash
 gtc setup --answers answers.json ./my-bundle
 ```
 
-## Provider ごとの設定
+## Provider 固有の設定
 
 ### Telegram
 
@@ -126,7 +146,7 @@ gtc setup --answers answers.json ./my-bundle
 
 **認証情報の取得方法:**
 1. Telegram で [@BotFather](https://t.me/botfather) にメッセージを送る
-2. `/newbot` を送信し、案内に従う
+2. `/newbot` を送信して案内に従う
 3. bot token をコピーする
 
 ### Slack
@@ -178,10 +198,10 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-## 公開 URL の設定
+## Public URL Configuration
 
 <Aside type="caution">
-Webhook ベースの providers には公開アクセス可能な URL が必要です。`gtc start` で ngrok または cloudflared を使う場合、`public_base_url` は自動的に置き換えられます。
+Webhook ベースの provider には外部からアクセス可能な URL が必要です。`public_base_url` は、`gtc start` で ngrok または cloudflared を使う場合に自動的に置き換えられます。
 </Aside>
 
 ### ngrok を使う
@@ -201,37 +221,62 @@ ngrok http 8080
 gtc start ./my-bundle --cloudflared on
 ```
 
-## Setup Flow の実行
+## Bundle Capabilities
 
-`gtc setup` を実行すると、次の処理が行われます:
+`bundle.yaml` file では、setup 中に追加の挙動を有効にする capabilities を宣言できます。Capabilities は capability identifier の配列として列挙されます。
+
+### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
+
+`bundle.yaml` に `greentic.cap.bundle_assets.read.v1` capability が存在する場合、`gtc setup` は bundle ルートに `assets/` directory を作成し、provider pack から asset file をそこへ scaffold します。
+
+```yaml title="bundle.yaml"
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+```
+
+具体的には、provider pack の assets（`assets/webchat-gui/` entries など）が bundle レベルの `assets/` directory にコピーされます。これにより、元の pack 内容を変更せずに、webchat-gui の skin や設定ファイルなどの provider assets をカスタマイズできます。
+
+**仕組み:**
+
+- setup 中、asset directory を含む provider pack（例: `assets/webchat-gui/`）のファイルが、bundle ルートの `assets/` directory に scaffold されます。
+- その後はこれらの file を自由に編集できます。bundle レベルの asset file は runtime 時に pack のデフォルトを上書きします。
+- これは、webchat widget の look and feel の調整、設定の変更、brand に合わせた skin の適用に便利です。
+
+<Aside type="tip">
+setup により assets が scaffold された後は、安全に変更できます。runtime が assets を読み込む際、bundle レベルのカスタマイズが pack のデフォルトより優先されます。
+</Aside>
+
+## Setup Flow Execution
+
+`gtc setup` を実行すると、次の処理を行います:
 
 <Steps>
 
 1. **bundle 設定を読み込む**
 
-   providers を見つけるために `greentic.demo.yaml` を読み込みます。
+   `greentic.demo.yaml` を読み込み、provider を見つけます。
 
-2. **回答を検証する**
+2. **answers を検証する**
 
-   必須フィールドがすべて揃っているかを確認します。
+   必須フィールドがすべて存在することを確認します。
 
 3. **setup flows を実行する**
 
-   各 provider の `setup_flow` を実行します（例: webhook 登録）。
+   各 provider の `setup_flow` を実行します（例: webhook registration）。
 
 4. **認証情報を保存する**
 
-   設定された secrets store に認証情報を保存します。
+   認証情報を設定済みの secrets store に保存します。
 
 5. **検証を実行する**
 
-   setup が正しく動作したことを確認するために `verify_flow` を実行します。
+   `verify_flow` を実行して setup が正しく機能したことを確認します。
 
 </Steps>
 
-## 選択的なセットアップ
+## Selective Setup
 
-### 単一の Provider を setup する
+### 単一 Provider を setup する
 
 ```bash
 gtc setup --provider messaging-telegram ./my-bundle
@@ -250,9 +295,9 @@ gtc setup --skip messaging-teams ./my-bundle
 gtc start ./my-bundle --force-setup
 ```
 
-## トラブルシューティング
+## Troubleshooting
 
-### Webhook の登録に失敗した
+### Webhook Registration Failed
 
 ```
 Error: Failed to register webhook: 401 Unauthorized
@@ -260,15 +305,15 @@ Error: Failed to register webhook: 401 Unauthorized
 
 bot token が正しく、有効期限切れでないことを確認してください。
 
-### 必須フィールドが不足している
+### Missing Required Field
 
 ```
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-回答ファイルに必須フィールドがすべて含まれていることを確認してください。
+answers file に必須フィールドがすべて含まれていることを確認してください。
 
-### 公開 URL にアクセスできない
+### Public URL Not Accessible
 
 ```
 Error: Webhook verification failed: Connection refused
@@ -276,24 +321,24 @@ Error: Webhook verification failed: Connection refused
 
 公開 URL にインターネットからアクセスできることを確認してください。ngrok/cloudflared が実行中か確認します。
 
-### 認証情報が見つからない
+### Credential Not Found
 
 ```
 Error: Secret 'slack_bot_token' not found
 ```
 
-provider を設定するために `gtc setup` を実行するか、回答ファイルを確認してください。
+provider を設定するために `gtc setup` を実行するか、answers file を確認してください。
 
-## ベストプラクティス
+## Best Practices
 
-1. **CI/CD では回答ファイルを使う** - 自動化パイプラインで対話型プロンプトを避ける
-2. **認証情報を安全に保つ** - 実際の token を含む回答ファイルを git に commit しない
-3. **環境変数を使う** - 回答内で `$ENV_VAR` を使って secrets を参照する
-4. **dry-run で確認する** - 変更前に setup をプレビューする
-5. **URL 変更時は再生成する** - 公開 URL が変わったら setup を再実行する
+1. **CI/CD では answers file を使う** - 自動化パイプラインでは対話プロンプトを避ける
+2. **認証情報を安全に保つ** - 実際の token を含む answers file を git に commit しない
+3. **environment variables を使う** - answers 内では `$ENV_VAR` で secret を参照する
+4. **dry-run でテストする** - 変更を加える前に setup をプレビューする
+5. **URL が変わったら再生成する** - 公開 URL が変わったら setup を再実行する
 
-## 次のステップ
+## Next Steps
 
-- [gtc start](/ja/cli/start/) - Runtime server を実行する
+- [gtc start](/ja/cli/start/) - runtime server を実行する
 - [Telegram Setup](/ja/providers/messaging/telegram/) - 詳細な Telegram ガイド
 - [Slack Setup](/ja/providers/messaging/slack/) - 詳細な Slack ガイド

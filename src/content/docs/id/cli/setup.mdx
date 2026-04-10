@@ -7,7 +7,7 @@ import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Gambaran Umum
 
-Perintah `gtc setup` mengonfigurasi provider di bundle Greentic Anda. Perintah ini menjalankan flow setup untuk setiap provider yang diaktifkan, mengumpulkan kredensial, dan mengonfigurasi webhook.
+Perintah `gtc setup` mengonfigurasikan provider di bundle Greentic Anda. Perintah ini menjalankan flow setup untuk setiap provider yang diaktifkan, mengumpulkan kredensial, dan mengonfigurasi webhook.
 
 ## Penggunaan
 
@@ -18,18 +18,18 @@ gtc setup [OPTIONS] <BUNDLE_PATH>
 ## Opsi
 
 | Opsi | Deskripsi |
-|--------|-----------|
-| `--answers <FILE>` | Path ke file jawaban (non-interaktif) |
-| `--dry-run` | Pratinjau setup tanpa melakukan perubahan |
-| `--emit-answers <FILE>` | Hasilkan template jawaban |
-| `--advanced` | Sertakan field opsional di template jawaban |
+|--------|-------------|
+| `--answers <FILE>` | Path ke file answers (non-interaktif) |
+| `--dry-run` | Pratinjau setup tanpa membuat perubahan |
+| `--emit-answers <FILE>` | Buat template answers |
+| `--advanced` | Sertakan field opsional dalam template answers |
 | `--provider <NAME>` | Setup hanya provider tertentu |
 | `--skip <NAME>` | Lewati provider tertentu |
 | `-v, --verbose` | Aktifkan output verbose |
 
 ## Setup Interaktif
 
-Jalankan setup secara interaktif untuk diminta input bagi setiap provider:
+Jalankan setup secara interaktif agar Anda dipandu untuk setiap provider:
 
 ```bash
 gtc setup ./my-bundle
@@ -42,7 +42,27 @@ CLI akan meminta:
 
 ## Setup Non-Interaktif
 
-### Hasilkan Template Jawaban
+### Flow Katalog Demo
+
+Setiap demo dalam katalog [`greentic-demo`](https://github.com/greenticai/greentic-demo) menerbitkan dokumen `*-setup-answers.json` bersama pack-nya. Terapkan dokumen tersebut ke bundle yang Anda buat dengan `gtc wizard`:
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+```
+
+Pola yang sama berlaku untuk demo mana pun, cukup ganti ID demo. Lihat [Menjalankan Demo](/id/getting-started/running-demos/) untuk katalog lengkap beserta deskripsi dan kredensial yang diperlukan.
+
+Anda juga dapat langsung mengarahkan `gtc setup` ke artefak `.gtbundle` yang telah dipublikasikan:
+
+```bash
+gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+```
+
+<Aside type="note">
+`gtc setup` mendeteksi tenant bundle secara otomatis dari direktori `tenants/`, sehingga secret ditulis ke URI tenant yang benar bahkan ketika bundle tidak dibuat dengan tenant default `demo`. Perintah ini juga menjalankan **validasi capability dependensi** di seluruh pack dalam bundle dan memperingatkan jika ada capability yang dibutuhkan (misalnya `greentic:state/state-store`) yang masih belum terpenuhi.
+</Aside>
+
+### Menghasilkan Template Answers
 
 Pertama, hasilkan template dengan semua field yang diperlukan:
 
@@ -54,7 +74,7 @@ gtc setup --dry-run --emit-answers answers.json ./my-bundle
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 ```
 
-### Format File Jawaban
+### Format File Answers
 
 <Tabs>
 <TabItem label="JSON">
@@ -104,13 +124,13 @@ messaging-teams:
 </TabItem>
 </Tabs>
 
-### Terapkan Jawaban
+### Menerapkan Answers
 
 ```bash
 gtc setup --answers answers.json ./my-bundle
 ```
 
-## Konfigurasi Spesifik Provider
+## Konfigurasi Khusus Provider
 
 ### Telegram
 
@@ -127,7 +147,7 @@ gtc setup --answers answers.json ./my-bundle
 **Cara mendapatkan kredensial:**
 1. Kirim pesan ke [@BotFather](https://t.me/botfather) di Telegram
 2. Kirim `/newbot` dan ikuti petunjuknya
-3. Salin bot token
+3. Salin token bot
 
 ### Slack
 
@@ -145,7 +165,7 @@ gtc setup --answers answers.json ./my-bundle
 
 **Cara mendapatkan kredensial:**
 1. Buka [api.slack.com/apps](https://api.slack.com/apps)
-2. Buat app baru atau pilih yang sudah ada
+2. Buat aplikasi baru atau pilih yang sudah ada
 3. Ambil Bot Token dari OAuth & Permissions
 4. Ambil App ID dari Basic Information
 5. Ambil Configuration Token dari App Manifest
@@ -181,7 +201,7 @@ gtc setup --answers answers.json ./my-bundle
 ## Konfigurasi URL Publik
 
 <Aside type="caution">
-Provider berbasis webhook memerlukan URL yang dapat diakses publik. `public_base_url` akan otomatis diganti saat menggunakan ngrok atau cloudflared dengan `gtc start`.
+Provider berbasis webhook memerlukan URL yang dapat diakses publik. `public_base_url` akan diganti secara otomatis saat menggunakan ngrok atau cloudflared dengan `gtc start`.
 </Aside>
 
 ### Menggunakan ngrok
@@ -201,6 +221,31 @@ ngrok http 8080
 gtc start ./my-bundle --cloudflared on
 ```
 
+## Capability Bundle
+
+File `bundle.yaml` dapat mendeklarasikan capability yang membuka perilaku tambahan selama setup. Capability dicantumkan sebagai array identifier capability.
+
+### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
+
+Ketika capability `greentic.cap.bundle_assets.read.v1` ada di `bundle.yaml`, `gtc setup` membuat direktori `assets/` di root bundle dan melakukan scaffold file aset dari provider pack ke dalamnya.
+
+```yaml title="bundle.yaml"
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+```
+
+Secara khusus, aset dari provider pack (seperti entri `assets/webchat-gui/`) disalin ke direktori `assets/` level bundle. Ini memberi Anda tempat untuk menyesuaikan aset provider, misalnya skin webchat-gui dan file konfigurasi, tanpa memodifikasi isi pack asli.
+
+**Cara kerjanya:**
+
+- Selama setup, provider pack yang menyertakan direktori aset (misalnya `assets/webchat-gui/`) akan melakukan scaffold file-file tersebut ke direktori `assets/` di root bundle.
+- Setelah itu Anda dapat mengedit file-file ini dengan bebas. File aset level bundle akan menimpa default pack saat runtime.
+- Ini berguna untuk menyesuaikan tampilan dan nuansa widget webchat, mengubah konfigurasi, atau menerapkan skin bermerek.
+
+<Aside type="tip">
+Setelah setup melakukan scaffold aset, Anda dapat memodifikasinya dengan aman. Kustomisasi level bundle Anda akan diprioritaskan dibanding default pack saat runtime memuat aset.
+</Aside>
+
 ## Eksekusi Flow Setup
 
 Saat Anda menjalankan `gtc setup`, perintah ini:
@@ -211,13 +256,13 @@ Saat Anda menjalankan `gtc setup`, perintah ini:
 
    Membaca `greentic.demo.yaml` untuk menemukan provider.
 
-2. **Memvalidasi jawaban**
+2. **Memvalidasi answers**
 
-   Memeriksa bahwa semua field wajib tersedia.
+   Memeriksa bahwa semua field yang diperlukan tersedia.
 
 3. **Menjalankan flow setup**
 
-   Mengeksekusi `setup_flow` setiap provider (misalnya, registrasi webhook).
+   Menjalankan `setup_flow` milik setiap provider (misalnya registrasi webhook).
 
 4. **Menyimpan kredensial**
 
@@ -225,7 +270,7 @@ Saat Anda menjalankan `gtc setup`, perintah ini:
 
 5. **Menjalankan verifikasi**
 
-   Mengeksekusi `verify_flow` untuk memastikan setup berhasil.
+   Menjalankan `verify_flow` untuk mengonfirmasi bahwa setup berhasil.
 
 </Steps>
 
@@ -258,15 +303,15 @@ gtc start ./my-bundle --force-setup
 Error: Failed to register webhook: 401 Unauthorized
 ```
 
-Periksa bahwa bot token Anda benar dan belum kedaluwarsa.
+Periksa bahwa token bot Anda benar dan belum kedaluwarsa.
 
-### Field Wajib Hilang
+### Field Wajib Tidak Ada
 
 ```
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-Pastikan semua field wajib ada di file jawaban Anda.
+Pastikan semua field yang diperlukan ada di file answers Anda.
 
 ### URL Publik Tidak Dapat Diakses
 
@@ -274,7 +319,7 @@ Pastikan semua field wajib ada di file jawaban Anda.
 Error: Webhook verification failed: Connection refused
 ```
 
-Pastikan URL publik Anda dapat diakses dari internet. Periksa bahwa ngrok/cloudflared sedang berjalan.
+Pastikan URL publik Anda dapat diakses dari internet. Periksa apakah ngrok/cloudflared sedang berjalan.
 
 ### Kredensial Tidak Ditemukan
 
@@ -282,15 +327,15 @@ Pastikan URL publik Anda dapat diakses dari internet. Periksa bahwa ngrok/cloudf
 Error: Secret 'slack_bot_token' not found
 ```
 
-Jalankan `gtc setup` untuk mengonfigurasi provider, atau periksa file jawaban Anda.
+Jalankan `gtc setup` untuk mengonfigurasi provider, atau periksa file answers Anda.
 
 ## Praktik Terbaik
 
-1. **Gunakan file jawaban di CI/CD** - Hindari prompt interaktif di pipeline otomatis
-2. **Jaga kredensial tetap aman** - Jangan commit file jawaban dengan token nyata ke git
-3. **Gunakan variabel lingkungan** - Referensikan secret via `$ENV_VAR` di jawaban
-4. **Uji dengan dry-run** - Pratinjau setup sebelum melakukan perubahan
-5. **Generate ulang saat URL berubah** - Jalankan ulang setup saat URL publik Anda berubah
+1. **Gunakan file answers di CI/CD** - Hindari prompt interaktif dalam pipeline otomatis
+2. **Jaga keamanan kredensial** - Jangan commit file answers yang berisi token nyata ke git
+3. **Gunakan environment variable** - Referensikan secret melalui `$ENV_VAR` di answers
+4. **Uji dengan dry-run** - Pratinjau setup sebelum membuat perubahan
+5. **Regenerasi saat URL berubah** - Jalankan ulang setup saat URL publik Anda berubah
 
 ## Langkah Berikutnya
 

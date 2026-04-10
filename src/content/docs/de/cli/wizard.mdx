@@ -1,13 +1,13 @@
 ---
 title: gtc wizard
-description: Neue Greentic-Bundles mit dem Wizard-Befehl erstellen
+description: Neue Greentic-Bundles mit dem wizard-Befehl erstellen
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Überblick
 
-Der Befehl `gtc wizard` erstellt neue Greentic-Bundles aus Wizard-Antworten. Er erzeugt die komplette Bundle-Struktur inklusive Konfigurationsdateien, Provider-Setups und App-Vorlagen.
+Der Befehl `gtc wizard` erstellt neue Greentic-Bundles aus Wizard-Antworten. Er scaffoldet die vollständige Bundle-Struktur einschließlich Konfigurationsdateien, Provider-Setups und App-Vorlagen.
 
 ## Verwendung
 
@@ -19,13 +19,13 @@ gtc wizard [OPTIONS]
 
 | Option | Beschreibung |
 |--------|-------------|
-| `--answers <FILE \| URL>` | Pfad oder URL zur Wizard-Answer-Datei (JSON oder YAML). Unterstützt lokale Pfade und entfernte `http://`- / `https://`-URLs. |
-| `--dry-run` | Generierte Dateien in der Vorschau anzeigen, ohne sie zu schreiben |
+| `--answers <FILE \| URL>` | Pfad oder URL zur Wizard-Antwortdatei (JSON oder YAML). Unterstützt lokale Pfade und entfernte `http://`- / `https://`-URLs. |
+| `--dry-run` | Erzeugte Dateien in der Vorschau anzeigen, ohne sie zu schreiben |
 | `--output <DIR>` | Ausgabeverzeichnis (Standard: aktuelles Verzeichnis) |
 | `--template <NAME>` | Eine bestimmte Vorlage verwenden |
 | `-v, --verbose` | Ausführliche Ausgabe aktivieren |
 
-## Wizard-Answer-Datei
+## Wizard-Antwortdatei
 
 ### JSON-Format
 
@@ -91,13 +91,35 @@ tenants:
           - slack
 ```
 
-## Generierte Struktur
+### Capabilities
 
-Beim Ausführen des Wizard wird Folgendes erzeugt:
+Das Array `capabilities` in der Wizard-Antwortdatei steuert Bundle-weite Funktionen, die beim Erstellen des Bundles aktiviert werden. Capabilities bestimmen, welche zusätzlichen Scaffold-Schritte der Wizard über die Standard-Bundle-Struktur hinaus ausführt.
+
+```json title="create-answers.json"
+{
+  "capabilities": ["greentic.cap.bundle_assets.read.v1"]
+}
+```
+
+**Verfügbare Capabilities:**
+
+| Capability | Beschreibung |
+|------------|-------------|
+| `greentic.cap.bundle_assets.read.v1` | Aktiviert Bundle-weite Asset-Überschreibungen. Wenn vorhanden, scaffoldet der Wizard automatisch `webchat-gui`-Skin-Assets aus Provider-Packs in das Verzeichnis `assets/` des Bundles. |
+
+Wenn `greentic.cap.bundle_assets.read.v1` enthalten ist, enthält das erzeugte Bundle ein Verzeichnis `assets/` mit Dateien, die aus Provider-Packs kopiert wurden, etwa `webchat-gui`-Skins und Konfigurationen. Diese Dateien auf Bundle-Ebene können angepasst werden und überschreiben zur Laufzeit die Standardwerte des Packs.
+
+<Aside type="tip">
+Das Array `capabilities` wird in `bundle.yaml` geschrieben und später auch von `gtc setup` berücksichtigt, wenn das Bundle konfiguriert wird. Details zum Laufzeitverhalten finden Sie im [Capabilities-Abschnitt von gtc setup](/de/cli/setup/#bundle-capabilities).
+</Aside>
+
+## Erzeugte Struktur
+
+Das Ausführen des Wizards erzeugt:
 
 ```
 my-digital-worker/
-├── greentic.demo.yaml          # Main configuration
+├── greentic.demo.yaml          # Hauptkonfiguration
 ├── providers/
 │   ├── messaging/
 │   │   ├── messaging-telegram.gtpack
@@ -121,38 +143,58 @@ my-digital-worker/
 
 ## Beispiele
 
+### Demo-Katalog-Bundles
+
+Das Repository [`greentic-demo`](https://github.com/greenticai/greentic-demo) veröffentlicht für jede Demo in seinen Release-Artefakten ein `*-create-answers.json` und ein `*-setup-answers.json`. Verwenden Sie diese direkt, um ein lokales Bundle zu erstellen, das Sie anschließend weiter bearbeiten können:
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+```
+
+Fahren Sie dann mit Setup und Start fort:
+
+```bash
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+Ersetzen Sie die Demo-ID durch eine beliebige der veröffentlichten Demos (`quickstart`, `quickstart-event`, `hr-onboarding`, `helpdesk-itsm`, `sales-crm`, `supply-chain`, `incident`, `redbutton`, `cloud-deploy-demo`, `weather-mcp-demo`, ...). Der vollständige Katalog mit Beschreibungen und erforderlichen Zugangsdaten befindet sich auf der Seite [Demos ausführen](/de/getting-started/running-demos/).
+
+<Aside type="tip">
+Der Wizard führt eine **Capability-basierte Abhängigkeitsauflösung** durch. Wenn das Create-Answers-Dokument der Demo auf einen Provider verweist, der `required_capabilities` deklariert (z. B. Messaging-Provider, die `greentic:state/state-store` benötigen), fügt der Wizard automatisch ein passendes Pack wie `state-memory` zum erzeugten Bundle hinzu. Sie müssen es nicht manuell auflisten.
+</Aside>
+
 ### Grundlegende Verwendung
 
 ```bash
-# Interactive mode
+# Interaktiver Modus
 gtc wizard
 
-# With answers file
+# Mit Answers-Datei
 gtc wizard --answers wizard-answers.yaml
 ```
 
-### Vorschau-Modus
+### Vorschaumodus
 
 ```bash
-# See what would be generated
+# Anzeigen, was erzeugt würde
 gtc wizard --answers wizard-answers.yaml --dry-run
 ```
 
-### Entfernte Answer-Datei
+### Entfernte Answers-Datei
 
-Das Flag `--answers` akzeptiert `http://`- und `https://`-URLs. Dadurch ist es unkompliziert,
-gemeinsam genutzte Answer-Dokumente zentral zu speichern und aus CI/CD-Pipelines darauf zu verweisen.
+Das Flag `--answers` akzeptiert `http://`- und `https://`-URLs. Dadurch können gemeinsam genutzte Answer-Dokumente zentral gespeichert und aus CI/CD-Pipelines referenziert werden.
 
 ```bash
-# Fetch answers from a remote URL
+# Answers von einer entfernten URL abrufen
 gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml
 
-# Combine with dry-run to preview before generating
+# Mit dry-run kombinieren, um vor dem Erzeugen eine Vorschau anzuzeigen
 gtc wizard --answers https://config.example.com/teams/support/wizard-answers.yaml --dry-run
 ```
 
 <Aside type="tip">
-Die Unterstützung entfernter URLs ist nützlich in CI/CD-Pipelines, in denen Wizard-Antworten in einem gemeinsamen Repository oder Artifakt-Server gespeichert und zur Build-Zeit abgerufen werden.
+Die Unterstützung entfernter URLs ist in CI/CD-Pipelines nützlich, wenn Wizard-Antworten in einem gemeinsamen Repository oder Artefaktserver gespeichert und zur Build-Zeit abgerufen werden.
 </Aside>
 
 ### Benutzerdefiniertes Ausgabeverzeichnis
@@ -164,10 +206,10 @@ gtc wizard --answers wizard-answers.yaml --output ./my-project
 ### Vorlagen verwenden
 
 ```bash
-# List available templates
+# Verfügbare Vorlagen auflisten
 gtc wizard --list-templates
 
-# Use specific template
+# Bestimmte Vorlage verwenden
 gtc wizard --template customer-service --answers answers.yaml
 ```
 
@@ -175,18 +217,107 @@ gtc wizard --template customer-service --answers answers.yaml
 
 | Template | Beschreibung |
 |----------|-------------|
-| `minimal` | Minimales Bundle mit einem Provider |
+| `minimal` | Schlankes Bundle mit einem Provider |
 | `customer-service` | FAQ-Bot mit Eskalation |
 | `helpdesk` | IT-Support mit Ticket-Integration |
 | `multi-channel` | Mehrere Messaging-Kanäle |
+
+## Bundle-Capabilities
+
+Der Wizard fragt nach optionalen Bundle-Capabilities, die zusätzliche Funktionen aktivieren. Jede Capability schaltet einen bestimmten Satz an Assets und Verhaltensweisen im erzeugten Bundle frei.
+
+### Interaktive Eingaben
+
+Wenn Sie `gtc wizard` interaktiv ausführen, sehen Sie:
+
+```
+? Enable bundle-level assets (./assets/)? [Y/n]
+? Enable OAuth login for WebChat GUI? [y/N]
+? Enable multi-language for WebChat GUI? [y/N]
+? Enable embeddable WebChat widget? [y/N]
+```
+
+### Capability-Referenz
+
+| Prompt | Capability ID | Was sie bewirkt |
+|--------|---------------|-------------|
+| Enable bundle-level assets | `greentic.cap.bundle_assets.read.v1` | Erstellt das Verzeichnis `./assets/` und scaffoldet Standard-Skin-Dateien aus Provider-Packs in Tenant-spezifische Verzeichnisse |
+| Enable OAuth login for WebChat GUI | `greentic.cap.webchat.oauth.v1` | Fügt OAuth/OIDC-Authentifizierungsprovider-Konfiguration zu Tenant-Konfigurationsdateien hinzu |
+| Enable multi-language for WebChat GUI | `greentic.cap.webchat.i18n.v1` | Aktiviert den Locale-Picker in WebChat und scaffoldet Locale-JSON-Dateien unter `./assets/` |
+| Enable embeddable WebChat widget | `greentic.cap.webchat.embed.v1` | Erzeugt Embed-HTML-Snippets (Fullpage-Link, Inline-iframe, Chat Bubble) pro Tenant |
+
+### Capabilities in der Answers-Datei setzen
+
+Anstatt Prompts interaktiv zu beantworten, können Sie Capabilities direkt in der Answers-Datei festlegen, indem Sie ein Array `capabilities` hinzufügen:
+
+<Tabs>
+  <TabItem label="JSON">
+```json title="wizard-answers.json"
+{
+  "project": {
+    "name": "my-digital-worker",
+    "version": "1.0.0"
+  },
+  "providers": {
+    "messaging": ["webchat", "telegram"]
+  },
+  "capabilities": [
+    "greentic.cap.bundle_assets.read.v1",
+    "greentic.cap.webchat.oauth.v1",
+    "greentic.cap.webchat.i18n.v1",
+    "greentic.cap.webchat.embed.v1"
+  ],
+  "tenants": [
+    {
+      "id": "demo",
+      "name": "Demo Tenant",
+      "teams": [{ "id": "default", "channels": ["webchat"] }]
+    }
+  ]
+}
+```
+  </TabItem>
+  <TabItem label="YAML">
+```yaml title="wizard-answers.yaml"
+project:
+  name: my-digital-worker
+  version: "1.0.0"
+
+providers:
+  messaging:
+    - webchat
+    - telegram
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+  - greentic.cap.webchat.oauth.v1
+  - greentic.cap.webchat.i18n.v1
+  - greentic.cap.webchat.embed.v1
+
+tenants:
+  - id: demo
+    name: Demo Tenant
+    teams:
+      - id: default
+        channels:
+          - webchat
+```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Capabilities sind additiv. Das Aktivieren von `greentic.cap.webchat.embed.v1` erfordert implizit `greentic.cap.bundle_assets.read.v1`, weil die Embed-Snippets in das Verzeichnis `./assets/` geschrieben werden. Der Wizard behandelt diese Abhängigkeit automatisch.
+</Aside>
+
+Ausführliche Informationen zu Capabilities, Scaffold-Verhalten und dem Overlay-Mechanismus finden Sie unter [Bundle-Assets](/de/greentic-docs/concepts/bundle-assets/).
 
 ## Workflow
 
 <Steps>
 
-1. **Answer-Datei erstellen**
+1. **Answers-Datei erstellen**
 
-   Definiere deine Projektkonfiguration in JSON oder YAML.
+   Definieren Sie Ihre Projektkonfiguration in JSON oder YAML.
 
 2. **Wizard ausführen**
 
@@ -194,9 +325,9 @@ gtc wizard --template customer-service --answers answers.yaml
    gtc wizard --answers wizard-answers.yaml
    ```
 
-3. **Generierte Dateien prüfen**
+3. **Erzeugte Dateien prüfen**
 
-   Überprüfe die generierte Bundle-Struktur.
+   Kontrollieren Sie die erzeugte Bundle-Struktur.
 
 4. **Provider konfigurieren**
 
@@ -212,9 +343,9 @@ gtc wizard --template customer-service --answers answers.yaml
 
 </Steps>
 
-## Generierte Flows anpassen
+## Erzeugte Flows anpassen
 
-Der Wizard generiert grundlegende Flow-Vorlagen. Passe sie nach der Generierung an:
+Der Wizard erzeugt grundlegende Flow-Vorlagen. Passen Sie sie nach der Generierung an:
 
 ```yaml title="apps/support-bot/flows/on_message.ygtc"
 name: on_message
@@ -241,18 +372,18 @@ triggers:
 ```
 
 <Aside type="tip">
-Verwende zuerst `--dry-run`, um die generierte Struktur in der Vorschau zu prüfen, bevor sie auf die Festplatte geschrieben wird.
+Verwenden Sie zuerst `--dry-run`, um die erzeugte Struktur in der Vorschau zu prüfen, bevor Sie sie auf die Festplatte schreiben.
 </Aside>
 
 ## Fehlerbehebung
 
-### Ungültige Answer-Datei
+### Ungültige Answers-Datei
 
 ```
 Error: Failed to parse answers file
 ```
 
-Stelle sicher, dass dein JSON/YAML gültig ist. Verwende einen Linter, um die Syntax zu prüfen.
+Stellen Sie sicher, dass Ihr JSON/YAML gültig ist. Verwenden Sie einen Linter, um die Syntax zu prüfen.
 
 ### Erforderliche Felder fehlen
 
@@ -260,7 +391,7 @@ Stelle sicher, dass dein JSON/YAML gültig ist. Verwende einen Linter, um die Sy
 Error: Missing required field: project.name
 ```
 
-Prüfe, ob alle erforderlichen Felder in deiner Answer-Datei vorhanden sind.
+Prüfen Sie, dass alle erforderlichen Felder in Ihrer Answers-Datei vorhanden sind.
 
 ### Vorlage nicht gefunden
 
@@ -268,7 +399,7 @@ Prüfe, ob alle erforderlichen Felder in deiner Answer-Datei vorhanden sind.
 Error: Template 'unknown' not found
 ```
 
-Verwende `gtc wizard --list-templates`, um die verfügbaren Vorlagen anzuzeigen.
+Verwenden Sie `gtc wizard --list-templates`, um die verfügbaren Vorlagen anzuzeigen.
 
 ## Nächste Schritte
 

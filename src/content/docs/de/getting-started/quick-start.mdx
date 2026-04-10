@@ -1,69 +1,83 @@
 ---
 title: Schnellstart
-description: Ihren ersten Greentic Digital Worker in wenigen Minuten starten
+description: Ihren ersten Greentic digital worker in wenigen Minuten starten
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Diese Anleitung hilft Ihnen dabei, einen grundlegenden Greentic Digital Worker lokal zu starten.
+Diese Anleitung bringt Sie in wenigen Minuten von null zu einem laufenden Greentic digital worker. Der schnellste Weg ist, eine der veröffentlichten Demos aus dem Katalog [`greentic-demo`](https://github.com/greenticai/greentic-demo) zu starten. Jede Demo verwendet denselben dreistufigen Ablauf.
+
+<Aside type="tip">
+Möchten Sie alle verfügbaren Demos durchsuchen und genau sehen, was jede einzelne tut? Wechseln Sie zu [Demos ausführen](/de/getting-started/running-demos/).
+</Aside>
 
 ## Voraussetzungen
 
-Bevor Sie beginnen, stellen Sie sicher, dass Folgendes vorhanden ist:
+Bevor Sie beginnen, stellen Sie sicher, dass Sie Folgendes haben:
 
-- **Rust** 1.90 oder neuer (`rustup default 1.90`)
-- **Node.js** 18+ (für Frontend-Tools)
-- **Git** zum Klonen von Repositories
+- **`gtc` CLI** installiert — siehe [Installation](/de/getting-started/installation/)
+- **Rust** 1.91 oder neuer (nur erforderlich, wenn Sie aus dem Quellcode bauen)
+- Eine **öffentliche URL** für Webhook-Provider (z. B. `ngrok` oder `cloudflared`) — für den Quickstart nur mit WebChat nicht erforderlich
 
-## Installation
+## Die quickstart-Demo starten
+
+Die Demo `quickstart` ist das kleinste End-to-End-Bundle: eine Begrüßungskarte, eine Info-Karte und eine Echo-Interaktion über WebChat. Sie benötigt keine externen Konten.
 
 <Steps>
 
-1. **Die GTC CLI installieren**
+1. **Erstellen Sie das Bundle** aus dem veröffentlichten Create-Answers-Dokument:
 
    ```bash
-   cargo install greentic-cli
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
    ```
 
-   Oder aus dem Quellcode bauen:
+   Der Wizard lädt das Demo-Pack herunter, löst Capability-Abhängigkeiten auf (z. B. zieht er `state-memory` automatisch hinzu, weil der WebChat-Provider `greentic:state/state-store` benötigt), und schreibt ein lokales Bundle-Verzeichnis.
+
+2. **Konfigurieren Sie Provider** mit dem veröffentlichten Setup-Answers-Dokument:
 
    ```bash
-   git clone https://github.com/greenticai/greentic.git
-   cd greentic/greentic
-   cargo build --release
+   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
    ```
 
-2. **Ein neues Bundle erstellen**
+   Das Setup erkennt den Tenant des Bundles automatisch, speichert Secrets pro Provider und validiert, dass jede erforderliche Capability erfüllt ist.
 
-   Verwenden Sie den Assistenten, um ein neues Bundle mit Ihrer gewünschten Konfiguration zu erstellen:
+3. **Starten Sie die Runtime**:
 
    ```bash
-   gtc wizard --answers wizard-answers.yaml
+   gtc start ./quickstart-demo-bundle
    ```
 
-   Oder interaktiv ausführen:
+   Der Runner gibt die öffentliche WebChat-URL aus. Öffnen Sie sie in einem Browser, und Sie sollten die Begrüßungskarte sehen.
+
+</Steps>
+
+<Aside type="note">
+Derselbe dreistufige Ablauf funktioniert für jede Demo im Katalog. Wenn Sie eine andere ausprobieren möchten, ersetzen Sie einfach die Demo-ID, zum Beispiel durch `helpdesk-itsm`, `hr-onboarding` oder `weather-mcp-demo`. Die vollständige Liste finden Sie unter [Demos ausführen](/de/getting-started/running-demos/).
+</Aside>
+
+## Ihr eigenes Bundle erstellen
+
+Wenn Sie bereit sind, über den veröffentlichten Katalog hinauszugehen, gelten dieselben drei Befehle. Sie verwenden dann einfach Ihre eigenen Dateien statt Release-URLs:
+
+<Steps>
+
+1. **Erstellen Sie ein Bundle** mit dem Wizard. Sie können ihn interaktiv oder mit einem lokalen Answer-Dokument ausführen:
 
    ```bash
    gtc wizard
+   # or
+   gtc wizard --answers ./my-create-answers.json
    ```
 
-3. **Provider konfigurieren**
-
-   Richten Sie Ihre Messaging-Provider ein (z. B. Telegram, Slack):
+2. **Konfigurieren Sie Provider**, wieder entweder interaktiv oder nicht interaktiv:
 
    ```bash
    gtc setup ./my-bundle
+   # or
+   gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-   Für ein nicht-interaktives Setup verwenden Sie eine Antwortdatei:
-
-   ```bash
-   gtc setup --answers answers.json ./my-bundle
-   ```
-
-4. **Die Runtime starten**
-
-   Starten Sie Ihren digitalen Worker:
+3. **Starten Sie die Runtime**:
 
    ```bash
    gtc start ./my-bundle
@@ -71,7 +85,9 @@ Bevor Sie beginnen, stellen Sie sicher, dass Folgendes vorhanden ist:
 
 </Steps>
 
-## Beispiel: Hello-World-Flow
+Unter [gtc wizard](/de/cli/wizard/) und [gtc setup](/de/cli/setup/) finden Sie die vollständige Referenz, einschließlich Capability-Flags und Schemas für Answer-Dokumente.
+
+## Beispiel: Hello World Flow
 
 Erstellen Sie einen einfachen Flow, der auf Nachrichten antwortet:
 
@@ -98,7 +114,7 @@ Ein typisches Greentic-Bundle sieht so aus:
 
 ```
 my-bundle/
-├── greentic.demo.yaml      # Main configuration
+├── greentic.demo.yaml      # Hauptkonfiguration
 ├── providers/
 │   └── messaging/
 │       └── messaging-telegram.gtpack
@@ -106,7 +122,7 @@ my-bundle/
 │   └── my-app/
 │       └── flows/
 │           └── on_message.ygtc
-└── seeds.yaml              # Seed data (optional)
+└── seeds.yaml              # Seed-Daten (optional)
 ```
 
 ## Konfigurationsdatei
@@ -139,9 +155,9 @@ tenants:
 
 ## Nächste Schritte
 
-Nachdem Ihr grundlegendes Setup läuft:
+Nachdem Sie nun ein grundlegendes Setup am Laufen haben:
 
-- [Flows kennenlernen](/de/concepts/flows/) - Flow-Definitionen verstehen
+- [Flows verstehen](/de/concepts/flows/) - Flow-Definitionen verstehen
 - [Telegram konfigurieren](/de/providers/messaging/telegram/) - Telegram-Bot einrichten
 - [Slack konfigurieren](/de/providers/messaging/slack/) - Mit einem Slack-Workspace verbinden
-- [Benutzerdefinierte Komponenten bauen](/de/concepts/components/) - Eigene WASM-Komponenten erstellen
+- [Benutzerdefinierte Komponenten erstellen](/de/concepts/components/) - Eigene WASM-Komponenten erstellen

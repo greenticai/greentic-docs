@@ -1,0 +1,313 @@
+---
+title: Menjalankan Demo
+description: Coba Greentic secara end-to-end dengan katalog demo yang dipublikasikan. Setiap demo mengikuti alur tiga langkah yang sama.
+---
+
+import { Aside, Card, CardGrid, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Repositori [`greentic-demo`](https://github.com/greenticai/greentic-demo) menyediakan katalog demo siap jalan. Masing-masing adalah bundle lengkap (provider messaging, flow, adaptive card, alat MCP) yang dipaketkan sebagai `.gtpack` dan diorkestrasi oleh dua dokumen jawaban yang dipublikasikan: satu untuk create wizard, satu untuk setup.
+
+Anda tidak perlu melakukan scaffold apa pun secara manual. Setiap demo dijalankan dengan tiga perintah yang sama.
+
+## Alur Tiga Langkah
+
+<Steps>
+
+1. **Buat bundle** dengan dokumen create-answers yang dipublikasikan:
+
+   ```bash
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/<demo>-create-answers.json
+   ```
+
+   Ini akan mengunduh pack apa pun yang direferensikan dalam dokumen jawaban, menyelesaikan dependensi capability (misalnya `state-memory` ditarik otomatis ketika provider messaging mendeklarasikan bahwa ia membutuhkan `greentic:state/state-store`), lalu menulis direktori bundle lokal.
+
+2. **Konfigurasikan provider** dengan dokumen setup-answers yang dipublikasikan:
+
+   ```bash
+   gtc setup ./<demo>-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/<demo>-setup-answers.json
+   ```
+
+   Setup mendeteksi tenant sebenarnya dari direktori `tenants/` bundle, menyimpan secret per provider, dan memperingatkan Anda jika masih ada capability yang dibutuhkan namun belum terpenuhi.
+
+3. **Mulai runtime**:
+
+   ```bash
+   gtc start ./<demo>-bundle
+   ```
+
+   Saat startup, `gtc start` memvalidasi ulang dependensi pack, mendaftarkan webhook melalui op WASM `setup_webhook` milik setiap provider (mendaftar ulang secara otomatis jika URL tunnel Anda berubah), dan mencetak path ingress publik (misalnya `https://<tunnel>/v1/web/webchat/demo/`).
+
+</Steps>
+
+<Aside type="tip">
+Ganti `<demo>` dengan salah satu ID demo di katalog di bawah. Direktori bundle yang dibuat pada langkah 1 dinamai berdasarkan demo tersebut (misalnya `quickstart-demo-bundle`).
+</Aside>
+
+## Prasyarat
+
+Sebelum menjalankan demo apa pun, pastikan Anda memiliki:
+
+- **`gtc` CLI** — lihat [Instalasi](/id/getting-started/installation/)
+- **URL publik** untuk provider webhook — `ngrok` atau `cloudflared` (lihat [Konfigurasi URL Publik](/id/cli/setup/#konfigurasi-url-publik))
+- **Kredensial provider** untuk integrasi messaging atau MCP pihak ketiga yang digunakan demo tersebut (token Slack, token bot Telegram, OAuth Atlassian, dll.) — dokumen setup-answers memberi tahu Anda secret apa saja yang diperlukan
+
+Sebagian besar demo dapat berjalan hanya dengan **WebChat GUI** plus `state-memory`, yang tidak memerlukan akun eksternal.
+
+## Katalog Demo
+
+Setiap release `greentic-demo` menerbitkan `.gtpack`, `*-create-answers.json`, dan `*-setup-answers.json` ke [latest release](https://github.com/greenticai/greentic-demo/releases/latest). Ganti ID demo ke dalam tiga perintah yang ditunjukkan di atas.
+
+### quickstart
+
+Pengalaman Greentic paling minimal. Kartu sambutan, kartu tentang, dan interaksi echo dasar, berguna sebagai smoke test bahwa toolchain, tunnel, dan front-end WebChat Anda bekerja end-to-end.
+
+- **Channel:** WebChat GUI
+- **Layanan eksternal:** tidak ada
+- **ID demo:** `quickstart`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc start ./quickstart-demo-bundle
+```
+
+### quickstart-event
+
+Menguji setiap provider event dalam satu bundle: webhook, cron timer, transactional email melalui SendGrid, dan SMS melalui Twilio.
+
+- **Channel:** WebChat GUI
+- **Layanan eksternal:** SendGrid (opsional), Twilio (opsional), incoming webhook
+- **ID demo:** `quickstart-event`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
+gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
+gtc start ./quickstart-event-demo-bundle --ngrok on
+```
+
+### hr-onboarding
+
+Wizard onboarding karyawan interaktif dengan pelacakan tugas, pengumpulan dokumen, dan provisioning akses. Menyimpan state sesi di beberapa langkah.
+
+- **Channel:** WebChat GUI (wajib), Slack (opsional)
+- **Layanan eksternal:** tidak ada yang wajib (state disimpan in-memory)
+- **ID demo:** `hr-onboarding`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/hr-onboarding-create-answers.json
+gtc setup ./hr-onboarding-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/hr-onboarding-setup-answers.json
+gtc start ./hr-onboarding-demo-bundle
+```
+
+### helpdesk-itsm
+
+Asisten helpdesk TI yang terintegrasi dengan Jira melalui OAuth Atlassian dan alat MCP: membuat tiket, memeriksa status, mencari knowledge base, melakukan eskalasi.
+
+- **Channel:** WebChat GUI
+- **Layanan eksternal:** Atlassian / Jira (kredensial OAuth ada di setup-answers)
+- **ID demo:** `helpdesk-itsm`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/helpdesk-itsm-create-answers.json
+gtc setup ./helpdesk-itsm-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/helpdesk-itsm-setup-answers.json
+gtc start ./helpdesk-itsm-demo-bundle
+```
+
+### sales-crm
+
+Asisten penjualan yang terhubung ke Salesforce melalui OAuth dan MCP: kualifikasi lead, visualisasi pipeline, pelacakan deal, penjadwalan meeting.
+
+- **Channel:** WebChat GUI
+- **Layanan eksternal:** Salesforce (kredensial OAuth ada di setup-answers)
+- **ID demo:** `sales-crm`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/sales-crm-create-answers.json
+gtc setup ./sales-crm-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/sales-crm-setup-answers.json
+gtc start ./sales-crm-demo-bundle
+```
+
+### supply-chain
+
+Asisten inventaris dan supply-chain: pengecekan stok, pelacakan pesanan, peringatan stok rendah, alur persetujuan pemesanan ulang, direktori supplier.
+
+- **Channel:** WebChat GUI (wajib), Slack (opsional)
+- **Layanan eksternal:** tidak ada yang wajib
+- **ID demo:** `supply-chain`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
+gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
+gtc start ./supply-chain-demo-bundle
+```
+
+### incident
+
+Flow pembuatan incident berbasis adaptive card yang menargetkan WebChat dan Webex, lalu membuka incident di Better Stack.
+
+- **Channel:** WebChat GUI, Webex
+- **Layanan eksternal:** Better Stack (`betterstack_token` di setup-answers)
+- **ID demo:** `incident`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
+gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
+gtc start ./incident-demo-bundle
+```
+
+### redbutton
+
+Skenario event tombol darurat: ingress webhook memicu flow yang memilih cabang acak, secara opsional memanggil endpoint HTTP, memutar audio lokal, dan membuat incident Better Stack.
+
+- **Channel:** event-driven (tidak memerlukan antarmuka chat)
+- **Layanan eksternal:** Better Stack
+- **ID demo:** `redbutton`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/redbutton-create-answers.json
+gtc setup ./redbutton-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/redbutton-setup-answers.json
+gtc start ./redbutton-demo-bundle --ngrok on
+```
+
+Picu flow tersebut dengan:
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/events/ingress/webhook/demo/default \
+  -H 'content-type: application/json' \
+  -d '{"source":"red-button","pressed":true}'
+```
+
+### cloud-deploy-demo
+
+Komposisi bundle yang lebih kaya yang menguji provider deploy Terraform bersama messaging, event, dan state, berguna saat memvalidasi integrasi deployment cloud.
+
+- **Channel:** WebChat GUI
+- **Layanan eksternal:** provider cloud yang kompatibel dengan Terraform (dikonfigurasi di setup-answers)
+- **ID demo:** `cloud-deploy-demo`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-create-answers.json
+gtc setup ./cloud-deploy-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
+gtc start ./cloud-deploy-demo-bundle
+```
+
+### weather-mcp-demo
+
+Asisten cuaca yang mengambil kondisi saat ini dan prakiraan melalui WeatherAPI lewat alat MCP, lalu merender hasilnya sebagai adaptive card.
+
+- **Channel:** WebChat GUI
+- **Layanan eksternal:** API key [weatherapi.com](https://www.weatherapi.com/)
+- **ID demo:** `weather-mcp-demo`
+
+```bash
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/weather-mcp-demo-create-answers.json
+gtc setup ./weather-mcp-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/weather-mcp-demo-setup-answers.json
+gtc start ./weather-mcp-demo-bundle
+```
+
+## Apa yang Terjadi di Balik Layar
+
+Ketiga perintah ini terlihat sederhana, tetapi masing-masing menjalankan bagian platform yang tidak sepele.
+
+### `gtc wizard --answers ...`
+
+- Menyelesaikan app pack demo (`*.gtpack`), baik diunduh dari GitHub Releases maupun di-pull dari OCI sesuai deklarasi di dokumen jawaban.
+- Mewujudkan workspace bundle (`bundle.yaml`, `packs/`, `tenants/`).
+- **Menjalankan resolusi dependensi berbasis capability.** Provider pack mendeklarasikan `required_capabilities`; wizard secara otomatis menambahkan `state-memory`, `state-redis`, pack OAuth, dan sebagainya yang sesuai, sehingga Anda tidak perlu mengingat dependensi setiap provider.
+- Menghormati flag capability seperti `greentic.cap.bundle_assets.read.v1`, `greentic.cap.webchat.oauth.v1`, `greentic.cap.webchat.i18n.v1`, dan `greentic.cap.webchat.embed.v1`. Flag ini menentukan apakah wizard melakukan scaffold aset level bundle, konfigurasi provider OAuth, file locale, dan embed snippet.
+
+### `gtc setup ./<demo>-bundle --answers ...`
+
+- Mendeteksi tenant sebenarnya secara otomatis dari `bundle/tenants/` (sehingga secret ditulis di bawah URI tenant yang benar).
+- Memvalidasi capability dependensi di seluruh pack dalam bundle dan memperingatkan jika ada yang hilang.
+- Menyimpan setiap nilai dari dokumen jawaban ke secrets store di bawah `secrets://{env}/{tenant}/{team}/{provider}/{key}`, sehingga provider dapat membaca kredensial saat runtime tanpa Anda perlu mengetiknya lagi.
+
+### `gtc start ./<demo>-bundle`
+
+- Memuat bundle, me-mount setiap pack, dan menjalankan adapter ingress HTTP.
+- Memeriksa ulang dependensi pack melalui indeks capability lalu mencetak capability yang terpenuhi maupun yang hilang.
+- Memanggil op WASM `setup_webhook` milik setiap provider ketika URL tunnel publik berubah. Pendaftaran ulang webhook kini berjalan otomatis.
+- Mencetak path route publik (misalnya URL WebChat) sehingga Anda dapat langsung membukanya di browser.
+
+## Operasi Umum
+
+### Gunakan tunnel yang berbeda
+
+Sebagian besar demo yang terikat webhook bekerja dengan tunnel apa pun. Pilih salah satu:
+
+<Tabs>
+<TabItem label="ngrok">
+
+```bash
+gtc start ./<demo>-bundle --ngrok on
+```
+
+</TabItem>
+<TabItem label="Cloudflared">
+
+```bash
+gtc start ./<demo>-bundle --cloudflared on
+```
+
+</TabItem>
+<TabItem label="No tunnel">
+
+```bash
+gtc start ./<demo>-bundle --ngrok off --cloudflared off
+```
+
+Gunakan ini ketika Anda hanya membutuhkan WebChat di `localhost`.
+
+</TabItem>
+</Tabs>
+
+### Jalankan ulang setup setelah merotasi secret
+
+```bash
+gtc setup ./<demo>-bundle --answers <updated-setup-answers.json>
+```
+
+`gtc setup` bersifat idempoten. Perintah ini menimpa secret di tempat dan menjalankan ulang flow setup per provider.
+
+### Inspeksi bundle sebelum menjalankan
+
+```bash
+gtc wizard --answers <create-answers.json> --dry-run
+gtc setup ./<demo>-bundle --dry-run
+```
+
+Kedua perintah mendukung `--dry-run` untuk meninjau output tanpa menyentuh filesystem atau secrets store.
+
+### Hentikan demo yang sedang berjalan
+
+```bash
+gtc stop ./<demo>-bundle
+```
+
+Ini mematikan runner dan proses tambahan apa pun (NATS, tunnel) yang dijalankan oleh `gtc start`.
+
+## Pemecahan Masalah
+
+### Wizard mengatakan ada capability yang tidak terpenuhi
+
+Perbarui dokumen create-answers agar menyertakan pack yang menyediakan capability yang hilang. Untuk `greentic:state/state-store`, baik `state-memory` (tanpa setup) maupun `state-redis` (memerlukan instance Redis) bisa digunakan. Sebagian besar demo sudah mendeklarasikan dependensi ini, jadi wizard akan menariknya secara otomatis.
+
+### WebChat terbuka tetapi kartu kosong
+
+Pastikan tenant bundle cocok dengan tenant dalam URL WebChat. `gtc setup` sekarang mendeteksi tenant bundle secara otomatis, jadi jika Anda menjalankan setup sebelum perbaikan ini tersedia, jalankan ulang setelah `gtc wizard` untuk menyegarkan layout bundle.
+
+### `setup_webhook` terus gagal saat startup
+
+Periksa bahwa secret yang dibutuhkan provider Anda ada di file answers (misalnya `bot_token`, `slack_configuration_token`, `ms_bot_app_password`). Jalankan ulang `gtc setup` dengan dokumen yang diperbarui lalu restart `gtc start`.
+
+### URL ingress terus berubah
+
+Secara default `ngrok` mengeluarkan URL baru setiap kali restart. Webhook updater mendeteksi perubahan itu saat startup dan memanggil op `setup_webhook` milik setiap provider agar URL baru didaftarkan ke upstream, tetapi untuk demo yang berjalan lama Anda mungkin ingin upgrade ke domain yang direservasi.
+
+## Langkah Berikutnya
+
+- [gtc wizard](/id/cli/wizard/) — referensi lengkap untuk dokumen create-answers dan flag capability
+- [gtc setup](/id/cli/setup/) — konfigurasi provider, kredensial, dan penggunaan dry-run
+- [gtc start](/id/cli/start/) — opsi runtime, tunnel, dan observability
+- [Bundle Assets](/id/concepts/bundle-assets/) — cara kerja overlay aset yang digunakan oleh skin WebChat
+- [Multi-Tenancy](/id/concepts/multi-tenancy/) — bagaimana isolasi tenant berinteraksi dengan secret dan ingress

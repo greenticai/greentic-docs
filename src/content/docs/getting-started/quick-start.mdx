@@ -3,73 +3,89 @@ title: Quick Start
 description: Get your first Greentic digital worker running in minutes
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-This guide will help you get a basic Greentic digital worker running locally.
+This guide gets you from zero to a running Greentic digital worker in a few minutes. The fastest path is to launch one of the published demos from the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog — every demo uses the same three-step flow.
+
+<Aside type="tip">
+Want to browse all available demos and see exactly what each one does? Jump to [Running Demos](/getting-started/running-demos/).
+</Aside>
 
 ## Prerequisites
 
 Before you begin, ensure you have:
 
-- **Rust** 1.90 or later (`rustup default 1.90`)
-- **Node.js** 18+ (for frontend tools)
-- **Git** for cloning repositories
+- **`gtc` CLI** installed — see [Installation](/getting-started/installation/)
+- **Rust** 1.91 or later (only needed if you build from source)
+- A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only quickstart
 
-## Installation
+## Launch the quickstart demo
+
+The `quickstart` demo is the smallest end-to-end bundle: a welcome card, an about card, and an echo interaction over WebChat. It needs no external accounts.
 
 <Steps>
 
-1. **Install the GTC CLI**
+1. **Create the bundle** from the published create-answers document:
 
    ```bash
-   cargo install greentic-cli
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
    ```
 
-   Or build from source:
+   The wizard downloads the demo pack, resolves capability dependencies (e.g. it pulls in `state-memory` automatically because the WebChat provider needs `greentic:state/state-store`), and writes a local bundle directory.
+
+2. **Configure providers** with the published setup-answers document:
 
    ```bash
-   git clone https://github.com/greenticai/greentic.git
-   cd greentic/greentic
-   cargo build --release
+   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
    ```
 
-2. **Create a new bundle**
+   Setup auto-detects the bundle's tenant, persists secrets per provider, and validates that every required capability is satisfied.
 
-   Use the wizard to create a new bundle with your desired configuration:
+3. **Start the runtime**:
 
    ```bash
-   gtc wizard --answers wizard-answers.yaml
+   gtc start ./quickstart-demo-bundle
    ```
 
-   Or run interactively:
+   The runner prints the public WebChat URL — open it in a browser and you should see the welcome card.
+
+</Steps>
+
+<Aside type="note">
+The same three-step flow works for every demo in the catalog. To try a different one, just substitute the demo ID — for example `helpdesk-itsm`, `hr-onboarding`, or `weather-mcp-demo`. See [Running Demos](/getting-started/running-demos/) for the complete list.
+</Aside>
+
+## Building your own bundle
+
+When you are ready to move beyond the published catalog, the same three commands apply — they just consume your own files instead of release URLs:
+
+<Steps>
+
+1. **Create a bundle** with the wizard. You can run it interactively or with a local answers document:
 
    ```bash
    gtc wizard
+   # or
+   gtc wizard --answers ./my-create-answers.json
    ```
 
-3. **Configure providers**
-
-   Set up your messaging providers (e.g., Telegram, Slack):
+2. **Configure providers**, again either interactively or non-interactively:
 
    ```bash
    gtc setup ./my-bundle
+   # or
+   gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-   For non-interactive setup, use an answers file:
-
-   ```bash
-   gtc setup --answers answers.json ./my-bundle
-   ```
-
-4. **Start the runtime**
-
-   Launch your digital worker:
+3. **Start the runtime**:
 
    ```bash
    gtc start ./my-bundle
    ```
 
 </Steps>
+
+See [gtc wizard](/cli/wizard/) and [gtc setup](/cli/setup/) for the full reference, including capability flags and answers-document schemas.
 
 ## Example: Hello World Flow
 

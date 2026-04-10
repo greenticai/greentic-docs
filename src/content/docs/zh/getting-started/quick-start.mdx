@@ -1,69 +1,83 @@
 ---
 title: 快速开始
-description: 在几分钟内运行你的第一个 Greentic 数字员工
+description: 几分钟内运行你的第一个 Greentic digital worker
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-本指南将帮助你在本地运行一个基础的 Greentic 数字员工。
+本指南将帮助你在几分钟内从零开始运行一个 Greentic digital worker。最快的方式是启动 [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog 中已发布的一个 demo，每个 demo 都遵循相同的三步流程。
 
-## 前置条件
+<Aside type="tip">
+想浏览所有可用 demo，并准确了解每个 demo 的功能？请跳转到[运行 Demo](/zh/getting-started/running-demos/)。
+</Aside>
 
-开始之前，请确保你已经具备：
+## 先决条件
 
-- **Rust** 1.90 或更高版本（`rustup default 1.90`）
-- **Node.js** 18+（用于前端工具）
-- **Git**（用于克隆仓库）
+开始之前，请确保你已具备：
 
-## 安装
+- 已安装 **`gtc` CLI**，参见[安装](/zh/getting-started/installation/)
+- **Rust** 1.91 或更高版本（仅在从源码构建时需要）
+- 用于 webhook providers 的**公开 URL**（例如 `ngrok` 或 `cloudflared`）；如果只是 WebChat quickstart，则不需要
+
+## 启动 quickstart demo
+
+`quickstart` demo 是最小的端到端 bundle：包含 welcome card、about card，以及通过 WebChat 进行的 echo 交互。它不需要任何外部账户。
 
 <Steps>
 
-1. **安装 GTC CLI**
+1. **创建 bundle**，使用已发布的 create-answers 文档：
 
    ```bash
-   cargo install greentic-cli
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
    ```
 
-   或从源码构建：
+   wizard 会下载 demo pack、解析 capability 依赖（例如由于 WebChat provider 需要 `greentic:state/state-store`，它会自动拉取 `state-memory`），并写出本地 bundle 目录。
+
+2. **配置 providers**，使用已发布的 setup-answers 文档：
 
    ```bash
-   git clone https://github.com/greenticai/greentic.git
-   cd greentic/greentic
-   cargo build --release
+   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
    ```
 
-2. **创建新的 bundle**
+   setup 会自动检测 bundle 的 tenant，按 provider 持久化 secrets，并验证所有必需 capability 都已满足。
 
-   使用 wizard 根据你的目标配置创建新的 bundle：
+3. **启动 runtime**：
 
    ```bash
-   gtc wizard --answers wizard-answers.yaml
+   gtc start ./quickstart-demo-bundle
    ```
 
-   或以交互方式运行：
+   runner 会打印公开的 WebChat URL，在浏览器中打开它后，你应该能看到 welcome card。
+
+</Steps>
+
+<Aside type="note">
+catalog 中的每个 demo 都适用同样的三步流程。若要尝试其他 demo，只需替换 demo ID，例如 `helpdesk-itsm`、`hr-onboarding` 或 `weather-mcp-demo`。完整列表请参见[运行 Demo](/zh/getting-started/running-demos/)。
+</Aside>
+
+## 构建你自己的 bundle
+
+当你准备跳出已发布 catalog 时，仍然使用同样的三个命令，只是它们会读取你自己的文件，而不是 release URL：
+
+<Steps>
+
+1. **创建一个 bundle**，使用 wizard。你可以交互式运行，也可以使用本地 answers 文档：
 
    ```bash
    gtc wizard
+   # or
+   gtc wizard --answers ./my-create-answers.json
    ```
 
-3. **配置 providers**
-
-   设置你的消息 providers（例如 Telegram、Slack）：
+2. **配置 providers**，同样可以选择交互式或非交互式：
 
    ```bash
    gtc setup ./my-bundle
+   # or
+   gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-   若需非交互式配置，可使用 answers 文件：
-
-   ```bash
-   gtc setup --answers answers.json ./my-bundle
-   ```
-
-4. **启动运行时**
-
-   启动你的数字员工：
+3. **启动 runtime**：
 
    ```bash
    gtc start ./my-bundle
@@ -71,9 +85,11 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 </Steps>
 
+完整参考请参见 [gtc wizard](/zh/cli/wizard/) 和 [gtc setup](/zh/cli/setup/)，其中包括 capability flags 和 answers 文档 schema。
+
 ## 示例：Hello World Flow
 
-创建一个简单 flow 来响应消息：
+创建一个简单的 flow，用于响应消息：
 
 ```yaml title="flows/hello.ygtc"
 name: hello_world
@@ -111,7 +127,7 @@ my-bundle/
 
 ## 配置文件
 
-主配置文件（`greentic.demo.yaml`）定义了你的整体设置：
+主配置文件（`greentic.demo.yaml`）定义了你的 setup：
 
 ```yaml title="greentic.demo.yaml"
 name: my-digital-worker
@@ -139,9 +155,9 @@ tenants:
 
 ## 下一步
 
-现在你已经完成了基础环境搭建，可以继续：
+现在你已经运行起了一个基础 setup，可以继续：
 
-- [Learn about Flows](/zh/concepts/flows/) - 理解 flow 定义
-- [Configure Telegram](/zh/providers/messaging/telegram/) - 设置 Telegram bot
-- [Configure Slack](/zh/providers/messaging/slack/) - 连接到 Slack workspace
-- [Build custom components](/zh/concepts/components/) - 创建你自己的 WASM components
+- [了解 Flows](/zh/concepts/flows/) - 理解 flow 定义
+- [配置 Telegram](/zh/providers/messaging/telegram/) - 设置 Telegram bot
+- [配置 Slack](/zh/providers/messaging/slack/) - 连接到 Slack workspace
+- [构建自定义组件](/zh/concepts/components/) - 创建你自己的 WASM 组件
