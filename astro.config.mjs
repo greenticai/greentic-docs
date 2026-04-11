@@ -9,6 +9,12 @@ export default defineConfig({
 		starlight({
 			title: 'Greentic Docs',
 			description: 'Documentation for the Greentic Platform - WASM-component-based, multi-tenant platform for AI-driven digital workers',
+			logo: {
+				src: './src/assets/greentic-logo.png',
+				alt: 'greentic.ai',
+				replacesTitle: false,
+			},
+			favicon: '/favicon.ico',
 			defaultLocale: 'root',
 			locales: {
 				root: {
@@ -43,6 +49,29 @@ export default defineConfig({
 					attrs: {
 						property: 'og:title',
 						content: 'Greentic Documentation',
+					},
+				},
+				// Poppins font — matches the greentic.ai landing page typography.
+				{
+					tag: 'link',
+					attrs: {
+						rel: 'preconnect',
+						href: 'https://fonts.googleapis.com',
+					},
+				},
+				{
+					tag: 'link',
+					attrs: {
+						rel: 'preconnect',
+						href: 'https://fonts.gstatic.com',
+						crossorigin: '',
+					},
+				},
+				{
+					tag: 'link',
+					attrs: {
+						rel: 'stylesheet',
+						href: 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap',
 					},
 				},
 			],
