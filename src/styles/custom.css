@@ -1,8 +1,24 @@
-/* Greentic Custom Styles */
+/* ============================================================
+   Greentic Custom Styles — brand-matched to https://greentic.ai
+   ============================================================
+
+   Palette sourced directly from the :root tokens on the
+   greentic.ai landing page CSS:
+
+     --primary       : hsl(166 70% 45%)   #22C39E
+     --primary-glow  : hsl(166 80% 60%)   #3BE0B8
+     --accent-cyan   : hsl(186 70% 50%)   #26C7D9
+     --primary-dark  : hsl(166 70% 35%)   #1BA886
+
+   Typography is Poppins (loaded from Google Fonts via the
+   <link> tags injected in astro.config.mjs `head` array).
+   ============================================================ */
+
 :root {
-	--sl-color-accent-low: #134d3e;
-	--sl-color-accent: #25c39e;
-	--sl-color-accent-high: #5dd4b8;
+	/* Starlight accent tokens, tuned to match greentic.ai exactly */
+	--sl-color-accent-low: #0f3c31;
+	--sl-color-accent: #22c39e;
+	--sl-color-accent-high: #3be0b8;
 	--sl-color-white: #ffffff;
 	--sl-color-gray-1: #eceef2;
 	--sl-color-gray-2: #c0c2c7;
@@ -12,15 +28,39 @@
 	--sl-color-gray-6: #24272f;
 	--sl-color-black: #17181c;
 
+	/* Greentic brand extension tokens */
+	--greentic-primary: #22c39e;
+	--greentic-primary-dark: #1ba886;
+	--greentic-primary-glow: #3be0b8;
+	--greentic-accent-cyan: #26c7d9;
+	--greentic-gradient: linear-gradient(135deg, #22c39e, #26c7d9);
+	--greentic-shadow-glow: 0 0 40px rgba(34, 195, 158, 0.2);
+	--greentic-shadow-soft: 0 4px 20px rgba(15, 42, 35, 0.2);
+
+	/* Typography — Poppins from Google Fonts, with system fallbacks */
+	--sl-font: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+		Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--sl-font-system: var(--sl-font);
+	--sl-font-system-mono: ui-monospace, 'SF Mono', 'JetBrains Mono',
+		Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
 	/* Custom spacing */
 	--sl-content-width: 50rem;
 	--sl-sidebar-width: 18rem;
 }
 
 :root[data-theme='light'] {
-	--sl-color-accent-low: #d4f5ec;
-	--sl-color-accent: #25c39e;
-	--sl-color-accent-high: #1a8a70;
+	--sl-color-accent-low: #daf6ee;
+	--sl-color-accent: #1ba886;
+	--sl-color-accent-high: #0f6e58;
+	--greentic-shadow-soft: 0 4px 20px rgba(15, 42, 35, 0.08);
+}
+
+/* Force Poppins across the body so Starlight's default UI chrome
+   also inherits the brand typography. */
+html,
+body {
+	font-family: var(--sl-font);
 }
 
 /* ========================================
@@ -32,20 +72,23 @@
 	line-height: 1.75;
 }
 
-/* Headings */
+/* Headings — Poppins, with a teal→cyan gradient underline on h1 */
 .sl-markdown-content h1 {
+	font-family: var(--sl-font);
 	font-size: 2.25rem;
-	font-weight: 700;
+	font-weight: 800;
 	margin-top: 0;
 	margin-bottom: 1.5rem;
 	letter-spacing: -0.025em;
-	border-bottom: 2px solid var(--sl-color-accent);
 	padding-bottom: 0.5rem;
+	border-bottom: 2px solid transparent;
+	border-image: var(--greentic-gradient) 1;
 }
 
 .sl-markdown-content h2 {
+	font-family: var(--sl-font);
 	font-size: 1.75rem;
-	font-weight: 600;
+	font-weight: 700;
 	margin-top: 2.5rem;
 	margin-bottom: 1rem;
 	letter-spacing: -0.02em;
@@ -60,14 +103,16 @@
 }
 
 .sl-markdown-content h3 {
+	font-family: var(--sl-font);
 	font-size: 1.35rem;
-	font-weight: 600;
+	font-weight: 700;
 	margin-top: 2rem;
 	margin-bottom: 0.75rem;
 	color: var(--sl-color-accent-high);
 }
 
 .sl-markdown-content h4 {
+	font-family: var(--sl-font);
 	font-size: 1.15rem;
 	font-weight: 600;
 	margin-top: 1.5rem;
@@ -397,7 +442,7 @@
 .card:hover {
 	border-color: var(--sl-color-accent);
 	transform: translateY(-2px);
-	box-shadow: 0 4px 12px rgba(37, 195, 158, 0.15);
+	box-shadow: 0 4px 12px rgba(34, 195, 158, 0.18);
 }
 
 .card .title {
@@ -508,14 +553,16 @@ starlight-toc a[aria-current='true'] {
 }
 
 .hero .action.primary {
-	background: var(--sl-color-accent);
-	color: var(--sl-color-black);
+	background: var(--greentic-gradient);
+	color: var(--sl-color-white);
+	border: none;
+	box-shadow: var(--greentic-shadow-glow);
 }
 
 .hero .action.primary:hover {
-	background: var(--sl-color-accent-high);
+	background: linear-gradient(135deg, var(--greentic-primary-dark), var(--greentic-primary));
 	transform: translateY(-2px);
-	box-shadow: 0 4px 12px rgba(37, 195, 158, 0.3);
+	box-shadow: 0 6px 24px rgba(34, 195, 158, 0.35);
 }
 
 /* ========================================
