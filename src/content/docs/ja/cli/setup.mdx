@@ -1,80 +1,143 @@
 ---
 title: gtc setup
-description: Greentic bundle 内の provider を設定する
+description: Web ダッシュボードまたはヘッドレス端末で Greentic bundle の provider を設定する
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## 概要
 
-`gtc setup` コマンドは Greentic bundle 内の provider を設定します。有効になっている各 provider の setup flow を実行し、認証情報を収集して webhook を設定します。
+**Greentic Setup** は Greentic bundle の設定エンジンです。`gtc setup <bundle>` を実行すると、ブラウザにインタラクティブな Web ダッシュボードが開き、provider の認証情報の設定、現在のスコープの確認、各 provider の設定ウィザードの実行を、セキュアなローカルホスト型シングルページアプリケーションから行えます。
 
-## 使い方
+CI または SSH 環境では、`gtc setup --no-ui <bundle>` を使用すると端末のダイアローガーフローにフォールバックします。
 
-```bash
-gtc setup [OPTIONS] <BUNDLE_PATH>
-```
-
-## オプション
-
-| Option | 説明 |
-|--------|-------------|
-| `--answers <FILE>` | answers file のパス（非対話モード） |
-| `--dry-run` | 変更を加えずに setup をプレビューする |
-| `--emit-answers <FILE>` | answers テンプレートを生成する |
-| `--advanced` | answers テンプレートに任意フィールドを含める |
-| `--provider <NAME>` | 特定の provider のみ setup する |
-| `--skip <NAME>` | 特定の provider をスキップする |
-| `-v, --verbose` | verbose 出力を有効にする |
-
-## 対話型セットアップ
-
-各 provider について入力を求められる対話モードで setup を実行します:
+## 起動
 
 ```bash
+# Web ダッシュボードを起動（デフォルト）
 gtc setup ./my-bundle
+
+# ヘッドレス端末モード（CI / SSH）
+gtc setup --no-ui ./my-bundle
+
+# UI なしで事前構築済み回答ファイルを適用
+gtc setup --answers answers.json ./my-bundle
 ```
 
-CLI は以下を尋ねます:
-- provider の認証情報（API keys、tokens）
-- webhook 用の公開 URL
-- 任意の設定オプション
+`gtc setup ./my-bundle` を実行すると、バイナリは以下の処理を行います：
 
-## 非対話型セットアップ
+1. bundle 設定を読み込み、検証します。
+2. ランダムな使用可能ポートで `127.0.0.1` にバインドされたローカル [Axum](https://docs.rs/axum) HTTP サーバーを起動します。
+3. メモリのみに保存されるワンタイムベアラートークンを生成します（ディスクへの書き込みは行いません）。
+4. `http://127.0.0.1:<port>/?token=<token>` をデフォルトブラウザで開きます。
+5. Greentic Setup シングルページアプリケーションを提供します。
 
-### Demo Catalog Flows
+ブラウザタブを閉じるか、ダッシュボードの **Close** ボタンを使用すると、サーバーは自動的にシャットダウンします。
 
-[`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog 内の各 demo は、pack と一緒に `*-setup-answers.json` ドキュメントを公開しています。これを `gtc wizard` で作成した bundle に適用します:
+## ダッシュボード
+
+Greentic Setup ダッシュボードは [Alpine.js](https://alpinejs.dev/) で構築されたシングルページアプリケーションです。ブラウザを離れることなく bundle 設定を管理するためのクリーンでミニマルなインターフェースを提供します。
+
+### レイアウト
+
+ダッシュボードには 3 つの主要エリアがあります：
+
+- **トップバー** — bundle 名とサーバーをグレースフルにシャットダウンする閉じるボタンを表示します。
+- **サイドバー** — 3 つのスコープセレクター（テナント、環境、チーム）とナビゲーションメニューが含まれます。
+- **メインコンテンツエリア** — アクティブなビューをレンダリングします。
+
+### サイドバーナビゲーション
+
+サイドバー上部の 3 つのドロップダウンセレクターで、アクティブなスコープコンテキストを変更できます：
+
+| セレクター | 制御内容 |
+|------------|----------|
+| テナント | シークレットと provider 設定のテナント名前空間 |
+| 環境 | `demo`、`dev`、`staging`、またはカスタム値 |
+| チーム | テナント内のサブチームスコープ |
+
+**Manage** ナビセクションには以下が表示されます：
+
+| 項目 | ステータス |
+|------|-----------|
+| Overview | Phase 1a でアクティブ |
+| Providers | Phase 1b で提供予定 |
+| Secrets | Phase 1b で提供予定 |
+| Capabilities | Phase 1b で提供予定 |
+
+「1b」タグの付いた項目は現在のリリースでは読み取り専用のプレースホルダーです。
+
+### Overview ビュー
+
+Overview はデフォルトのランディングビューです。以下が含まれます：
+
+- bundle 表示名を含む**ウェルカム見出し**。
+- 設定済みスコープ数、検出された provider 数、保存されたシークレット数、警告数の 4 つのサマリーチップを示す**統計行**。
+- **スコープリスト** — 設定済みスコープ（テナント/環境/チームの組み合わせ）ごとのカード。そのスコープで設定された provider チップを表示します。
+- **空の状態** — スコープがまだ設定されていない場合、空の状態パネルが表示され、**Add tenant** ボタンで最初のテナントを追加するよう促します。
+
+## ウィザード
+
+**Add tenant** ボタン（またはスコープごとの **Configure** ボタン）をクリックすると、インライン設定ウィザードが起動します。ウィザードはダッシュボードシェル内で実行されます（別ページには遷移しません）。
+
+### ウィザードフロー
+
+ウィザードは一連のステップで設定を収集します：
+
+<Steps>
+
+1. **スコープを選択** — テナント、環境、チームを選択または確認します。
+
+2. **provider を選択** — このスコープで有効にする provider を切り替えます。
+
+3. **各 provider を設定** — 有効にした各 provider に必要なフィールド（API キー、パブリック Webhook URL など）を入力します。
+
+4. **確認** — 値が保存される前にすべての値のサマリーを確認します。
+
+5. **完了** — 認証情報がシークレットストアに書き込まれ、Overview が更新されて新しいスコープが表示されます。
+
+</Steps>
+
+### フィールドタイプ
+
+ウィザードは以下の入力タイプをサポートします：
+
+| タイプ | 用途 |
+|--------|------|
+| `text` | プレーンな文字列値（URL、ID、ユーザー名） |
+| `password` | 機密値 — マスクされた入力でレンダリングされ、完了後にメモリからクリアされます |
+| `textarea` | 複数行の値（証明書 PEM ブロック、JSON ペイロード） |
+| `select` | 列挙されたオプション |
+| `switch` | ブール値トグル（provider の有効/無効） |
+
+### ナビゲーション
+
+各ステップには **Back**、**Continue**、**Cancel** アクションがあります。最後のステップでは **Continue** が **Finish** に置き換わります。検証はステップごとに実行され、エラーは関連するフィールドの下にインラインで表示されます。
+
+## ヘッドレスモード
+
+SSH 経由での作業中、CI パイプライン内、またはブラウザ起動が無効な場合は、`--no-ui` を渡します：
 
 ```bash
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc setup --no-ui ./my-bundle
 ```
 
-同じパターンはどの demo に対しても使えます。demo ID を置き換えるだけです。説明と必要な認証情報を含む完全な catalog は [Running Demos](/ja/getting-started/running-demos/) を参照してください。
+これにより、レガシー端末ダイアローガーフローが呼び出されます。同じ設定値がプロンプトでインタラクティブに収集され、シークレットはダッシュボードウィザードと同じストアに保存されます。
 
-`gtc setup` を公開済みの `.gtbundle` artifact に直接向けることもできます:
+### 回答ファイル
 
-```bash
-gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
-```
-
-<Aside type="note">
-`gtc setup` は `tenants/` directory から bundle の tenant を自動検出するため、bundle がデフォルトの `demo` tenant で作成されていなくても、secret は正しい tenant URI に書き込まれます。また、bundle 内のすべての pack に対して **dependency capability validation** を実行し、必要な capability（例: `greentic:state/state-store`）がまだ満たされていない場合は警告します。
-</Aside>
-
-### Answers Template を生成する
-
-まず、必須フィールドをすべて含むテンプレートを生成します:
+回答ファイルを使用すると、インタラクティブなプロンプトなしでセットアップを自動化できます：
 
 ```bash
-# Basic template (required fields only)
+# テンプレートを生成（必須フィールドのみ）
 gtc setup --dry-run --emit-answers answers.json ./my-bundle
 
-# Full template (including optional fields)
+# オプションフィールドを含むテンプレートを生成
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
-```
 
-### Answers File Format
+# 回答を適用
+gtc setup --answers answers.json ./my-bundle
+```
 
 <Tabs>
 <TabItem label="JSON">
@@ -124,221 +187,106 @@ messaging-teams:
 </TabItem>
 </Tabs>
 
-### Answers を適用する
+#### デモカタログの回答
+
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) カタログの各デモには `*-setup-answers.json` ドキュメントが公開されています。直接適用できます：
 
 ```bash
-gtc setup --answers answers.json ./my-bundle
+gtc setup ./quickstart-demo-bundle \
+  --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
 ```
 
-## Provider 固有の設定
+説明と必要な認証情報を含む完全なカタログは[デモの実行](/ja/getting-started/running-demos/)を参照してください。
 
-### Telegram
-
-```json
-{
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-  }
-}
-```
-
-**認証情報の取得方法:**
-1. Telegram で [@BotFather](https://t.me/botfather) にメッセージを送る
-2. `/newbot` を送信して案内に従う
-3. bot token をコピーする
-
-### Slack
-
-```json
-{
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "xoxb-xxx-xxx-xxx",
-    "slack_app_id": "A07XXXXXX",
-    "slack_configuration_token": "xoxe.xoxp-xxx"
-  }
-}
-```
-
-**認証情報の取得方法:**
-1. [api.slack.com/apps](https://api.slack.com/apps) にアクセスする
-2. 新しい app を作成するか既存のものを選択する
-3. OAuth & Permissions から Bot Token を取得する
-4. Basic Information から App ID を取得する
-5. App Manifest から Configuration Token を取得する
-
-### Microsoft Teams
-
-```json
-{
-  "messaging-teams": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "app_id": "your-app-id",
-    "app_password": "your-app-password",
-    "tenant_id": "your-tenant-id"
-  }
-}
-```
-
-### WhatsApp (via Meta)
-
-```json
-{
-  "messaging-whatsapp": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "phone_number_id": "123456789",
-    "access_token": "EAAxxxxx",
-    "verify_token": "your-verify-token"
-  }
-}
-```
-
-## Public URL Configuration
-
-<Aside type="caution">
-Webhook ベースの provider には外部からアクセス可能な URL が必要です。`public_base_url` は、`gtc start` で ngrok または cloudflared を使う場合に自動的に置き換えられます。
+<Aside type="note">
+Greentic Setup は `tenants/` ディレクトリから bundle のテナントを自動検出するため、bundle がデフォルトの `demo` テナントで作成されていない場合でも、シークレットは正しいテナント URI に書き込まれます。また、bundle 内のすべてのパックに対して**依存関係の機能検証**を実行し、必要な機能（例：`greentic:state/state-store`）が満たされていない場合に警告を出します。
 </Aside>
 
-### ngrok を使う
+## セキュリティ
 
-```bash
-# Start ngrok in separate terminal
-ngrok http 8080
+Greentic Setup はすべてのローカル UI セッションに対してセキュリティファーストのアプローチを取っています：
 
-# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
-# Use this as public_base_url in answers
-```
+| 制御 | 実装 |
+|------|------|
+| ループバックのみ | サーバーは `127.0.0.1` にのみバインド — ネットワークへの露出なし |
+| ランダムポート | 起動時にランダムな使用可能ポートを選択 — 固定ポートへの推測攻撃なし |
+| ベアラートークン | メモリで生成されるワンタイムトークン。最初のロード時に URL クエリパラメータで渡され、その後はブラウザセッションにのみ保存されます |
+| Origin 強制 | すべての API リクエストは `Origin` 許可リストに対して検証されます。クロスオリジンリクエストは拒否されます |
+| ログにシークレットなし | 認証情報の値は stdout、stderr、ログファイルに書き込まれません |
+| ディスクにシークレットなし | ベアラートークンとウィザードの回答はメモリのみに保持され、使用後に機密構造体に対して `Zeroize` が呼び出されます |
+| 同一オリジンアセット | すべての JS、CSS、フォントアセットは同じローカルサーバーから提供されます — 外部 CDN 呼び出しなし |
+| テレメトリなし | ダッシュボードはアウトバウンドネットワーク呼び出しを行いません |
 
-### Cloudflared を使う
+## Bundle の機能
 
-```bash
-# Cloudflared generates URL automatically with gtc start
-gtc start ./my-bundle --cloudflared on
-```
+`bundle.yaml` ファイルでは、セットアップ中に追加の動作を有効にする機能を宣言できます。
 
-## Bundle Capabilities
+### Bundle アセット（`greentic.cap.bundle_assets.read.v1`）
 
-`bundle.yaml` file では、setup 中に追加の挙動を有効にする capabilities を宣言できます。Capabilities は capability identifier の配列として列挙されます。
-
-### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
-
-`bundle.yaml` に `greentic.cap.bundle_assets.read.v1` capability が存在する場合、`gtc setup` は bundle ルートに `assets/` directory を作成し、provider pack から asset file をそこへ scaffold します。
+この機能が宣言されると、Greentic Setup は bundle ルートに `assets/` ディレクトリを作成し、provider パックアセット（例：`assets/webchat-gui/`）をそこにコピーします。その後これらのファイルを自由に変更でき、bundle レベルのアセットファイルは実行時にパックのデフォルトをオーバーライドします。
 
 ```yaml title="bundle.yaml"
 capabilities:
   - greentic.cap.bundle_assets.read.v1
 ```
 
-具体的には、provider pack の assets（`assets/webchat-gui/` entries など）が bundle レベルの `assets/` directory にコピーされます。これにより、元の pack 内容を変更せずに、webchat-gui の skin や設定ファイルなどの provider assets をカスタマイズできます。
-
-**仕組み:**
-
-- setup 中、asset directory を含む provider pack（例: `assets/webchat-gui/`）のファイルが、bundle ルートの `assets/` directory に scaffold されます。
-- その後はこれらの file を自由に編集できます。bundle レベルの asset file は runtime 時に pack のデフォルトを上書きします。
-- これは、webchat widget の look and feel の調整、設定の変更、brand に合わせた skin の適用に便利です。
-
 <Aside type="tip">
-setup により assets が scaffold された後は、安全に変更できます。runtime が assets を読み込む際、bundle レベルのカスタマイズが pack のデフォルトより優先されます。
+セットアップがアセットを作成した後、bundle レベルのカスタマイズはランタイムがアセットを読み込む際にパックのデフォルトより優先されます。
 </Aside>
 
-## Setup Flow Execution
+## ロードマップ
 
-`gtc setup` を実行すると、次の処理を行います:
+Greentic Setup Phase 1a はダッシュボードシェル、Overview ビュー、インラインウィザードを提供します。**Phase 1b** での今後の作業には以下が含まれます：
 
-<Steps>
+- **Providers** — bundle 内のすべてのパックを参照し、個々の provider を有効または無効にし、他の provider に影響を与えることなく単一の provider のセットアップを再実行します。
+- **Secrets** — シークレットストアの完全な CRUD：スコープごとの個々のシークレットエントリの作成、読み取り（マスク済み）、更新、削除。
+- **Capabilities** — パックごとの機能フラグの切り替えと依存関係グラフの確認。
+- **Rebuild トリガー** — 完全なランタイムの再起動なしにダッシュボードから実行中の bundle のホットリロードをリクエストします。
 
-1. **bundle 設定を読み込む**
+## トラブルシューティング
 
-   `greentic.demo.yaml` を読み込み、provider を見つけます。
+### ブラウザが開かない
 
-2. **answers を検証する**
+システムが自動ブラウザ起動をサポートしていない場合は、端末に表示された URL をコピーしてブラウザに手動で貼り付けてください：
 
-   必須フィールドがすべて存在することを確認します。
-
-3. **setup flows を実行する**
-
-   各 provider の `setup_flow` を実行します（例: webhook registration）。
-
-4. **認証情報を保存する**
-
-   認証情報を設定済みの secrets store に保存します。
-
-5. **検証を実行する**
-
-   `verify_flow` を実行して setup が正しく機能したことを確認します。
-
-</Steps>
-
-## Selective Setup
-
-### 単一 Provider を setup する
-
-```bash
-gtc setup --provider messaging-telegram ./my-bundle
+```
+Greentic Setup running at http://127.0.0.1:52341/?token=...
 ```
 
-### 特定の Provider をスキップする
-
-```bash
-gtc setup --skip messaging-teams ./my-bundle
-```
-
-### Setup を再実行する
-
-```bash
-# Force re-setup (useful after URL changes)
-gtc start ./my-bundle --force-setup
-```
-
-## Troubleshooting
-
-### Webhook Registration Failed
+### Webhook 登録に失敗した
 
 ```
 Error: Failed to register webhook: 401 Unauthorized
 ```
 
-bot token が正しく、有効期限切れでないことを確認してください。
+ボットトークンが正しく、有効期限が切れていないことを確認してください。
 
-### Missing Required Field
+### 必須フィールドが不足している
 
 ```
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-answers file に必須フィールドがすべて含まれていることを確認してください。
+すべての必須フィールドがウィザードで入力されているか、回答ファイルに存在することを確認してください。
 
-### Public URL Not Accessible
+### パブリック URL にアクセスできない
 
 ```
 Error: Webhook verification failed: Connection refused
 ```
 
-公開 URL にインターネットからアクセスできることを確認してください。ngrok/cloudflared が実行中か確認します。
+パブリック URL はインターネットから到達可能である必要があります。ngrok または cloudflared が実行中であることを確認してください。
 
-### Credential Not Found
+### 認証情報が見つからない
 
 ```
 Error: Secret 'slack_bot_token' not found
 ```
 
-provider を設定するために `gtc setup` を実行するか、answers file を確認してください。
+`gtc setup` を実行して provider を設定するか、回答ファイルを確認してください。
 
-## Best Practices
+## 次のステップ
 
-1. **CI/CD では answers file を使う** - 自動化パイプラインでは対話プロンプトを避ける
-2. **認証情報を安全に保つ** - 実際の token を含む answers file を git に commit しない
-3. **environment variables を使う** - answers 内では `$ENV_VAR` で secret を参照する
-4. **dry-run でテストする** - 変更を加える前に setup をプレビューする
-5. **URL が変わったら再生成する** - 公開 URL が変わったら setup を再実行する
-
-## Next Steps
-
-- [gtc start](/ja/cli/start/) - runtime server を実行する
-- [Telegram Setup](/ja/providers/messaging/telegram/) - 詳細な Telegram ガイド
-- [Slack Setup](/ja/providers/messaging/slack/) - 詳細な Slack ガイド
+- [gtc start](/ja/cli/start/) — セットアップ完了後にランタイムサーバーを起動します
+- [Telegram Setup](/ja/providers/messaging/telegram/) — 詳細な Telegram 設定ガイド
+- [Slack Setup](/ja/providers/messaging/slack/) — 詳細な Slack 設定ガイド

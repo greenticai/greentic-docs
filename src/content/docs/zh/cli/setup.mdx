@@ -1,80 +1,143 @@
 ---
 title: gtc setup
-description: 在你的 Greentic bundle 中配置 provider
+description: 通过 Web 控制台或无头终端配置 Greentic bundle 的 provider
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-## 概览
+## 概述
 
-`gtc setup` 命令用于配置你的 Greentic bundle 中的 provider。它会为每个已启用的 provider 运行 setup flow，收集凭据并配置 webhook。
+**Greentic Setup** 是 Greentic bundle 的配置引擎。运行 `gtc setup <bundle>` 会在浏览器中打开一个交互式 Web 控制台，您可以在其中配置 provider 凭据、检查当前 scope 并为每个 provider 运行引导式设置向导——全部在本地托管的受保护单页应用程序中完成。
 
-## 用法
+对于 CI 或 SSH 环境，`gtc setup --no-ui <bundle>` 会回退到终端对话框流程。
 
-```bash
-gtc setup [OPTIONS] <BUNDLE_PATH>
-```
-
-## 选项
-
-| 选项 | 说明 |
-|--------|-------------|
-| `--answers <FILE>` | answers 文件路径（非交互模式） |
-| `--dry-run` | 预览 setup 过程而不进行实际更改 |
-| `--emit-answers <FILE>` | 生成 answers 模板 |
-| `--advanced` | 在 answers 模板中包含可选字段 |
-| `--provider <NAME>` | 仅设置特定 provider |
-| `--skip <NAME>` | 跳过特定 provider |
-| `-v, --verbose` | 启用详细输出 |
-
-## 交互式 Setup
-
-以交互方式运行 setup，CLI 会针对每个 provider 提示你输入：
+## 启动
 
 ```bash
+# 启动 Web 控制台（默认）
 gtc setup ./my-bundle
+
+# 无头终端模式（CI / SSH）
+gtc setup --no-ui ./my-bundle
+
+# 无 UI 应用预构建的答案文件
+gtc setup --answers answers.json ./my-bundle
 ```
 
-CLI 会提示你提供：
-- Provider 凭据（API keys、tokens）
-- 用于 webhook 的公开 URL
-- 可选配置项
+运行 `gtc setup ./my-bundle` 时，二进制文件会：
 
-## 非交互式 Setup
+1. 加载并验证您的 bundle 配置。
+2. 在随机可用端口上启动绑定到 `127.0.0.1` 的本地 [Axum](https://docs.rs/axum) HTTP 服务器。
+3. 生成仅存储在内存中的一次性 Bearer 令牌——永远不会写入磁盘。
+4. 在默认浏览器中打开 `http://127.0.0.1:<port>/?token=<token>`。
+5. 提供 Greentic Setup 单页应用程序。
 
-### Demo Catalog Flows
+关闭浏览器标签页或使用控制台中的 **Close** 按钮时，服务器会自动关闭。
 
-[`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog 中的每个 demo，都会在其 pack 旁边发布一个 `*-setup-answers.json` 文档。你可以将它应用到使用 `gtc wizard` 创建的 bundle：
+## 控制台
+
+Greentic Setup 控制台是使用 [Alpine.js](https://alpinejs.dev/) 构建的单页应用程序。它提供了简洁、极简的界面，无需离开浏览器即可管理 bundle 配置。
+
+### 布局
+
+控制台有三个主要区域：
+
+- **顶栏** — 显示 bundle 名称和优雅关闭服务器的关闭按钮。
+- **侧边栏** — 包含三个 scope 选择器（租户、环境、团队）和导航菜单。
+- **主内容区** — 渲染当前活动视图。
+
+### 侧边栏导航
+
+侧边栏顶部的三个下拉选择器允许您更改活动 scope 上下文：
+
+| 选择器 | 控制内容 |
+|--------|---------|
+| 租户 | 密钥和 provider 配置的租户命名空间 |
+| 环境 | `demo`、`dev`、`staging` 或自定义值 |
+| 团队 | 租户内的子团队 scope |
+
+**Manage** 导航部分显示：
+
+| 条目 | 状态 |
+|------|------|
+| Overview | Phase 1a 中可用 |
+| Providers | Phase 1b 即将推出 |
+| Secrets | Phase 1b 即将推出 |
+| Capabilities | Phase 1b 即将推出 |
+
+标记为 "1b" 的条目在当前版本中是只读占位符。
+
+### Overview 视图
+
+Overview 是默认的着陆视图。包含：
+
+- 带有 bundle 显示名称的**欢迎标题**。
+- **统计行**，显示四个摘要芯片：已配置的 Scope、找到的 Provider、已存储的密钥和警告。
+- **Scope 列表** — 每个已配置 scope（租户/环境/团队组合）一个卡片，每个卡片显示在该 scope 中已设置的 provider 芯片。
+- **空状态** — 如果尚未配置任何 scope，会显示空状态面板，提示您使用 **Add tenant** 按钮添加第一个租户。
+
+## 向导
+
+点击 **Add tenant**（或每个 scope 的 **Configure** 按钮）会启动内联设置向导。向导在控制台 shell 内运行——不会导航到单独的页面。
+
+### 向导流程
+
+向导通过一系列步骤收集配置：
+
+<Steps>
+
+1. **选择 scope** — 选择或确认租户、环境和团队。
+
+2. **选择 provider** — 切换您要为此 scope 启用的 provider。
+
+3. **配置每个 provider** — 为每个已启用的 provider 填写必填字段（API 密钥、公共 Webhook URL 等）。
+
+4. **审核** — 在保存之前查看所有值的摘要。
+
+5. **完成** — 凭据写入密钥存储；Overview 刷新以显示新 scope。
+
+</Steps>
+
+### 字段类型
+
+向导支持以下输入类型：
+
+| 类型 | 用途 |
+|------|------|
+| `text` | 普通字符串值（URL、ID、用户名） |
+| `password` | 敏感值——渲染为掩码输入，完成后从内存中清除 |
+| `textarea` | 多行值（证书 PEM 块、JSON 负载） |
+| `select` | 枚举选项 |
+| `switch` | 布尔开关（启用/禁用 provider） |
+
+### 导航
+
+每个步骤都有 **Back**、**Continue** 和 **Cancel** 操作。最后一步将 **Continue** 替换为 **Finish**。每步前进之前都会运行验证；错误会内联显示在相关字段下方。
+
+## 无头模式
+
+如果您通过 SSH 工作、在 CI 流水线中或禁用了浏览器启动，请传递 `--no-ui`：
 
 ```bash
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc setup --no-ui ./my-bundle
 ```
 
-同样的模式适用于任何 demo，只需替换 demo ID 即可。完整 catalog、说明以及所需凭据请参见[运行 Demo](/zh/getting-started/running-demos/)。
+这会调用旧版终端对话框流程。所有相同的配置值都会在提示符处交互式收集，密钥保存到与控制台向导相同的存储中。
 
-你也可以让 `gtc setup` 直接处理已发布的 `.gtbundle` artifact：
+### 答案文件
 
-```bash
-gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
-```
-
-<Aside type="note">
-`gtc setup` 会从 `tenants/` 目录自动检测 bundle 的 tenant，因此即使 bundle 不是用默认的 `demo` tenant 创建的，secrets 也会写入正确的 tenant URI。它还会对 bundle 中的每个 pack 运行**依赖 capability 校验**，如果仍有任何必需 capability（例如 `greentic:state/state-store`）未满足，就会发出警告。
-</Aside>
-
-### 生成 Answers 模板
-
-首先，生成包含所有必填字段的模板：
+答案文件允许您在没有任何交互式提示的情况下自动化设置：
 
 ```bash
-# Basic template (required fields only)
+# 生成模板（仅必填字段）
 gtc setup --dry-run --emit-answers answers.json ./my-bundle
 
-# Full template (including optional fields)
+# 生成包含可选字段的模板
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
-```
 
-### Answers 文件格式
+# 应用答案
+gtc setup --answers answers.json ./my-bundle
+```
 
 <Tabs>
 <TabItem label="JSON">
@@ -124,178 +187,71 @@ messaging-teams:
 </TabItem>
 </Tabs>
 
-### 应用 Answers
+#### 演示目录答案
+
+[`greentic-demo`](https://github.com/greenticai/greentic-demo) 目录中的每个演示都会发布一个 `*-setup-answers.json` 文档。直接应用它：
 
 ```bash
-gtc setup --answers answers.json ./my-bundle
+gtc setup ./quickstart-demo-bundle \
+  --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
 ```
 
-## Provider 专用配置
+有关包含描述和所需凭据的完整目录，请参阅[运行演示](/zh/getting-started/running-demos/)。
 
-### Telegram
-
-```json
-{
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-  }
-}
-```
-
-**如何获取凭据：**
-1. 在 Telegram 中联系 [@BotFather](https://t.me/botfather)
-2. 发送 `/newbot` 并按照提示操作
-3. 复制 bot token
-
-### Slack
-
-```json
-{
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "xoxb-xxx-xxx-xxx",
-    "slack_app_id": "A07XXXXXX",
-    "slack_configuration_token": "xoxe.xoxp-xxx"
-  }
-}
-```
-
-**如何获取凭据：**
-1. 访问 [api.slack.com/apps](https://api.slack.com/apps)
-2. 创建一个新应用或选择现有应用
-3. 在 OAuth & Permissions 中获取 Bot Token
-4. 在 Basic Information 中获取 App ID
-5. 在 App Manifest 中获取 Configuration Token
-
-### Microsoft Teams
-
-```json
-{
-  "messaging-teams": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "app_id": "your-app-id",
-    "app_password": "your-app-password",
-    "tenant_id": "your-tenant-id"
-  }
-}
-```
-
-### WhatsApp (via Meta)
-
-```json
-{
-  "messaging-whatsapp": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "phone_number_id": "123456789",
-    "access_token": "EAAxxxxx",
-    "verify_token": "your-verify-token"
-  }
-}
-```
-
-## 公开 URL 配置
-
-<Aside type="caution">
-基于 webhook 的 provider 需要一个可公开访问的 URL。使用 `gtc start` 配合 ngrok 或 cloudflared 时，`public_base_url` 会被自动替换。
+<Aside type="note">
+Greentic Setup 从 `tenants/` 目录自动检测 bundle 的租户，因此即使 bundle 不是使用默认的 `demo` 租户创建的，密钥也会写入正确的租户 URI。它还对 bundle 中的每个 pack 运行**依赖项能力验证**，如果任何必需的能力（例如 `greentic:state/state-store`）仍未满足，则会发出警告。
 </Aside>
 
-### 使用 ngrok
+## 安全性
 
-```bash
-# Start ngrok in separate terminal
-ngrok http 8080
+Greentic Setup 对所有本地 UI 会话采用安全优先的方法：
 
-# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
-# Use this as public_base_url in answers
-```
+| 控制 | 实现 |
+|------|------|
+| 仅回环 | 服务器仅绑定到 `127.0.0.1`——无网络暴露 |
+| 随机端口 | 启动时选择随机可用端口——无固定端口可猜测 |
+| Bearer 令牌 | 在内存中生成的一次性令牌，在首次加载时通过 URL 查询参数传递，然后仅存储在浏览器会话中 |
+| Origin 强制 | 每个 API 请求都针对 `Origin` 允许列表进行验证；跨域请求被拒绝 |
+| 日志中无密钥 | 凭据值从不写入 stdout、stderr 或日志文件 |
+| 磁盘上无密钥 | Bearer 令牌和向导答案仅保存在内存中；使用后对敏感结构调用 `Zeroize` |
+| 同源资源 | 所有 JS、CSS 和字体资源都从同一本地服务器提供——无外部 CDN 调用 |
+| 无遥测 | 控制台不进行任何出站网络调用 |
 
-### 使用 Cloudflared
+## Bundle 能力
 
-```bash
-# Cloudflared generates URL automatically with gtc start
-gtc start ./my-bundle --cloudflared on
-```
+`bundle.yaml` 文件可以声明在设置期间解锁额外行为的能力。
 
-## Bundle Capabilities
+### Bundle 资源（`greentic.cap.bundle_assets.read.v1`）
 
-`bundle.yaml` 文件可以声明 capabilities，以在 setup 期间启用额外行为。Capabilities 以 capability 标识符数组的形式列出。
-
-### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
-
-当 `bundle.yaml` 中存在 `greentic.cap.bundle_assets.read.v1` capability 时，`gtc setup` 会在 bundle 根目录创建一个 `assets/` 目录，并将 provider packs 中的 asset 文件 scaffold 到该目录。
+声明此能力后，Greentic Setup 会在 bundle 根目录创建 `assets/` 目录，并将 provider pack 资源复制到其中（例如 `assets/webchat-gui/`）。然后您可以自由修改这些文件；bundle 级别的资源文件在运行时会覆盖 pack 默认值。
 
 ```yaml title="bundle.yaml"
 capabilities:
   - greentic.cap.bundle_assets.read.v1
 ```
 
-具体来说，provider packs 中的 assets（例如 `assets/webchat-gui/` 条目）会被复制到 bundle 级别的 `assets/` 目录中。这让你可以在不修改原始 pack 内容的情况下，自定义 provider assets，例如 webchat-gui 皮肤和配置文件。
-
-**工作方式：**
-
-- 在 setup 期间，包含 asset 目录的 provider packs（例如 `assets/webchat-gui/`）会将这些文件 scaffold 到 bundle 根目录下的 `assets/` 目录。
-- 之后你可以自由编辑这些文件。运行时会优先使用 bundle 级别的 asset 文件，而不是 pack 默认值。
-- 这对于自定义 webchat widget 的外观和体验、调整配置或应用品牌皮肤非常有用。
-
 <Aside type="tip">
-setup 完成 asset scaffold 后，你可以安全地修改它们。运行时加载 assets 时，你在 bundle 级别所做的自定义会优先于 pack 默认值。
+设置创建资源后，当运行时加载它们时，您的 bundle 级别自定义项优先于 pack 默认值。
 </Aside>
 
-## Setup Flow 执行过程
+## 路线图
 
-当你运行 `gtc setup` 时，它会：
+Greentic Setup Phase 1a 提供控制台 shell、Overview 视图和内联向导。**Phase 1b** 中即将推出的工作包括：
 
-<Steps>
+- **Providers** — 浏览 bundle 中的所有 pack，启用或禁用单个 provider，重新运行单个 provider 的设置而不影响其他 provider。
+- **Secrets** — 密钥存储的完整 CRUD：按 scope 创建、读取（掩码）、更新和删除单个密钥条目。
+- **Capabilities** — 按 pack 切换能力标志并检查依赖关系图。
+- **重建触发器** — 从控制台请求正在运行的 bundle 热重载，无需重启完整运行时。
 
-1. **加载 bundle 配置**
+## 故障排除
 
-   读取 `greentic.demo.yaml` 以查找 providers。
+### 浏览器未打开
 
-2. **校验 answers**
+如果您的系统不支持自动浏览器启动，请复制打印到终端的 URL 并手动粘贴到浏览器中：
 
-   检查所有必填字段是否存在。
-
-3. **运行 setup flows**
-
-   执行每个 provider 的 `setup_flow`（例如 webhook 注册）。
-
-4. **存储凭据**
-
-   将凭据保存到已配置的 secrets store。
-
-5. **执行验证**
-
-   运行 `verify_flow` 以确认 setup 是否成功。
-
-</Steps>
-
-## 选择性 Setup
-
-### 设置单个 Provider
-
-```bash
-gtc setup --provider messaging-telegram ./my-bundle
 ```
-
-### 跳过特定 Provider
-
-```bash
-gtc setup --skip messaging-teams ./my-bundle
+Greentic Setup running at http://127.0.0.1:52341/?token=...
 ```
-
-### 重新运行 Setup
-
-```bash
-# Force re-setup (useful after URL changes)
-gtc start ./my-bundle --force-setup
-```
-
-## 故障排查
 
 ### Webhook 注册失败
 
@@ -303,7 +259,7 @@ gtc start ./my-bundle --force-setup
 Error: Failed to register webhook: 401 Unauthorized
 ```
 
-检查你的 bot token 是否正确且未过期。
+检查您的 bot 令牌是否正确且未过期。
 
 ### 缺少必填字段
 
@@ -311,15 +267,15 @@ Error: Failed to register webhook: 401 Unauthorized
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-确认你的 answers 文件中包含所有必填字段。
+确保所有必填字段在向导中填写或存在于您的答案文件中。
 
-### 无法访问公开 URL
+### 公共 URL 无法访问
 
 ```
 Error: Webhook verification failed: Connection refused
 ```
 
-确认你的公开 URL 可从互联网访问，并检查 ngrok/cloudflared 是否正在运行。
+您的公共 URL 必须可从互联网访问。检查 ngrok 或 cloudflared 是否正在运行。
 
 ### 找不到凭据
 
@@ -327,18 +283,10 @@ Error: Webhook verification failed: Connection refused
 Error: Secret 'slack_bot_token' not found
 ```
 
-运行 `gtc setup` 来配置该 provider，或检查你的 answers 文件。
+运行 `gtc setup` 配置 provider，或检查您的答案文件。
 
-## 最佳实践
+## 后续步骤
 
-1. **在 CI/CD 中使用 answers 文件** - 避免在自动化流水线中使用交互式提示
-2. **妥善保护凭据** - 不要将包含真实 token 的 answers 文件提交到 git
-3. **使用环境变量** - 在 answers 中通过 `$ENV_VAR` 引用 secrets
-4. **先使用 dry-run 测试** - 在实际更改前先预览 setup 结果
-5. **URL 变化后重新生成** - 当你的公开 URL 发生变化时重新运行 setup
-
-## 下一步
-
-- [gtc start](/zh/cli/start/) - 运行 runtime server
-- [Telegram Setup](/zh/providers/messaging/telegram/) - 详细的 Telegram 指南
-- [Slack Setup](/zh/providers/messaging/slack/) - 详细的 Slack 指南
+- [gtc start](/zh/cli/start/) — 设置完成后运行运行时服务器
+- [Telegram 设置](/zh/providers/messaging/telegram/) — 详细的 Telegram 配置指南
+- [Slack 设置](/zh/providers/messaging/slack/) — 详细的 Slack 配置指南

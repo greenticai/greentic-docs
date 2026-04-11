@@ -1,80 +1,143 @@
 ---
 title: gtc setup
-description: Configure providers in your Greentic bundle
+description: Configure your Greentic bundle providers via the web dashboard or headless terminal
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Overview
 
-The `gtc setup` command configures providers in your Greentic bundle. It runs setup flows for each enabled provider, collecting credentials and configuring webhooks.
+**Greentic Setup** is the configuration engine for Greentic bundles. Running `gtc setup <bundle>` opens an interactive web dashboard in your browser where you can configure provider credentials, inspect current scopes, and run the guided setup wizard for each provider — all from a secure, locally-hosted single-page application.
 
-## Usage
+For CI or SSH environments, `gtc setup --no-ui <bundle>` falls back to the terminal dialoguer flow.
 
-```bash
-gtc setup [OPTIONS] <BUNDLE_PATH>
-```
-
-## Options
-
-| Option | Description |
-|--------|-------------|
-| `--answers <FILE>` | Path to answers file (non-interactive) |
-| `--dry-run` | Preview setup without making changes |
-| `--emit-answers <FILE>` | Generate answers template |
-| `--advanced` | Include optional fields in answers template |
-| `--provider <NAME>` | Setup only specific provider |
-| `--skip <NAME>` | Skip specific provider |
-| `-v, --verbose` | Enable verbose output |
-
-## Interactive Setup
-
-Run setup interactively to be prompted for each provider:
+## Launching
 
 ```bash
+# Launch the web dashboard (default)
 gtc setup ./my-bundle
+
+# Headless terminal mode (CI / SSH)
+gtc setup --no-ui ./my-bundle
+
+# Apply a pre-built answers file without UI
+gtc setup --answers answers.json ./my-bundle
 ```
 
-The CLI will prompt for:
-- Provider credentials (API keys, tokens)
-- Public URL for webhooks
-- Optional configuration options
+When you run `gtc setup ./my-bundle`, the binary:
 
-## Non-Interactive Setup
+1. Loads and validates your bundle configuration.
+2. Starts a local [Axum](https://docs.rs/axum) HTTP server bound to `127.0.0.1` on a random available port.
+3. Generates a one-time bearer token stored only in memory — never written to disk.
+4. Opens your default browser to `http://127.0.0.1:<port>/?token=<token>`.
+5. Serves the Greentic Setup single-page application.
 
-### Demo Catalog Flows
+The server shuts down automatically when you close the browser tab or use the in-dashboard **Close** button.
 
-Every demo in the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog publishes a `*-setup-answers.json` document alongside its pack. Apply it to a bundle that you created with `gtc wizard`:
+## Dashboard
+
+The Greentic Setup dashboard is a single-page application built with [Alpine.js](https://alpinejs.dev/). It provides a clean, minimal interface for managing your bundle configuration without leaving the browser.
+
+### Layout
+
+The dashboard has three main areas:
+
+- **Topbar** — displays the bundle name and a close button that gracefully shuts down the server.
+- **Sidebar** — contains three scope selectors (tenant, environment, team) and the navigation menu.
+- **Main content area** — renders the active view.
+
+### Sidebar navigation
+
+Three dropdown selectors at the top of the sidebar let you change the active scope context:
+
+| Selector | What it controls |
+|----------|-----------------|
+| Tenant | The tenant namespace for secrets and provider config |
+| Environment | `demo`, `dev`, `staging`, or a custom value |
+| Team | Sub-team scope within the tenant |
+
+The **Manage** nav section shows:
+
+| Item | Status |
+|------|--------|
+| Overview | Active in Phase 1a |
+| Providers | Coming in Phase 1b |
+| Secrets | Coming in Phase 1b |
+| Capabilities | Coming in Phase 1b |
+
+Items tagged "1b" are read-only placeholders in the current release.
+
+### Overview view
+
+The Overview is the default landing view. It contains:
+
+- **Welcome heading** with the bundle display name.
+- **Stat row** showing four summary chips: Scopes configured, Providers found, Secrets stored, and Warnings.
+- **Scope list** — one card per configured scope (tenant/env/team combination), each showing the provider chips that have been set up in that scope.
+- **Empty state** — if no scopes have been configured yet, an empty-state panel prompts you to add the first tenant using the **Add tenant** button.
+
+## Wizard
+
+Clicking **Add tenant** (or a per-scope **Configure** button) launches the inline setup wizard. The wizard runs inside the dashboard shell — it does not navigate away from the page.
+
+### Wizard flow
+
+The wizard collects configuration in a series of steps:
+
+<Steps>
+
+1. **Select scope** — choose or confirm the tenant, environment, and team.
+
+2. **Choose providers** — toggle which providers you want to enable for this scope.
+
+3. **Configure each provider** — for each enabled provider, fill in the required fields (API keys, public webhook URL, etc.).
+
+4. **Review** — see a summary of all values before they are persisted.
+
+5. **Finish** — credentials are written to the secrets store; the Overview refreshes to show the new scope.
+
+</Steps>
+
+### Field types
+
+The wizard supports the following input types:
+
+| Type | Usage |
+|------|-------|
+| `text` | Plain string values (URLs, IDs, usernames) |
+| `password` | Sensitive values — rendered as masked inputs, cleared from memory on finish |
+| `textarea` | Multi-line values (certificate PEM blocks, JSON payloads) |
+| `select` | Enumerated options |
+| `switch` | Boolean toggles (enable/disable a provider) |
+
+### Navigation
+
+Each step has **Back**, **Continue**, and **Cancel** actions. The final step replaces **Continue** with **Finish**. Validation runs per-step before advancing; errors are shown inline under the relevant field.
+
+## Headless mode
+
+If you are working over SSH, in a CI pipeline, or have disabled browser launch, pass `--no-ui`:
 
 ```bash
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc setup --no-ui ./my-bundle
 ```
 
-The same pattern works for any demo — just substitute the demo ID. See [Running Demos](/getting-started/running-demos/) for the full catalog with descriptions and required credentials.
+This invokes the legacy terminal dialoguer flow. All the same configuration values are collected interactively at the prompt, and secrets are persisted to the same store as the dashboard wizard.
 
-You can also point `gtc setup` directly at a published `.gtbundle` artifact:
+### Answers files
 
-```bash
-gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
-```
-
-<Aside type="note">
-`gtc setup` auto-detects the bundle's tenant from the `tenants/` directory, so secrets are written to the correct tenant URI even when the bundle was not created with the default `demo` tenant. It also runs **dependency capability validation** across every pack in the bundle and warns if any required capability (e.g. `greentic:state/state-store`) is still unsatisfied.
-</Aside>
-
-### Generate Answers Template
-
-First, generate a template with all required fields:
+Answers files let you automate setup without any interactive prompts:
 
 ```bash
-# Basic template (required fields only)
+# Generate a template (required fields only)
 gtc setup --dry-run --emit-answers answers.json ./my-bundle
 
-# Full template (including optional fields)
+# Generate a template with optional fields
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
-```
 
-### Answers File Format
+# Apply answers
+gtc setup --answers answers.json ./my-bundle
+```
 
 <Tabs>
 <TabItem label="JSON">
@@ -124,204 +187,97 @@ messaging-teams:
 </TabItem>
 </Tabs>
 
-### Apply Answers
+#### Demo catalog answers
+
+Every demo in the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog publishes a `*-setup-answers.json` document. Apply it directly:
 
 ```bash
-gtc setup --answers answers.json ./my-bundle
+gtc setup ./quickstart-demo-bundle \
+  --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
 ```
 
-## Provider-Specific Configuration
+See [Running Demos](/getting-started/running-demos/) for the full catalog with descriptions and required credentials.
 
-### Telegram
-
-```json
-{
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-  }
-}
-```
-
-**How to get credentials:**
-1. Message [@BotFather](https://t.me/botfather) on Telegram
-2. Send `/newbot` and follow prompts
-3. Copy the bot token
-
-### Slack
-
-```json
-{
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "xoxb-xxx-xxx-xxx",
-    "slack_app_id": "A07XXXXXX",
-    "slack_configuration_token": "xoxe.xoxp-xxx"
-  }
-}
-```
-
-**How to get credentials:**
-1. Go to [api.slack.com/apps](https://api.slack.com/apps)
-2. Create a new app or select existing
-3. Get Bot Token from OAuth & Permissions
-4. Get App ID from Basic Information
-5. Get Configuration Token from App Manifest
-
-### Microsoft Teams
-
-```json
-{
-  "messaging-teams": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "app_id": "your-app-id",
-    "app_password": "your-app-password",
-    "tenant_id": "your-tenant-id"
-  }
-}
-```
-
-### WhatsApp (via Meta)
-
-```json
-{
-  "messaging-whatsapp": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "phone_number_id": "123456789",
-    "access_token": "EAAxxxxx",
-    "verify_token": "your-verify-token"
-  }
-}
-```
-
-## Public URL Configuration
-
-<Aside type="caution">
-Webhook-based providers require a publicly accessible URL. The `public_base_url` will be automatically replaced when using ngrok or cloudflared with `gtc start`.
+<Aside type="note">
+Greentic Setup auto-detects the bundle's tenant from the `tenants/` directory, so secrets are written to the correct tenant URI even when the bundle was not created with the default `demo` tenant. It also runs **dependency capability validation** across every pack and warns if any required capability (for example `greentic:state/state-store`) is unsatisfied.
 </Aside>
 
-### Using ngrok
+## Security
 
-```bash
-# Start ngrok in separate terminal
-ngrok http 8080
+Greentic Setup takes a security-first approach for all local UI sessions:
 
-# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
-# Use this as public_base_url in answers
-```
+| Control | Implementation |
+|---------|---------------|
+| Loopback only | Server binds exclusively to `127.0.0.1` — no network exposure |
+| Random port | A random available port is selected at startup — no fixed port to guess |
+| Bearer token | One-time token generated in memory, passed via URL query param on first load, then stored in the browser session only |
+| Origin enforcement | Every API request is validated against an `Origin` allowlist; cross-origin requests are rejected |
+| No secrets in logs | Credential values are never written to stdout, stderr, or log files |
+| No secrets on disk | The bearer token and wizard answers are held in memory only; `Zeroize` is called on sensitive structs after use |
+| Same-origin assets | All JS, CSS, and font assets are served from the same local server — no external CDN calls |
+| No telemetry | The dashboard makes no outbound network calls |
 
-### Using Cloudflared
+## Bundle capabilities
 
-```bash
-# Cloudflared generates URL automatically with gtc start
-gtc start ./my-bundle --cloudflared on
-```
+The `bundle.yaml` file can declare capabilities that unlock additional behavior during setup.
 
-## Bundle Capabilities
+### Bundle assets (`greentic.cap.bundle_assets.read.v1`)
 
-The `bundle.yaml` file can declare capabilities that unlock additional behavior during setup. Capabilities are listed as an array of capability identifiers.
-
-### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
-
-When the `greentic.cap.bundle_assets.read.v1` capability is present in `bundle.yaml`, `gtc setup` creates an `assets/` directory at the bundle root and scaffolds asset files from provider packs into it.
+When this capability is declared, Greentic Setup scaffolds an `assets/` directory at the bundle root and copies provider pack assets into it (for example `assets/webchat-gui/`). You can then modify these files freely; bundle-level asset files override pack defaults at runtime.
 
 ```yaml title="bundle.yaml"
 capabilities:
   - greentic.cap.bundle_assets.read.v1
 ```
 
-Specifically, assets from provider packs (such as `assets/webchat-gui/` entries) are copied into the bundle-level `assets/` directory. This gives you a place to customize provider assets -- for example, webchat-gui skins and configuration files -- without modifying the original pack contents.
-
-**How it works:**
-
-- During setup, provider packs that include asset directories (e.g., `assets/webchat-gui/`) have those files scaffolded into the bundle root `assets/` directory.
-- You can then edit these files freely. Bundle-level asset files override pack defaults at runtime.
-- This is useful for customizing the look and feel of webchat widgets, adjusting configuration, or applying branded skins.
-
 <Aside type="tip">
-After setup scaffolds the assets, you can safely modify them. Your bundle-level customizations take precedence over the pack defaults when the runtime loads assets.
+After setup scaffolds the assets, your bundle-level customizations take precedence over the pack defaults when the runtime loads them.
 </Aside>
 
-## Setup Flow Execution
+## Roadmap
 
-When you run `gtc setup`, it:
+Greentic Setup Phase 1a delivers the dashboard shell, Overview view, and inline wizard. Upcoming work in **Phase 1b** includes:
 
-<Steps>
-
-1. **Loads bundle configuration**
-
-   Reads `greentic.demo.yaml` to find providers.
-
-2. **Validates answers**
-
-   Checks all required fields are present.
-
-3. **Runs setup flows**
-
-   Executes each provider's `setup_flow` (e.g., webhook registration).
-
-4. **Stores credentials**
-
-   Saves credentials to the configured secrets store.
-
-5. **Runs verification**
-
-   Executes `verify_flow` to confirm setup worked.
-
-</Steps>
-
-## Selective Setup
-
-### Setup Single Provider
-
-```bash
-gtc setup --provider messaging-telegram ./my-bundle
-```
-
-### Skip Specific Provider
-
-```bash
-gtc setup --skip messaging-teams ./my-bundle
-```
-
-### Re-run Setup
-
-```bash
-# Force re-setup (useful after URL changes)
-gtc start ./my-bundle --force-setup
-```
+- **Providers** — browse all packs in the bundle, enable or disable individual providers, re-run setup for a single provider without touching others.
+- **Secrets** — full CRUD for the secrets store: create, read (masked), update, and delete individual secret entries per scope.
+- **Capabilities** — toggle capability flags per pack and inspect the dependency graph.
+- **Rebuild trigger** — request a hot reload of the running bundle from the dashboard without restarting the full runtime.
 
 ## Troubleshooting
 
-### Webhook Registration Failed
+### Browser does not open
+
+If your system does not support automatic browser launch, copy the URL printed to the terminal and paste it into your browser manually:
+
+```
+Greentic Setup running at http://127.0.0.1:52341/?token=...
+```
+
+### Webhook registration failed
 
 ```
 Error: Failed to register webhook: 401 Unauthorized
 ```
 
-Check that your bot token is correct and not expired.
+Check that your bot token is correct and has not expired.
 
-### Missing Required Field
+### Missing required field
 
 ```
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-Ensure all required fields are in your answers file.
+Ensure all required fields are filled in the wizard or present in your answers file.
 
-### Public URL Not Accessible
+### Public URL not accessible
 
 ```
 Error: Webhook verification failed: Connection refused
 ```
 
-Ensure your public URL is accessible from the internet. Check ngrok/cloudflared is running.
+Your public URL must be reachable from the internet. Check that ngrok or cloudflared is running.
 
-### Credential Not Found
+### Credential not found
 
 ```
 Error: Secret 'slack_bot_token' not found
@@ -329,16 +285,8 @@ Error: Secret 'slack_bot_token' not found
 
 Run `gtc setup` to configure the provider, or check your answers file.
 
-## Best Practices
+## Next steps
 
-1. **Use answers files in CI/CD** - Avoid interactive prompts in automated pipelines
-2. **Keep credentials secure** - Don't commit answers files with real tokens to git
-3. **Use environment variables** - Reference secrets via `$ENV_VAR` in answers
-4. **Test with dry-run** - Preview setup before making changes
-5. **Regenerate on URL change** - Re-run setup when your public URL changes
-
-## Next Steps
-
-- [gtc start](/cli/start/) - Run the runtime server
-- [Telegram Setup](/providers/messaging/telegram/) - Detailed Telegram guide
-- [Slack Setup](/providers/messaging/slack/) - Detailed Slack guide
+- [gtc start](/cli/start/) — run the runtime server after setup is complete
+- [Telegram Setup](/providers/messaging/telegram/) — detailed Telegram configuration guide
+- [Slack Setup](/providers/messaging/slack/) — detailed Slack configuration guide
