@@ -51,6 +51,7 @@ The `gtc` binary composes subcommands from multiple repos:
 | `gtc wizard` | `greentic-dev` | Bundle creation wizard |
 | `gtc setup` | `greentic-setup` | Provider setup/configuration |
 | `gtc start` | `greentic-start` | Runtime server |
+| `gtc admin` | `greentic` + `greentic-deployer` + `greentic-start` | Admin access, health, status, and runtime control |
 | `gtc pack` | `greentic-pack` | Pack building |
 | `gtc flow` | `greentic-flow` | Flow validation |
 
@@ -76,6 +77,7 @@ Options:
 | `wizard` | Create a new bundle from wizard answers |
 | `setup` | Configure providers in a bundle |
 | `start` | Start the runtime server |
+| `admin` | Inspect and use the runtime admin API |
 | `pack` | Pack management (build, verify, publish) |
 | `flow` | Flow management (validate, doctor) |
 
@@ -171,6 +173,7 @@ gtc --help
 gtc wizard --help
 gtc setup --help
 gtc start --help
+gtc admin --help
 ```
 
 ## Next Steps
@@ -178,4 +181,5 @@ gtc start --help
 - [gtc wizard](/cli/wizard/) - Bundle creation
 - [gtc setup](/cli/setup/) - Provider setup
 - [gtc start](/cli/start/) - Runtime server
+- [Admin Access](/admin/admin-access/) - Runtime admin API access and usage
 - [Building Packs](/cli/building-packs/) - Pack management
