@@ -108,6 +108,12 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Extensions',
+					items: [
+						{ label: 'Bundle Extensions', slug: 'extensions/bundle-extensions' },
+					],
+				},
+				{
 					label: 'Messaging Providers',
 					items: [
 						{ label: 'Overview', slug: 'providers/messaging/overview' },
