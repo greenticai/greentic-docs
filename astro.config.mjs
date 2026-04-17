@@ -110,7 +110,11 @@ export default defineConfig({
 				{
 					label: 'Extensions',
 					items: [
+						{ label: 'Designer Extensions', slug: 'extensions/designer-extensions' },
+						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
+						{ label: 'Adaptive Cards', slug: 'extensions/adaptive-cards' },
 						{ label: 'Bundle Extensions', slug: 'extensions/bundle-extensions' },
+						{ label: 'Writing an Extension', slug: 'extensions/writing-extensions' },
 					],
 				},
 				{
