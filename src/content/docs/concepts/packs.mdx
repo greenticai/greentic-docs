@@ -344,6 +344,30 @@ reject_unsigned = true
 Setting `reject_unsigned = false` in production is strongly discouraged. Unsigned packs bypass all authenticity checks.
 </Aside>
 
+## Related: Extension Packs (`.gtxpack`)
+
+Runtime `.gtpack` archives are not the only pack format in the ecosystem. The
+Greentic Designer and `gtdx` CLI distribute **extensions** as `.gtxpack`
+artifacts. There are **four extension kinds** — `DesignExtension`,
+`BundleExtension`, `DeployExtension`, and `ProviderExtension` (Wave A) — each
+shipping a WASM guest component plus a `describe.json` manifest.
+
+Extension packs are built with a **deterministic writer**: entries are sorted
+by path, timestamps zeroed, and text files LF-normalised, so two builds of the
+same source tree hash to the same bytes.
+
+`gtdx` resolves extensions from three registry backends:
+
+| Backend | Layout | When |
+|---------|--------|------|
+| **Local filesystem** | `~/.greentic/extensions/<kind>/<id>/<version>/` (hierarchical) | Dev loop, `gtdx install --from-path` |
+| **Greentic Store** | HTTPS API, signed manifests | Production / shared teams |
+| **OCI registry** | `oras` blobs (e.g. GHCR) | CI and private distribution |
+
+A `ProviderExtension` uniquely also bundles a runtime `.gtpack` inside the
+`.gtxpack` — see [Provider Extensions](/extensions/provider-extensions/) for
+the full layout.
+
 ## Best Practices
 
 1. **Version semantically** — use [semver](https://semver.org/) so consumers can declare compatible version ranges
