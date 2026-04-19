@@ -9,18 +9,27 @@ deployment target. Instead, it loads signed WebAssembly Component Model
 artifacts (`.gtxpack`) at runtime that teach it how to author content,
 package output, and deploy results.
 
-Three extension kinds share one foundation:
+Four extension kinds share one foundation:
 
 | Kind | Teaches the designer to... | Example reference impls |
 |---|---|---|
 | **design-extension** | Author content (cards, flows, digital workers, telco-x schemas) | [`greentic.adaptive-cards`](./adaptive-cards/) |
 | **bundle-extension** | Package designer output into deployable Application Packs | [`bundle-standard`](./bundle-extensions/) |
-| **deploy-extension** | Ship Application Packs to a target environment | (future: AWS, GCP, Cisco on-prem) |
+| **deploy-extension** | Ship Application Packs to a target environment | [`deploy-desktop`](./deploy-extensions/) (AWS / GCP / Cisco to follow) |
+| **provider-extension** | Add new messaging or events providers to the runtime | See [Provider Extensions](./provider-extensions/) |
 
 Each extension kind has its own WIT sub-interface, its own call site in
-the designer, and its own author tutorial — but the install lifecycle,
-permission model, signature verification, and registry/store integration
-are all shared infrastructure.
+the designer (or runtime, for providers), and its own author tutorial —
+but the install lifecycle, permission model, signature verification, and
+registry/store integration are all shared infrastructure.
+
+Scaffolding is consistent across all four kinds:
+
+```bash
+gtdx new my-ext --kind design   # or bundle | deploy | provider
+```
+
+See [`gtdx` CLI reference](./gtdx-cli/) for the full input matrix.
 
 ## How it works
 
@@ -49,10 +58,15 @@ are all shared infrastructure.
 ```
 
 The designer hosts the runtime in-process. On startup it scans
-`~/.greentic/extensions/{design,bundle,deploy}/` for installed
-extensions, validates each `describe.json`, and loads the WASM
-component into a wasmtime `Linker` configured with five host imports
-(logging, i18n, secrets, broker, http) plus WASI.
+`~/.greentic/extensions/{design,bundle,deploy,provider}/` for installed
+extensions, validates each `describe.json`, and loads the
+`wasm32-wasip2` component into a wasmtime `Linker` configured with five
+host imports (logging, i18n, secrets, broker, http) plus WASI.
+
+Guests compiled with the modern `cargo component build` pipeline use
+`mod bindings;` (no `wit_bindgen::generate!` macro). See
+[Writing an Extension](./writing-extensions/) for the current guest
+template.
 
 When the LLM in the designer chat loop calls `validate_card`, the
 designer dispatches that to `runtime.invoke_tool("greentic.adaptive-cards", "validate_card", args_json)`,
@@ -153,5 +167,9 @@ Files land at `~/.greentic/extensions/<kind>/<name>-<version>/`.
 
 - [Adaptive Cards reference extension](./adaptive-cards/)
 - [Bundle Extensions](./bundle-extensions/)
+- [Deploy Extensions](./deploy-extensions/)
+- [Provider Extensions](./provider-extensions/)
 - [`gtdx` CLI reference](./gtdx-cli/)
 - [Writing your own extension](./writing-extensions/)
+- [Publishing extensions](./publishing-extensions/)
+- [GitHub Action](./github-action/)
