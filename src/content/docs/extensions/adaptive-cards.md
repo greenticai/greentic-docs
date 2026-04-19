@@ -46,10 +46,23 @@ crates/adaptive-card-extension/build.sh
 ls -lh crates/adaptive-card-extension/greentic.adaptive-cards-1.6.0.gtxpack
 ```
 
-Prerequisites: Rust 1.94, `cargo-component` ≥ 0.20, `wasm32-wasip1`
+Prerequisites: Rust 1.94, `cargo-component` ≥ 0.20, `wasm32-wasip2`
 target. The build script wraps `cargo component build --release` and
 zips the output with `describe.json`, schemas, prompts, and i18n into
 the final `.gtxpack`.
+
+### From scratch via `gtdx`
+
+If you want to build a similar design-extension from scratch, start with:
+
+```bash
+gtdx new my-ac-ext --kind design
+```
+
+and implement the same `greentic:extension-design@0.1.0` exports. See
+[Writing an Extension](./writing-extensions/) for the full walkthrough,
+and [Publishing Extensions](./publishing-extensions/) for the distribute
+story.
 
 ## Installing
 
@@ -165,3 +178,5 @@ samples ship in a follow-up.
   for using the same tools from external LLM clients
 - [Designer Extensions overview](./designer-extensions/)
 - [Writing your own extension](./writing-extensions/)
+- [Publishing Extensions](./publishing-extensions/)
+- [`gtdx` CLI reference](./gtdx-cli/)
