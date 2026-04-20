@@ -309,7 +309,7 @@ Handle uploads in flow:
     message: "Here's what I found..."
 ```
 
-## Attachment envelope shape
+## Attachment Envelope Shape
 
 WASM components emit outputs as JSON (serialized to CBOR). The runtime wraps each output into a `ChannelMessageEnvelope` before handing it to the WebChat provider, which in turn serializes the envelope to a DirectLine activity on the wire.
 
@@ -340,18 +340,27 @@ Each attachment entry uses the Bot Framework `{contentType, content}` shape. For
 ```json
 {
   "contentType": "application/vnd.microsoft.card.adaptive",
-  "content": { "$schema": "...", "type": "AdaptiveCard", "version": "1.5", "body": [ ... ] }
+  "content": {
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "type": "AdaptiveCard",
+    "version": "1.5",
+    "body": [
+      { "type": "TextBlock", "text": "Welcome!" }
+    ]
+  }
 }
 ```
 
 ### Minimal Rust component example
 
-The following component output emits an Adaptive Card attachment plus `channelData` and `entities`. All three round-trip to the DirectLine activity reaching the WebChat client:
+The following component output emits an Adaptive Card attachment plus `channelData` and `entities`. All three round-trip to the DirectLine activity reaching the WebChat client.
+
+Schematic: the snippets below illustrate the JSON output shape, not the component entrypoint. Real Greentic components expose operations through their WIT world (via `wit-bindgen`-generated trait impls) — see the component authoring guide for the actual entrypoint.
 
 ```rust
 use serde_json::json;
 
-fn run(_operation: &str) -> serde_json::Value {
+fn build_output() -> serde_json::Value {
     let card = json!({
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         "type": "AdaptiveCard",
@@ -383,6 +392,7 @@ fn run(_operation: &str) -> serde_json::Value {
 Equivalent output using the canonical `extensions` carrier:
 
 ```rust
+// card is the same AdaptiveCard JSON as above
 json!({
     "text": "Here is your card:",
     "extensions": {

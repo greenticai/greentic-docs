@@ -376,18 +376,18 @@ disk に書き出す前に、まず `--dry-run` を使って生成される構�
 </Aside>
 
 {/* TODO: translate — section added from English source in docs/webchat-envelope-shape-and-http-gate */}
-## Component scaffolding: `http_client` capability
+## Component Scaffolding: `http_client` Capability
 
 When scaffolding a new WASM component (for example via `greentic-component new`), the wizard can mark the component as needing outbound HTTP by setting `http_client: true`. This writes the capability declaration into the component manifest.
 
 <Aside type="caution">
-**Desktop runner HTTP gate.** Declaring `http_client: true` is a capability _request_ — the runtime must grant it before the component can actually open outbound sockets. On the **desktop runner profile**, honouring this manifest flag has been a no-op until the HTTP gate fix lands: components that declared `http_client: true` had no `wasi:http/outgoing-handler` implementation linked, and runtime HTTP calls failed.
+**Desktop runner HTTP gate.** Declaring `http_client: true` is a capability _request_ — the runtime must grant it before the component can actually open outbound sockets. On the **desktop runner profile**, honouring this manifest flag has historically been a no-op: components that declared `http_client: true` had no `wasi:http/outgoing-handler` implementation linked, and runtime HTTP calls failed.
 
-As of Greentic runner `N.N.N`, the desktop profile honours the manifest and grants `wasi:http/outgoing-handler@0.2.0` automatically when `http_client: true` is declared. {/* TODO: confirm runner version once Bug 2 PR merges */}
+Starting with Greentic runner `N.N.N` (landing with the desktop HTTP gate fix, not yet released), the desktop profile will honour the manifest and grant `wasi:http/outgoing-handler@0.2.0` automatically when a component declares `http_client: true`. Until that release is available, use the workaround below. {/* TODO: confirm runner version once the desktop HTTP gate fix lands */}
 
-**Until the fix is released, the workaround is** to ship your component with a custom WIT world that imports `wasi:http/outgoing-handler@0.2.0` directly, rather than relying on the scaffolded manifest flag. Once Bug 2 is merged and you are on a runner that includes it, you can drop the custom world and use `http_client: true` as intended.
+**Workaround until the fix ships:** ship your component with a custom WIT world that imports `wasi:http/outgoing-handler@0.2.0` directly, rather than relying on the scaffolded manifest flag. Once you are on a runner that includes the desktop HTTP gate manifest-honouring fix, you can drop the custom world and use `http_client: true` as intended.
 
-For components that emit Adaptive Cards via HTTP fetches (e.g. RAG lookups before returning an `attachments[]` array), see the [WebChat provider's Attachment envelope shape](/providers/messaging/webchat/#attachment-envelope-shape) section for the expected component-output layout.
+For components that emit Adaptive Cards via HTTP fetches (e.g. RAG lookups before returning an `attachments[]` array), see the [WebChat provider's Attachment Envelope Shape](/ja/providers/messaging/webchat/#attachment-envelope-shape) section for the expected component-output layout.
 </Aside>
 
 ## Troubleshooting
