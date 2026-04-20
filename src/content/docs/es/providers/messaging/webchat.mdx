@@ -283,6 +283,104 @@ Maneja las subidas en un flow:
     message: "Here's what I found..."
 ```
 
+{/* TODO: translate — section added from English source in docs/webchat-envelope-shape-and-http-gate */}
+## Attachment envelope shape
+
+WASM components emit outputs as JSON (serialized to CBOR). The runtime wraps each output into a `ChannelMessageEnvelope` before handing it to the WebChat provider, which in turn serializes the envelope to a DirectLine activity on the wire.
+
+Structured, provider-aware data travels in the envelope's `extensions` map — **not** at the top level of the component output. `extensions` is the canonical carrier: it is provider-agnostic, round-trips end-to-end, and the WebChat provider passes known keys through to DirectLine verbatim (no stripping, no normalization).
+
+### Well-known extension keys
+
+The keys below are declared in `greentic-types` (`src/messaging/extensions.rs`) and are the source of truth. Downstream consumers must tolerate unknown keys and MUST round-trip them — stripping unrecognized keys is a bug.
+
+| Key | Shape | Purpose |
+|-----|-------|---------|
+| `adaptive_card` | Object | Adaptive Card JSON. Replaces the legacy `metadata["adaptive_card"]` string convention. |
+| `channel_data` | Object | Bot Framework / DirectLine `channelData` — free-form per-channel metadata. |
+| `entities` | Array | Bot Framework `entities` array (mentions, structured annotations, ...). |
+| `attachments` | Array | Provider-native attachments with inline `content`. Preferred over the URL-only `envelope.attachments` when inline content is required (e.g. Adaptive Cards). |
+
+Other well-known keys — `rag`, `suggested_actions`, `speak`, `input_hint` — follow the same pass-through rule.
+
+### Accepted shapes from components
+
+The WebChat provider accepts attachments in **either** of two shapes. Both round-trip to the DirectLine activity identically:
+
+1. **Top-level `attachments` array** on the component output — convenient when you are already writing DirectLine-native JSON.
+2. **`extensions["attachments"]` array** on the envelope — the canonical carrier, useful when other extension keys are set alongside (`channel_data`, `entities`, ...).
+
+Each attachment entry uses the Bot Framework `{contentType, content}` shape. For an Adaptive Card:
+
+```json
+{
+  "contentType": "application/vnd.microsoft.card.adaptive",
+  "content": { "$schema": "...", "type": "AdaptiveCard", "version": "1.5", "body": [ ... ] }
+}
+```
+
+### Minimal Rust component example
+
+The following component output emits an Adaptive Card attachment plus `channelData` and `entities`. All three round-trip to the DirectLine activity reaching the WebChat client:
+
+```rust
+use serde_json::json;
+
+fn run(_operation: &str) -> serde_json::Value {
+    let card = json!({
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.5",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "Welcome!",
+                "weight": "Bolder",
+                "size": "Medium"
+            }
+        ]
+    });
+
+    json!({
+        "text": "Here is your card:",
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": card
+            }
+        ],
+        "channelData": { "source": "my-component" },
+        "entities": [ { "type": "mention", "id": "user-123" } ]
+    })
+}
+```
+
+Equivalent output using the canonical `extensions` carrier:
+
+```rust
+json!({
+    "text": "Here is your card:",
+    "extensions": {
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": card
+            }
+        ],
+        "channel_data": { "source": "my-component" },
+        "entities": [ { "type": "mention", "id": "user-123" } ]
+    }
+})
+```
+
+<Aside type="note">
+Use `extensions["attachments"]` (the canonical form) when your component also sets `channel_data`, `entities`, `suggested_actions`, or any other well-known extension key. The top-level `attachments` shape is accepted for backwards compatibility with DirectLine-native component authors.
+</Aside>
+
+<Aside type="tip">
+The provider does not strip or normalize known extension keys — emitted fields round-trip to DirectLine verbatim. If an Adaptive Card renders in a developer tool but not in WebChat, check that your component output matches one of the two accepted shapes above rather than, for example, embedding the card under `metadata["adaptive_card"]`.
+</Aside>
+
 ## Integración con APIs
 
 ### API de JavaScript
