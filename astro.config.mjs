@@ -175,6 +175,11 @@ export default defineConfig({
 						{ label: 'Pack Format', slug: 'reference/pack-format' },
 						{ label: 'WIT Interfaces', slug: 'reference/wit-interfaces' },
 						{ label: 'Configuration', slug: 'reference/configuration' },
+						{
+							label: 'CLI --help (auto-generated)',
+							collapsed: true,
+							autogenerate: { directory: 'reference/cli' },
+						},
 					],
 				},
 			],
