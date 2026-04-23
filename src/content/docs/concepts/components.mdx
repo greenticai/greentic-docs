@@ -23,6 +23,15 @@ A **Component** is a portable WebAssembly (WASM) building block that implements 
 | **Tool** | MCP tool implementation | Database query, API call |
 | **Operator** | Message transformation | Button handling, card rendering |
 
+<Aside>
+In addition to runtime components (above), Greentic has a second WASM surface:
+**designer extensions**, distributed as `.gtxpack` artifacts. There are four
+kinds — `DesignExtension`, `BundleExtension`, `DeployExtension`, and
+`ProviderExtension` — authored with `cargo-component` against the
+`greentic:extension-*@0.1.0` WIT packages. See
+[Extensions](/extensions/writing-extensions/) for that authoring surface.
+</Aside>
+
 ## Creating a Component
 
 ### Project Setup
@@ -50,6 +59,8 @@ my-processor/
 
 ### Cargo.toml
 
+Greentic components are authored with [`cargo-component`](https://github.com/bytecodealliance/cargo-component), which generates bindings from WIT at build time and emits a `wasm32-wasip2` component binary.
+
 ```toml title="Cargo.toml"
 [package]
 name = "my-processor"
@@ -60,9 +71,16 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-wit-bindgen = "0.53"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+wit-bindgen-rt = { version = "0.47", features = ["bitflags"] }
+
+[package.metadata.component]
+package = "greentic:my-processor"
+
+[package.metadata.component.target]
+path = "wit"
+world = "processor"
 
 [profile.release]
 opt-level = "s"
@@ -97,17 +115,17 @@ world processor {
 
 ### Implementation
 
+With `cargo-component`, bindings are generated into `src/bindings.rs` at build time. You declare them with `mod bindings;` and implement the `Guest` trait from the generated module.
+
 ```rust title="src/lib.rs"
-use wit_bindgen::generate;
+#[allow(warnings)]
+mod bindings;
 
-generate!({
-    world: "processor",
-    path: "wit",
-});
+use bindings::exports::greentic::my_processor::types::{Guest, Input, Output};
 
-struct MyProcessor;
+struct Component;
 
-impl Guest for MyProcessor {
+impl Guest for Component {
     fn process(input: Input) -> Output {
         // Your processing logic here
         let result = format!("Processed: {}", input.message);
@@ -119,14 +137,14 @@ impl Guest for MyProcessor {
     }
 }
 
-export!(MyProcessor);
+bindings::export!(Component with_types_in bindings);
 ```
 
 ### Building
 
 ```bash
-# Build for WASM target
-cargo build --target wasm32-wasip2 --release
+# Build component with cargo-component (wraps cargo with WIT bindgen + wasip2)
+cargo component build --release
 
 # Output: target/wasm32-wasip2/release/my_processor.wasm
 ```
@@ -135,28 +153,29 @@ cargo build --target wasm32-wasip2 --release
 
 ### Async Operations
 
-Components can perform async operations using WASI interfaces:
+Components can perform async operations using WASI interfaces. With `cargo-component`, the generated bindings live in `mod bindings;` and expose async imports exactly as declared in the WIT world:
 
 ```rust
-use wit_bindgen::generate;
+#[allow(warnings)]
+mod bindings;
 
-generate!({
-    world: "async-processor",
-    path: "wit",
-    async: true,
-});
+use bindings::greentic::http::outgoing::fetch;
+use bindings::exports::greentic::async_processor::types::{Guest, Input, Output};
 
-impl Guest for AsyncProcessor {
-    async fn process(input: Input) -> Output {
-        // Async HTTP call
-        let response = http_fetch(&input.url).await;
+struct Component;
+
+impl Guest for Component {
+    fn process(input: Input) -> Output {
+        let response = fetch(&input.url).expect("http fetch failed");
 
         Output {
-            result: response.body,
+            result: String::from_utf8_lossy(&response.body).into_owned(),
             success: response.status == 200,
         }
     }
 }
+
+bindings::export!(Component with_types_in bindings);
 ```
 
 ### State Management

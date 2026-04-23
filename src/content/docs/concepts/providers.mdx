@@ -323,8 +323,61 @@ Providers communicate via NATS:
 - [Email (SendGrid)](/providers/events/email-sendgrid/)
 - [SMS (Twilio)](/providers/events/sms-twilio/)
 
+## Providers as Extensions (Wave A)
+
+Starting with Wave A of the designer extension system, providers can **also**
+ship as the 4th extension kind: `ProviderExtension`. This lets the designer,
+wizards, and `gtdx install` discover a provider's channels, triggers, and
+event schemas at design time — while the same `.gtxpack` also bundles the
+runtime `.gtpack` that `greentic-runner` executes.
+
+A provider extension is a single `.gtxpack` artifact with two WASM payloads:
+
+- **Guest component** (`extension.wasm`) — exports the
+  `greentic:extension-provider@0.1.0` interfaces (`messaging`, `event-source`,
+  `event-sink`) so the designer can enumerate channels/triggers/events and
+  fetch their JSON schemas without executing the runtime.
+- **Runtime pack** (`runtime/provider.gtpack`) — the ordinary `.gtpack`
+  containing the provider's ingress/egress/operator WASM components. Loaded
+  unchanged by `greentic-runner`.
+
+The `describe.json` manifest declares the runtime pack via a required
+`runtime.gtpack` field:
+
+```json
+{
+  "apiVersion": "greentic.ai/v1",
+  "kind": "ProviderExtension",
+  "runtime": {
+    "component": "extension.wasm",
+    "gtpack": {
+      "file": "runtime/provider.gtpack",
+      "sha256": "abc123…",
+      "pack_id": "myco.my-provider-runtime@0.1.0",
+      "component_version": "0.6.0"
+    }
+  }
+}
+```
+
+**Schema invariant:** `kind == "ProviderExtension"` ↔ `runtime.gtpack` is
+present. Any other `kind` rejects the field, and a `ProviderExtension`
+without it fails to install.
+
+On `gtdx install`, the guest lands in
+`~/.greentic/extensions/provider/<id>/<version>/` while the bundled runtime
+pack is dropped into `~/.greentic/runtime/packs/providers/gtdx/`, where the
+runner's 30 s poll picks it up. The existing pack components described above
+(ingress / egress / operator) all still apply — nothing about the runtime
+contract changes. The provider extension kind is purely a distribution and
+design-time discovery layer on top.
+
+See [Provider Extensions](/extensions/provider-extensions/) for the full
+layout, the 6 worlds, and the packaging workflow.
+
 ## Next Steps
 
 - [Messaging Providers Overview](/providers/messaging/overview/)
 - [Events Providers Overview](/providers/events/overview/)
+- [Provider Extensions](/extensions/provider-extensions/)
 - [Multi-Tenancy](/concepts/multi-tenancy/)

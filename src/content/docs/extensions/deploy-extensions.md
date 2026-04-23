@@ -5,6 +5,22 @@ description: Declare additional deployment targets for greentic-deployer via plu
 
 Deploy extensions let platforms, clouds, and local runtimes declare themselves as deployment targets for `greentic-deployer` without modifying the deployer itself. Each extension ships a signed `.gtxpack` archive that advertises one or more targets, exposes their credential and configuration JSON Schemas, and declares how `deploy` / `poll` / `rollback` should run.
 
+Deploy extensions sit alongside the runtime pack workflow — the deployer
+consumes the `.gtpack` artifacts produced by bundle extensions (or the
+legacy `greentic-bundle build` path) and ships them to the target
+environment.
+
+Scaffold a new deploy extension with:
+
+```bash
+gtdx new my-deploy-ext --kind deploy
+```
+
+See the [`gtdx` CLI reference](./gtdx-cli/) and
+[Writing an Extension](./writing-extensions/) for the full authoring
+walkthrough. The rest of this page focuses on the deploy-specific
+surface.
+
 ## How it works
 
 `greentic-deployer` ships with 12 built-in backends (AWS, Azure, GCP, Terraform, Helm, single-VM, Desktop, and six more). Deploy extensions sit on top of that core: a small WebAssembly component declares new target IDs and answers four metadata questions, while actual execution is delegated to either a built-in backend (Mode A) or to the extension itself (Mode B).
@@ -123,18 +139,29 @@ Local docker-compose and podman do not require any credentials. The credential s
 
 ## Writing a new deploy extension
 
-The `deploy-desktop` reference extension is intentionally minimal — copy it as a template:
+Start with `gtdx new my-deploy-ext --kind deploy`. That generates a
+`wasm32-wasip2` guest crate (`mod bindings;`, `cargo-component` build)
+with a working `describe.json`, `schemas/`, `src/lib.rs`, and
+`build.sh` wired up for the `greentic:extension-deploy@0.1.0` contract.
+Then:
 
-1. Clone `greentic-biz/greentic-deployer-extensions` and start a new directory under `reference-extensions/`.
-2. Rename the crate in `Cargo.toml` (`name`, `package.metadata.component.package`).
-3. Update `describe.json` metadata, `capabilities.offered`, and `contributions.targets[]`.
-4. Replace the four files in `schemas/` with your target's credential + config JSON Schemas.
-5. Update `wit/world.wit` imports if your extension needs host capabilities (`secrets`, `http`).
-6. Rewrite `src/lib.rs` to implement the four `targets::Guest` methods for your targets.
-7. Update `build.sh` constants (`ID`, output path).
-8. Run `./ci/local_check.sh` in the repo root to verify everything lands clean.
+1. Update `describe.json` metadata, `capabilities.offered`, and
+   `contributions.targets[]` to describe your targets.
+2. Replace the files in `schemas/` with your target's credential +
+   config JSON Schemas.
+3. Update `wit/world.wit` imports if your extension needs host
+   capabilities (`secrets`, `http`).
+4. Implement the four `targets::Guest` methods in `src/lib.rs` for your
+   targets.
+5. If you're porting from the existing `deploy-desktop` reference, the
+   companion repo [`greentic-biz/greentic-deployer-extensions`](https://github.com/greentic-biz/greentic-deployer-extensions)
+   has a fully worked example under `reference-extensions/deploy-desktop/`.
 
-For Mode B (full WASM execution), also implement `deployment::Guest::{deploy, poll, rollback}` and request the relevant `permissions.network` / `permissions.secrets` in `describe.json`. The runtime rejects unauthorized host calls. Mode B is a Phase B surface — prerequisites are tracked in the parent migration spec linked below.
+For Mode B (full WASM execution), also implement
+`deployment::Guest::{deploy, poll, rollback}` and request the relevant
+`permissions.network` / `permissions.secrets` in `describe.json`. The
+runtime rejects unauthorized host calls. Mode B is a Phase B surface —
+prerequisites are tracked in the parent migration spec linked below.
 
 ## Phase A scope
 
@@ -159,7 +186,12 @@ For Mode B (full WASM execution), also implement `deployment::Guest::{deploy, po
 
 ## Further reading
 
+- [Designer Extensions overview](./designer-extensions/)
+- [Writing an Extension](./writing-extensions/) — authoring walkthrough for all four kinds
+- [`gtdx` CLI reference](./gtdx-cli/)
+- [Publishing Extensions](./publishing-extensions/)
+- [GitHub Action](./github-action/) — automate publish from CI
+- [Bundle Extensions](./bundle-extensions/) — sibling pattern for packaging Greentic Designer output
 - Parent migration spec: [`greenticai/greentic-deployer/docs/superpowers/specs/2026-04-17-deploy-extension-migration-design.md`](https://github.com/greenticai/greentic-deployer/blob/main/docs/superpowers/specs/2026-04-17-deploy-extension-migration-design.md) — authoritative design document (Mode A vs Mode B semantics, canonical backend strings, WIT contract usage).
 - Host integration PR: [`greenticai/greentic-deployer#121`](https://github.com/greenticai/greentic-deployer/pull/121) — the `src/ext/` module, `BuiltinBackendId::Desktop` variant, and `Ext` CLI subcommand.
 - Reference extension repo: [`greentic-biz/greentic-deployer-extensions`](https://github.com/greentic-biz/greentic-deployer-extensions) — companion repo for shippable `.gtxpack` artifacts.
-- [Bundle Extensions](/extensions/bundle-extensions) — sibling pattern for packaging Greentic Designer output.

@@ -111,11 +111,14 @@ export default defineConfig({
 					label: 'Extensions',
 					items: [
 						{ label: 'Designer Extensions', slug: 'extensions/designer-extensions' },
-						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
-						{ label: 'Adaptive Cards', slug: 'extensions/adaptive-cards' },
 						{ label: 'Bundle Extensions', slug: 'extensions/bundle-extensions' },
 						{ label: 'Deploy Extensions', slug: 'extensions/deploy-extensions' },
+						{ label: 'Provider Extensions', slug: 'extensions/provider-extensions' },
 						{ label: 'Writing an Extension', slug: 'extensions/writing-extensions' },
+						{ label: 'Publishing Extensions', slug: 'extensions/publishing-extensions' },
+						{ label: 'GitHub Action', slug: 'extensions/github-action' },
+						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
+						{ label: 'Adaptive Cards (Example)', slug: 'extensions/adaptive-cards' },
 					],
 				},
 				{
