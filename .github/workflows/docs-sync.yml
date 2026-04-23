@@ -1,0 +1,140 @@
+name: Nightly Docs Sync
+
+# Keep auto-generated reference pages in sync with the installed CLI binaries
+# so docs don't go stale between releases. Runs nightly at 03:00 UTC (15 min
+# after greentic-messaging-providers' nightly cron to avoid clashing).
+#
+# The job installs the latest Greentic CLI binaries via `cargo binstall`, runs
+# `scripts/sync-cli-help.mjs` for each, and opens a PR if the generated
+# reference pages under `src/content/docs/reference/cli/` changed.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      clis:
+        description: "Comma-separated CLI names to sync (default: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # List of Greentic CLIs to sync. Edit here to extend coverage — the step
+  # below installs whatever's in this list via cargo binstall and then runs
+  # the reference generator against each. Override via workflow_dispatch
+  # `clis` input.
+  DEFAULT_CLIS: "gtc,greentic-start,greentic-pack,greentic-secrets,greentic-bundle,greentic-flow,greentic-component,greentic-setup"
+
+jobs:
+  sync:
+    name: Sync CLI --help reference pages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install cargo-binstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
+            | bash
+
+      - name: Resolve CLI list
+        id: clis
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.clis }}" ]; then
+            echo "list=${{ github.event.inputs.clis }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "list=${DEFAULT_CLIS}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Greentic CLIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          IFS=',' read -ra CLIS <<<"${{ steps.clis.outputs.list }}"
+          for cli in "${CLIS[@]}"; do
+            cli_trimmed="$(echo "$cli" | xargs)"
+            if [ -z "$cli_trimmed" ]; then continue; fi
+            echo "::group::binstall $cli_trimmed"
+            # `|| true` so a missing crate doesn't fail the whole matrix; we
+            # skip the sync step for CLIs that didn't install.
+            cargo binstall -y --force "$cli_trimmed" || \
+              echo "::warning::failed to install $cli_trimmed — skipping"
+            echo "::endgroup::"
+          done
+
+      - name: Generate reference pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          IFS=',' read -ra CLIS <<<"${{ steps.clis.outputs.list }}"
+          for cli in "${CLIS[@]}"; do
+            cli_trimmed="$(echo "$cli" | xargs)"
+            if [ -z "$cli_trimmed" ]; then continue; fi
+            if ! command -v "$cli_trimmed" >/dev/null 2>&1; then
+              echo "::warning::$cli_trimmed not on PATH — skipping page gen"
+              continue
+            fi
+            node scripts/sync-cli-help.mjs --cli "$cli_trimmed"
+          done
+
+      - name: Validate docs build
+        shell: bash
+        run: npm run build
+
+      - name: Detect changes
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/content/docs/reference/cli/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- src/content/docs/reference/cli/
+          fi
+
+      - name: Open pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automated/docs-sync
+          base: main
+          commit-message: "docs: refresh CLI --help reference pages"
+          title: "docs: refresh CLI --help reference pages"
+          body: |
+            Automated refresh of `src/content/docs/reference/cli/*.md` from the
+            latest Greentic CLI binaries installed via `cargo binstall`.
+
+            CLIs synced: `${{ steps.clis.outputs.list }}`.
+
+            Raised by the nightly `docs-sync.yml` workflow. Curated pages in
+            `src/content/docs/cli/*.mdx` are untouched. If the diff looks
+            wrong (binary regressed, flag removed without deprecation), treat
+            that as a signal, not just a doc update.
+          labels: |
+            docs
+            automation
+          delete-branch: true
