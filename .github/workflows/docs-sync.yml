@@ -49,10 +49,21 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Bootstrap Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Install cargo-binstall
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
           curl -L --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
             | bash
@@ -83,6 +94,16 @@ jobs:
               echo "::warning::failed to install $cli_trimmed — skipping"
             echo "::endgroup::"
           done
+          # gtc is a thin router that delegates to companion binaries
+          # (greentic-dev, greentic-operator, greentic-setup, etc.). Without
+          # `gtc install` those delegations fail with `exec: no such file`,
+          # and the --help pages come out incomplete. Run it so subcommand
+          # help text renders fully.
+          if command -v gtc >/dev/null 2>&1; then
+            echo "::group::gtc install (populate companion binaries)"
+            gtc install || echo "::warning::gtc install failed — subcommand help may be incomplete"
+            echo "::endgroup::"
+          fi
 
       - name: Generate reference pages
         shell: bash
