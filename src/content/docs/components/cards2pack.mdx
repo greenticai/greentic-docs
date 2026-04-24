@@ -14,6 +14,18 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 - Auto-translates cards via `greentic-i18n-translator`
 - Packages everything into a deployable `.gtpack`
 
+<Aside type="note" title="Also available as an embedded WASM path">
+As of `bundle-standard@0.2.0+`, the same cards → flow → `.gtpack` conversion
+also runs **inside a WASM sandbox** via `greentic-bundle ext render`. The
+Greentic Designer uses this embedded path internally (no `greentic-cards2pack`
+subprocess is invoked from the designer anymore).
+
+The standalone CLI documented below remains fully supported for direct use —
+CI pipelines, ad-hoc packaging, external integrations, and standalone authoring.
+Both paths share the same pure-Rust conversion logic (`cards2pack-core` library
+in the `greentic-bundle` workspace) and produce identical output.
+</Aside>
+
 ## Installation
 
 ```bash

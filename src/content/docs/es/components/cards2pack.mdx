@@ -1,37 +1,49 @@
 ---
 title: cards2pack
-description: Convierte Adaptive Cards en packs de Greentic
+description: Convert Adaptive Cards to Greentic packs
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Resumen
+## Overview
 
-**cards2pack** es una herramienta CLI que convierte archivos JSON de Adaptive Card en packs de Greentic. Hace lo siguiente:
+**cards2pack** is a CLI tool that converts Adaptive Card JSON files into Greentic packs. It:
 
-- Escanea cards, construye un grafo de dependencias y genera flows `.ygtc`
-- Extrae cadenas traducibles para i18n
-- Traduce automáticamente cards mediante `greentic-i18n-translator`
-- Empaqueta todo en un `.gtpack` listo para desplegar
+- Scans cards, builds a dependency graph, generates `.ygtc` flows
+- Extracts translatable strings for i18n
+- Auto-translates cards via `greentic-i18n-translator`
+- Packages everything into a deployable `.gtpack`
 
-## Instalación
+<Aside type="note" title="Also available as an embedded WASM path">
+As of `bundle-standard@0.2.0+`, the same cards → flow → `.gtpack` conversion
+also runs **inside a WASM sandbox** via `greentic-bundle ext render`. The
+Greentic Designer uses this embedded path internally (no `greentic-cards2pack`
+subprocess is invoked from the designer anymore).
+
+The standalone CLI documented below remains fully supported for direct use —
+CI pipelines, ad-hoc packaging, external integrations, and standalone authoring.
+Both paths share the same pure-Rust conversion logic (`cards2pack-core` library
+in the `greentic-bundle` workspace) and produce identical output.
+</Aside>
+
+## Installation
 
 ```bash
 cargo install greentic-cards2pack
 ```
 
-Herramientas requeridas:
+Required tools:
 
 ```bash
 cargo install greentic-flow greentic-pack
 cargo install greentic-i18n-translator  # optional, for --auto-translate
 ```
 
-## Inicio rápido
+## Quick Start
 
 <Steps>
 
-1. **Crear Adaptive Cards**
+1. **Create Adaptive Cards**
 
    ```json title="cards/welcome.json"
    {
@@ -51,7 +63,7 @@ cargo install greentic-i18n-translator  # optional, for --auto-translate
    }
    ```
 
-2. **Generar el pack**
+2. **Generate pack**
 
    ```bash
    greentic-cards2pack generate \
@@ -60,7 +72,7 @@ cargo install greentic-i18n-translator  # optional, for --auto-translate
      --name my-pack
    ```
 
-3. **Salida**
+3. **Output**
 
    ```
    my-pack/
@@ -73,61 +85,61 @@ cargo install greentic-i18n-translator  # optional, for --auto-translate
 
 </Steps>
 
-## Referencia CLI
+## CLI Reference
 
 ### `generate`
 
-Comando principal: escanea cards, genera flows y construye el pack.
+Main command — scan cards, generate flows, build pack.
 
 ```bash
 greentic-cards2pack generate [OPTIONS]
 ```
 
-| Flag | Descripción |
+| Flag | Description |
 |------|-------------|
-| `--cards <DIR>` | Directorio con archivos JSON de Adaptive Card (requerido) |
-| `--out <DIR>` | Directorio de workspace de salida (requerido) |
-| `--name <NAME>` | Nombre del pack (requerido) |
-| `--strict` | Produce errores por destinos faltantes, duplicados o JSON no válido |
-| `--group-by <MODE>` | Agrupación de flows: `folder` o `flow-field` |
-| `--default-flow <NAME>` | Nombre del flow por defecto para cards sin agrupar |
-| `--prompt` | Habilita enrutamiento basado en prompt (agrega nodo `prompt2flow`) |
-| `--prompt-json <FILE>` | JSON de respuestas para enrutamiento por prompt (requiere `--prompt`) |
-| `--auto-translate` | Traduce cards automáticamente con hasta 8 hilos en paralelo (requiere `greentic-i18n-translator`) |
-| `--langs <CODES>` | Códigos de idioma separados por comas; si se omite, traduce a los más de 65 locales compatibles |
-| `--glossary <FILE>` | JSON de glosario para traducciones consistentes |
-| `--verbose` | Imprime salida detallada |
+| `--cards <DIR>` | Directory of Adaptive Card JSON files (required) |
+| `--out <DIR>` | Output workspace directory (required) |
+| `--name <NAME>` | Pack name (required) |
+| `--strict` | Errors on missing targets, duplicates, invalid JSON |
+| `--group-by <MODE>` | Flow grouping: `folder` or `flow-field` |
+| `--default-flow <NAME>` | Default flow name for ungrouped cards |
+| `--prompt` | Enable prompt-based routing (adds `prompt2flow` node) |
+| `--prompt-json <FILE>` | Answers JSON for prompt routing (requires `--prompt`) |
+| `--auto-translate` | Auto-translate cards with up to 8 parallel threads (requires `greentic-i18n-translator`) |
+| `--langs <CODES>` | Comma-separated language codes; omit to translate to all 65+ supported locales |
+| `--glossary <FILE>` | Glossary JSON for consistent translations |
+| `--verbose` | Print detailed output |
 
 ### `extract-i18n`
 
-Extrae cadenas traducibles de las cards en un bundle JSON.
+Extract translatable strings from cards into a JSON bundle.
 
 ```bash
 greentic-cards2pack extract-i18n [OPTIONS]
 ```
 
-| Flag | Descripción |
+| Flag | Description |
 |------|-------------|
-| `--input <DIR>` | Directorio de archivos JSON de cards (requerido) |
-| `--output <FILE>` | Ruta del JSON de salida (por defecto: `i18n/en.json`) |
-| `--prefix <PREFIX>` | Prefijo de clave (por defecto: `card`) |
-| `--include-existing` | Incluye cadenas que ya contienen patrones `$t()` |
-| `--verbose` | Imprime el informe de extracción |
+| `--input <DIR>` | Directory of card JSON files (required) |
+| `--output <FILE>` | Output JSON path (default: `i18n/en.json`) |
+| `--prefix <PREFIX>` | Key prefix (default: `card`) |
+| `--include-existing` | Include strings that already contain `$t()` patterns |
+| `--verbose` | Print extraction report |
 
-## Identificación de Cards
+## Card Identification
 
-Las cards se identifican por (en orden de prioridad):
-1. El campo `greentic.cardId` en el JSON de la card
-2. El nombre base del archivo (por ejemplo, `welcome.json` → `welcome`)
+Cards are identified by (in order of priority):
+1. `greentic.cardId` field in the card JSON
+2. Filename stem (e.g., `welcome.json` → `welcome`)
 
-Las cards se agrupan en flows por:
-- El campo `flow` en los datos de la acción
-- `--group-by folder` (estructura de directorios)
-- El fallback `--default-flow`
+Cards are grouped into flows by:
+- `flow` field in action data
+- `--group-by folder` (directory structure)
+- `--default-flow` fallback
 
-## i18n y traducción automática
+## i18n & Auto-Translation
 
-### Extraer cadenas
+### Extract strings
 
 ```bash
 greentic-cards2pack extract-i18n \
@@ -136,7 +148,7 @@ greentic-cards2pack extract-i18n \
   --verbose
 ```
 
-Salida:
+Output:
 
 ```json title="i18n/en.json"
 {
@@ -147,28 +159,28 @@ Salida:
 ```
 
 <Aside type="note">
-Las claves siguen el patrón `{prefix}.{cardId}.{json_path}.{field}`. El ID de la card proviene de `greentic.cardId` o del nombre del archivo.
+Keys follow the pattern `{prefix}.{cardId}.{json_path}.{field}`. The card ID comes from `greentic.cardId` or the filename.
 </Aside>
 
 <Aside type="tip">
-La extracción siempre lee los archivos originales de cards en disco, no copias reescritas ni intermedias. Esto garantiza que las cadenas extraídas coincidan con lo que escribieron los autores, evitando desviaciones por transformaciones internas.
+Extraction always reads the original card files on disk, not any rewritten or intermediate copies. This ensures the extracted strings match what authors wrote, avoiding drift from internal transformations.
 </Aside>
 
-### Tipos de campos extraídos
+### Extracted field types
 
-| Campo | Origen |
+| Field | Source |
 |-------|--------|
-| `text` | Contenido de TextBlock |
-| `title` | Títulos de acciones, títulos de cards y títulos de toggles |
-| `label` | Etiquetas de inputs |
-| `placeholder` | Placeholders de inputs |
-| `errorMessage` | Errores de validación |
-| `altText` | Texto alternativo de imágenes |
-| `fallbackText` | Contenido fallback |
-| FactSet `title`/`value` | Entradas de facts |
-| ChoiceSet `title` | Opciones de choice |
+| `text` | TextBlock content |
+| `title` | Action titles, card titles, toggle titles |
+| `label` | Input labels |
+| `placeholder` | Input placeholders |
+| `errorMessage` | Validation errors |
+| `altText` | Image alt text |
+| `fallbackText` | Fallback content |
+| FactSet `title`/`value` | Fact entries |
+| ChoiceSet `title` | Choice options |
 
-### Traducción automática (un solo comando)
+### Auto-translate (one command)
 
 ```bash
 greentic-cards2pack generate \
@@ -179,7 +191,7 @@ greentic-cards2pack generate \
   --langs fr,de
 ```
 
-Esto extrae cadenas de los archivos originales de cards, las traduce mediante `greentic-i18n-translator` usando hasta 8 hilos concurrentes y empaqueta todo:
+This extracts strings from the original card files, translates via `greentic-i18n-translator` using up to 8 concurrent threads, and bundles everything:
 
 ```
 my-pack/assets/i18n/
@@ -189,12 +201,12 @@ my-pack/assets/i18n/
 ```
 
 <Aside type="caution">
-Los fallos de traducción no son fatales. El pack sigue construyéndose, con advertencias en `.cards2pack/manifest.json`. En modo no estricto, los errores de `greentic-pack build` tampoco son fatales, por lo que se produce un pack incluso si fallan algunas validaciones.
+Translation failures are non-fatal — the pack still builds, with warnings in `.cards2pack/manifest.json`. In non-strict mode, `greentic-pack build` errors are also non-fatal, so a pack is produced even if some validation checks fail.
 </Aside>
 
-### Glosario
+### Glossary
 
-Usa un glosario para mantener consistentes los nombres de marca y términos técnicos:
+Use a glossary to keep brand names and technical terms consistent:
 
 ```json title="glossary.json"
 {
@@ -210,9 +222,9 @@ greentic-cards2pack generate \
   --glossary glossary.json
 ```
 
-## Generación de Flows
+## Flow Generation
 
-Las secciones de flow generadas se envuelven en marcadores:
+Generated flow sections are wrapped in markers:
 
 ```yaml
 # BEGIN GENERATED (cards2pack)
@@ -222,18 +234,18 @@ Las secciones de flow generadas se envuelven en marcadores:
 # Developer space below (preserved on regen)
 ```
 
-El contenido fuera de los marcadores se conserva cuando regeneras.
+Content outside the markers is preserved when you regenerate.
 
-### Modo estricto
+### Strict mode
 
-Con `--strict`:
-- Los destinos de ruta faltantes producen errores (en lugar de nodos stub)
-- Los valores duplicados de `cardId` producen errores
-- El JSON no válido produce errores
+With `--strict`:
+- Missing route targets cause errors (instead of stub nodes)
+- Duplicate `cardId` values cause errors
+- Invalid JSON causes errors
 
-## Variables de plantilla
+## Template Variables
 
-Usa sintaxis Handlebars para contenido dinámico:
+Use Handlebars syntax for dynamic content:
 
 ```json
 {
@@ -243,10 +255,10 @@ Usa sintaxis Handlebars para contenido dinámico:
 ```
 
 <Aside type="note">
-Las expresiones de plantilla puras como `{{variable}}` se omiten durante la extracción de i18n. El texto mixto como `Hello, {{name}}!` sí se extrae.
+Pure template expressions like `{{variable}}` are skipped during i18n extraction. Mixed text like `Hello, {{name}}!` is extracted.
 </Aside>
 
-## Ejemplo: Formulario de varios pasos con traducción
+## Example: Multi-Step Form with Translation
 
 ```bash
 # Create cards in cards/ directory, then:
@@ -260,11 +272,11 @@ greentic-cards2pack generate \
   --strict
 ```
 
-Consulta el [ejemplo translate-demo](https://github.com/greentic-ai/greentic-cards2pack/tree/master/examples/translate-demo) para ver un recorrido completo.
+See the [translate-demo example](https://github.com/greentic-ai/greentic-cards2pack/tree/master/examples/translate-demo) for a complete walkthrough.
 
-## Siguientes pasos
+## Next Steps
 
-- [Guía de traducción de Cards](/es/i18n/cards-translation/)
-- [Resumen de i18n](/es/i18n/overview/)
-- [Guía de Flows](/es/concepts/flows/)
+- [Cards Translation Guide](/i18n/cards-translation/)
+- [i18n Overview](/i18n/overview/)
+- [Flows Guide](/concepts/flows/)
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/)
