@@ -1,0 +1,234 @@
+---
+title: Flow Node Kinds
+description: The node kinds understood by the flow engine — component nodes, builtin operators, and the state-store gap as of greentic-runner 0.5.11.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+A flow is a DAG whose nodes are either **component nodes** (WASM
+components loaded from the pack or a cross-pack resolver) or **builtin
+operators** — short-circuit nodes the flow engine executes itself.
+This page lists every node kind the engine recognises today, plus the
+state-store gap the runner currently exposes.
+
+<Aside type="note">
+This reference tracks `greentic-runner` 0.5.11 and the node kinds it
+actually dispatches in `greentic-runner-host/src/runner/engine.rs`.
+`.ygtc` files authored against older docs may reference node types
+that never existed as first-class engine kinds (for example a `state`
+type) — see the [State-store gap](#state-store-gap) section below.
+</Aside>
+
+## Component nodes
+
+Component nodes run a WASM component from the pack. They are the
+default: any node whose `component` field does not resolve to a
+builtin prefix is dispatched as a component node.
+
+```yaml
+nodes:
+  - id: llm
+    component: component-llm-openai   # pack-local component id
+    operation: complete               # operation exported by the component
+    config:
+      api_key_secret: "llm-api-key"
+    input:
+      prompt: '{{ entry.input.payload.text }}'
+```
+
+Component nodes may also reference components provisioned by other
+packs through the **cross-pack resolver**; the engine falls back to
+that resolver when the `component` id does not exist locally. See
+[Packs](/concepts/packs/) for the pack-local vs cross-pack lookup
+rules.
+
+## Builtin operators
+
+Builtin operators are identified by a reserved prefix on the
+`component` (or legacy `operation` / `target`) field. The engine
+dispatches them directly — no WASM call, no pack lookup. As of
+`greentic-runner` 0.5.11 the full set is:
+
+| Operator | Purpose |
+|----------|---------|
+| `emit.response` | Emit a response back to the originating channel. Terminal. |
+| `emit.log` | Emit a structured log line without affecting the message envelope. |
+| `session.wait` | Pause the flow on a named route until a matching resume event arrives. |
+| `flow.call` | Invoke another flow as a subroutine and resume when it returns. |
+| `provider.invoke` | Call an operation on a provider component (cross-pack aware). |
+
+Any `component` value starting with `emit.`, `session.`, `flow.`, or
+`provider.` is routed into the builtin table. Unknown prefixes in
+those namespaces are a hard error — the engine does not fall back to
+component resolution for reserved prefixes.
+
+### `emit.response`
+
+```yaml
+- id: reply
+  component: emit.response
+  input:
+    text: '{{ entry.input.payload.text }}'
+```
+
+Terminates the current flow path and emits the node's `input` as the
+response envelope. Downstream providers (WebChat, Slack, Telegram, ...)
+render the envelope per channel.
+
+### `emit.log`
+
+```yaml
+- id: trace
+  component: emit.log
+  input:
+    level: info
+    msg: "handled principals for {{ entry.input.extensions.channel_data.r1_principals.user }}"
+```
+
+Does not terminate — the flow continues to the `next` node. Useful for
+marking points in the flow that should surface in runtime logs without
+involving a full WASM component.
+
+### `session.wait`
+
+```yaml
+- id: await_answer
+  component: session.wait
+  config:
+    route: "confirm_order"
+    timeout_ms: 30000
+  next: on_answer
+```
+
+Persists a `FlowSnapshot` keyed by the session key
+(`{tenant}:{provider}:{conversation}:{user}`) and pauses. The matching
+resume event is routed by the `route` name. See the runner architecture
+overview for the full pause/resume semantics.
+
+### `flow.call`
+
+```yaml
+- id: verify
+  component: flow.call
+  config:
+    flow_id: verify-user
+  input:
+    user: '{{ entry.input.payload.from.id }}'
+  next: after_verify
+```
+
+Invokes another flow as a subroutine. The subflow's terminal response
+becomes this node's output. `flow.call` fails the parent flow if the
+subflow pauses (use `session.wait` at the parent level for
+pause-compatible subcalls).
+
+### `provider.invoke`
+
+```yaml
+- id: send_dm
+  component: provider.invoke
+  config:
+    provider_id: messaging-provider-slack
+    op: send_message
+  input:
+    to: '{{ entry.input.payload.from.id }}'
+    text: "Got it."
+```
+
+Calls a typed operation on a provider component, respecting the
+cross-pack resolver and the provider's declared capabilities. This is
+how flows reach outbound messaging without binding to a specific pack
+layout.
+
+## State store gap
+
+<Aside type="caution">
+**As of `greentic-runner` 0.5.11, there is no flow-callable
+`state.get` / `state.put` / `state.delete` / `state.list` / `state.cas`
+builtin.** Only the operators listed above are dispatched. Any flow
+that references a node `component: state.get` (or similar) will fail
+with an unknown-builtin error.
+</Aside>
+
+### What ships today
+
+- **Storage backends ship as provider packs.** `state-memory` and
+  `state-redis` are available as packs that expose the
+  `greentic:state/state-store` host capability to WASM components.
+- **WASM components can read and write state.** A component in a pack
+  that declares `greentic:state/state-store` as a required host
+  capability gets a typed handle to the store via `wit-bindgen` and
+  can perform get/put/delete/list/cas operations from inside the
+  component.
+- **Manifest default is permissive.** When a component manifest omits
+  `host.state`, the runner defaults to allowing the state-store host
+  call (see the `state-store-default-allow` fix). Explicit deny is
+  still honoured.
+
+### What is not shipping
+
+There is no flow-level `state.*` builtin operator. The roadmap
+tracks flow-callable state primitives, but the 0.5.11 engine does not
+dispatch them.
+
+### Recommended workaround
+
+When a flow needs to persist data across turns, invoke a custom WASM
+component that reads/writes via the host capability:
+
+```yaml
+- id: remember_principals
+  component: component-state-helper
+  operation: put
+  input:
+    key: 'principals/{{ entry.input.payload.from.id }}'
+    value: '{{ entry.input.extensions.channel_data.r1_principals }}'
+```
+
+Inside `component-state-helper`, the handler calls the
+`greentic:state/state-store` host API directly. The component is
+responsible for key namespacing and serialisation; the runner only
+enforces the capability grant.
+
+### Forward-looking example
+
+The `qa-demo` flow in the demo catalog contains `state.get` /
+`state.put` nodes as a forward-looking example. **That flow is not
+runnable end-to-end on 0.5.11** — it is staged for the release that
+introduces flow-level state builtins. Use it as a reference for the
+intended YAML shape, not as a working flow today.
+
+## Legacy `type:` shorthand
+
+Some older `.ygtc` files use a `type: <name>` shorthand instead of
+`component: <name>`. The engine still accepts the shorthand for
+backwards compatibility, but the canonical form going forward is
+`component:` (pack-local id or builtin prefix) plus `operation:`
+(the WIT-exported op name for component nodes).
+
+```yaml
+# Legacy
+- id: reply
+  type: reply
+  config:
+    message: "Hello"
+
+# Canonical
+- id: reply
+  component: emit.response
+  input:
+    text: "Hello"
+```
+
+New flows should use the canonical form. The legacy shorthand will
+remain accepted but is not guaranteed to receive new features
+(for example, per-node cross-pack resolver hints).
+
+## Next steps
+
+- [Flow YAML Schema](/reference/flow-schema/) — full YAML structure, template context, expression syntax.
+- [Channel Data Access](/reference/channel-data-access/) — how envelope extensions reach node inputs.
+- [Secret Seeding](/reference/secret-seeding/) — pack-scoped secret URIs for component nodes.
+- [Packs](/concepts/packs/) — pack-local vs cross-pack component resolution.

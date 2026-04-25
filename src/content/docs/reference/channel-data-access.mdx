@@ -1,0 +1,177 @@
+---
+title: Channel Data Access Pattern
+description: How DirectLine channelData reaches flow templates and WASM components as envelope extensions.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+WebChat and other DirectLine-compatible clients can attach free-form
+per-channel metadata to an activity via the DirectLine `channelData`
+field. In Greentic this metadata is not dropped and it is not treated as
+channel-specific plumbing — it becomes part of the normalized
+`ChannelMessageEnvelope` that flows through the whole runtime and reaches
+your flow templates and WASM components verbatim.
+
+This page documents the end-to-end contract. It is the canonical pattern
+used by the R1 demo (Paul's principals scenario): the front-end sets
+`channelData.r1_principals`, the flow reads it, and a WASM component
+receives it as structured input.
+
+<Aside type="note">
+This contract was stabilised in `greentic-runner` 0.5.11+. Earlier
+versions populated `ChannelMessageEnvelope.extensions["channel_data"]`
+but did not auto-merge extensions into individual node inputs.
+</Aside>
+
+## The wire contract
+
+### 1. Provider normalisation (camelCase -> snake_case)
+
+`messaging-provider-webchat` copies the DirectLine activity's
+`channelData` into the envelope's `extensions` map under the
+`channel_data` key. The rename from camelCase to snake_case is
+intentional: every well-known extension key uses snake_case inside
+Greentic so that flow templates and WASM components see a single,
+consistent naming convention.
+
+| Source (DirectLine wire) | Destination (Greentic envelope) |
+|--------------------------|---------------------------------|
+| `activity.channelData`   | `envelope.extensions.channel_data` |
+
+The provider passes the payload through verbatim — it does not strip or
+normalise keys nested inside `channelData`. Whatever shape the client
+sends is the shape your flow receives.
+
+### 2. Flow-input scope
+
+Once the envelope is routed to a flow, the runtime builds a template
+context where the envelope is exposed under `entry.input`. Extensions
+are reachable at:
+
+```
+entry.input.extensions.channel_data
+```
+
+This is the scope used by inline `{{ ... }}` template expressions in the
+flow YAML.
+
+### 3. Node-input scope (auto-merge)
+
+Before each node is dispatched, the flow engine merges envelope-level
+extensions into the node's WASM input as a top-level `extensions` field,
+**unless** the node's `input` mapping already defines an explicit
+`extensions` key (user mappings always win).
+
+As a result, WASM components see the extensions object directly on
+`input`:
+
+```
+input.extensions.channel_data
+```
+
+The merge is defined in `greentic-runner-host` (see
+`src/runner/extensions.rs`). It is a no-op when `entry.input.extensions`
+is missing, empty, or not a JSON object.
+
+## End-to-end example
+
+The R1 demo front-end sends:
+
+```json
+{
+  "type": "message",
+  "text": "Summarise my open incidents",
+  "channelData": {
+    "r1_principals": {
+      "user": "paul@example.com",
+      "groups": ["noc-operators"]
+    }
+  }
+}
+```
+
+### Flow YAML — read from the template context
+
+```yaml
+nodes:
+  - id: call_handler
+    component: component-some-handler
+    operation: handle_message
+    input:
+      principals: '{{ entry.input.extensions.channel_data.r1_principals }}'
+      message: '{{ entry.input.payload.text }}'
+```
+
+Here `principals` is passed into the component as a nested object, and
+`message` pulls from `payload.text` on the envelope.
+
+### WASM component — read from the auto-merged input
+
+Because the engine auto-merges extensions into every node's input, a
+component can skip the template binding entirely and read extensions
+directly off its `input`:
+
+```rust
+use serde_json::Value;
+
+fn handle(input: &Value) -> anyhow::Result<Value> {
+    let principals = input["extensions"]["channel_data"]["r1_principals"].clone();
+    // ... use principals
+    Ok(serde_json::json!({ "ok": true }))
+}
+```
+
+<Aside type="tip">
+Prefer the explicit flow-level binding (`input.principals: '{{ ...
+}}'`) when the component expects a specific named field — it keeps the
+contract between flow and component visible in the YAML. Use the
+auto-merged form when the component is pass-through machinery that just
+needs the whole `extensions` bag.
+</Aside>
+
+## Naming rules
+
+<Steps>
+
+1. **On the wire (DirectLine):** camelCase — `channelData`.
+
+2. **Inside the Greentic envelope:** snake_case — `extensions.channel_data`.
+
+3. **In flow templates and WASM components:** snake_case — always.
+
+</Steps>
+
+The provider is the only place where the rename happens. Flows and
+components never see the camelCase form.
+
+## Well-known extension keys
+
+`channel_data` is one of a small set of well-known keys defined in
+`greentic-types` (`src/messaging/extensions.rs`). All of them follow the
+same auto-merge rule on the node-input side, and all of them round-trip
+verbatim on the egress side. See the [WebChat
+provider](/providers/messaging/webchat/) page for the full table of
+canonical keys, including `adaptive_card`, `entities`, `attachments`,
+`suggested_actions`, `speak`, and `input_hint`.
+
+## Regression test
+
+The propagation contract is pinned by
+`run_app_flow_input_preserves_envelope_extensions_channel_data` in
+`greentic-start` (`src/messaging_app.rs`). The test builds an envelope
+with `extensions.channel_data.r1_principals`, runs it through the full
+messaging app path, and asserts the value survives verbatim at
+`/input/extensions/channel_data/r1_principals` in the resulting
+`ExecutionState.entry`.
+
+If you are changing anything between HTTP ingress and
+`engine.execute` (envelope routing, request building, runner glue),
+re-run that test first.
+
+## Next steps
+
+- [WebChat provider](/providers/messaging/webchat/) — envelope extensions table, attachment shapes, egress round-trip.
+- [Flow YAML Schema](/reference/flow-schema/) — template context variables (`{{entry.*}}`).
+- [Flow Node Kinds](/reference/flow-node-kinds/) — builtin operators and the component-node model.

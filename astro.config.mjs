@@ -175,6 +175,9 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ label: 'Flow YAML Schema', slug: 'reference/flow-schema' },
+						{ label: 'Flow Node Kinds', slug: 'reference/flow-node-kinds' },
+						{ label: 'Channel Data Access', slug: 'reference/channel-data-access' },
+						{ label: 'Secret Seeding', slug: 'reference/secret-seeding' },
 						{ label: 'Pack Format', slug: 'reference/pack-format' },
 						{ label: 'WIT Interfaces', slug: 'reference/wit-interfaces' },
 						{ label: 'Configuration', slug: 'reference/configuration' },
