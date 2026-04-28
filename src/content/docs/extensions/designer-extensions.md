@@ -1,175 +1,71 @@
 ---
-title: Designer Extensions
-description: WASM-based extension system that teaches Greentic Designer new content types, bundle recipes, and deploy targets at runtime.
+title: Extension Catalog and Wizard
+description: Use the extension catalog and gtc wizard to scaffold Greentic extension packs.
 ---
 
-Greentic Designer is **domain-agnostic**. It doesn't ship hardcoded
-knowledge of Adaptive Cards, Digital Workers, or any specific cloud
-deployment target. Instead, it loads signed WebAssembly Component Model
-artifacts (`.gtxpack`) at runtime that teach it how to author content,
-package output, and deploy results.
+The extension catalog is the data source behind the wizard's extension-pack flow. It maps user-facing extension types to the canonical manifest entries Greentic understands.
 
-Four extension kinds share one foundation:
+Use it through `gtc wizard`; do not hand-author catalog internals unless you are maintaining Greentic tooling.
 
-| Kind | Teaches the designer to... | Example reference impls |
-|---|---|---|
-| **design-extension** | Author content (cards, flows, digital workers, telco-x schemas) | [`greentic.adaptive-cards`](./adaptive-cards/) |
-| **bundle-extension** | Package designer output into deployable Application Packs | [`bundle-standard`](./bundle-extensions/) |
-| **deploy-extension** | Ship Application Packs to a target environment | [`deploy-desktop`](./deploy-extensions/) (AWS / GCP / Cisco to follow) |
-| **provider-extension** | Add new messaging or events providers to the runtime | See [Provider Extensions](./provider-extensions/) |
+## Wizard Entry Points
 
-Each extension kind has its own WIT sub-interface, its own call site in
-the designer (or runtime, for providers), and its own author tutorial —
-but the install lifecycle, permission model, signature verification, and
-registry/store integration are all shared infrastructure.
-
-Scaffolding is consistent across all four kinds:
+Interactive authoring:
 
 ```bash
-gtdx new my-ext --kind design   # or bundle | deploy | provider
+gtc wizard
 ```
 
-See [`gtdx` CLI reference](./gtdx-cli/) for the full input matrix.
-
-## How it works
-
-```
-                ┌──────────────────────────────────────────────┐
-                │   Greentic Store  (store.greentic.ai)        │
-                │   Developers upload · end-users discover     │
-                └────────────────────────┬─────────────────────┘
-                                         │ HTTPS / OpenAPI
-                                         ▼
-                ┌──────────────────────────────────────────────┐
-                │            extension runtime                  │
-                │  Registry trait — Store · OCI · Local         │
-                │  Wasmtime Component loader + Linker           │
-                │  Capability registry (semver matching)        │
-                │  Host broker (permission + depth gates)       │
-                │  Debounced filesystem watcher (hot reload)    │
-                └────────────────────────┬─────────────────────┘
-                                         │
-                ┌────────────────────────▼─────────────────────┐
-                │          Greentic Designer (consumer)        │
-                │  Chat — design-ext tools                     │
-                │  "Next" wizard — bundle-ext recipes          │
-                │  Deploy wizard — deploy-ext targets          │
-                └──────────────────────────────────────────────┘
-```
-
-The designer hosts the runtime in-process. On startup it scans
-`~/.greentic/extensions/{design,bundle,deploy,provider}/` for installed
-extensions, validates each `describe.json`, and loads the
-`wasm32-wasip2` component into a wasmtime `Linker` configured with five
-host imports (logging, i18n, secrets, broker, http) plus WASI.
-
-Guests compiled with the modern `cargo component build` pipeline use
-`mod bindings;` (no `wit_bindgen::generate!` macro). See
-[Writing an Extension](./writing-extensions/) for the current guest
-template.
-
-When the LLM in the designer chat loop calls `validate_card`, the
-designer dispatches that to `runtime.invoke_tool("greentic.adaptive-cards", "validate_card", args_json)`,
-which routes through wasmtime to the WASM component's exported function,
-runs the real validation logic in `adaptive-card-core`, and returns the
-result.
-
-## Capability registry
-
-Each extension declares **capabilities offered** and **capabilities
-required** in its `describe.json`. The runtime resolves the graph at
-startup and on hot-reload:
-
-- Required `^1.2.0` matches offered `1.2.5` or `1.3.0`, but not `2.0.0`
-- Multiple offerings → highest compatible semver wins
-- Missing requirement → extension marked **degraded**, not crashed
-- Cycle detection rejects circular dependencies on install
-
-A degraded extension's offered caps are not registered, so dependents
-fall back gracefully. The designer UI surfaces degraded state as a
-warning so users can install the missing dependency without restarting.
-
-## Permission model
-
-Default-deny. Each extension declares what it needs in
-`runtime.permissions`:
-
-```json
-{
-  "runtime": {
-    "permissions": {
-      "network": ["https://api.openai.com/*"],
-      "secrets": ["OPENAI_API_KEY"],
-      "callExtensionKinds": ["bundle"]
-    }
-  }
-}
-```
-
-On install, the user sees a prompt:
-
-```
-⚠️  Extension "adaptive-cards" v1.6.0 requests:
-  - Network: openai.com
-  - Secrets: OPENAI_API_KEY
-  - Cross-extension: may call bundle-kind extensions
-Install? [y/N]
-```
-
-Subsequent updates re-prompt only for new permissions. The runtime
-enforces these at every host call.
-
-## Trust policies
-
-Extensions are signed with Ed25519 by the developer. Three trust
-policies (configurable per install or globally):
-
-| Policy | What it accepts |
-|---|---|
-| `strict` | Must be signed and countersigned by the Greentic Store |
-| `normal` | Must be signed by a developer (default; matches cargo) |
-| `loose` | Unsigned allowed (dev mode only — prints a warning) |
-
-## Repository topology
-
-The infrastructure (runtime, contract, CLI, registry clients) lives in
-[`greentic-biz/greentic-designer-extensions`](https://github.com/greentic-biz/greentic-designer-extensions).
-Reference extensions live next to their domain library:
-
-- AC extension lives in [`greentic-biz/greentic-adaptive-card-mcp`](https://github.com/greentic-biz/greentic-adaptive-card-mcp)
-  next to `adaptive-card-core`
-- Bundle reference lives in [`greentic-biz/greentic-bundle-extensions`](https://github.com/greentic-biz/greentic-bundle-extensions)
-- Future: a digital workers extension would live in its own
-  `greentic-digital-workers` repo, etc.
-
-This per-domain split means the designer never needs cross-repo private
-dependency fetches at build time.
-
-## Installing extensions
-
-Use the [`gtdx` CLI](./gtdx-cli/):
+Agentic and CI authoring:
 
 ```bash
-# From a local .gtxpack file
-gtdx install ./greentic.adaptive-cards-1.6.0.gtxpack
-
-# From the Greentic Store
-gtdx install greentic.adaptive-cards@^1.6
-
-# From an OCI registry
-gtdx install --registry oci://ghcr.io/greenticai/extensions \
-  greentic.adaptive-cards
+gtc wizard --schema
+gtc wizard --answers extension-pack-answers.json
 ```
 
-Files land at `~/.greentic/extensions/<kind>/<name>-<version>/`.
+The launcher schema includes the embedded pack and bundle answer schemas. Coding agents should fetch this schema first, generate an answers file that matches it, and replay the wizard non-interactively.
 
-## See also
+## What the Catalog Provides
 
-- [Adaptive Cards reference extension](./adaptive-cards/)
-- [Bundle Extensions](./bundle-extensions/)
-- [Deploy Extensions](./deploy-extensions/)
-- [Provider Extensions](./provider-extensions/)
-- [`gtdx` CLI reference](./gtdx-cli/)
-- [Writing your own extension](./writing-extensions/)
-- [Publishing extensions](./publishing-extensions/)
-- [GitHub Action](./github-action/)
+Each extension type can define:
+
+- a stable type id such as `messaging`, `events`, `secrets`, or `deployer`
+- the canonical manifest key to write
+- localized names and descriptions
+- questions for the wizard
+- templates for scaffolded files
+- plan steps such as creating directories, writing files, delegating component or flow creation, and running CLI commands
+
+The wizard writes generated extension answers as JSON under `extensions/` and merges the validated extension payload into `pack.yaml`.
+
+## Catalog Types
+
+The current catalog covers:
+
+- `messaging`
+- `events`
+- `oauth`
+- `mcp`
+- `state`
+- `telemetry`
+- `secrets`
+- `admin`
+- `control`
+- `observer`
+- `deployer`
+- `runtime-capability`
+- `contract`
+- `ops`
+- `capability-offer`
+- `custom-scaffold`
+
+Most types map to `greentic.ext.capabilities.v1`. The deployer type maps to `greentic.deployer.v1`.
+
+## Default and Custom Catalogs
+
+The wizard can use the bundled catalog, check a catalog source, or use an explicit catalog reference when that is supported by the answer schema. Catalog references may be local files, fixtures, or registry-backed sources depending on the CLI build.
+
+For normal extension authoring, prefer the bundled/default catalog exposed by `gtc wizard`. For automation, pin the answers file and validate it with the schema before applying it.
+
+## Legacy Note
+
+This page replaces the old "designer extensions" documentation. `.gtxpack`, `gtdx`, and design-time extension classes are not the current extension-pack authoring path.

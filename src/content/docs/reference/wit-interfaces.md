@@ -340,7 +340,7 @@ provider extensions — the guest is purely a design-time descriptor, so it
 cannot read secrets or call external APIs. All network and secret access
 happens inside the bundled runtime `.gtpack`.
 
-See the [Provider Extensions](/extensions/provider-extensions/) guide for
+See the [Messaging and Event Extensions](/extensions/provider-extensions/) guide for
 packaging and publishing.
 
 ## MCP Tool Interface

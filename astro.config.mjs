@@ -81,6 +81,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Introduction', slug: 'getting-started/introduction' },
 						{ label: 'Quick Start', slug: 'getting-started/quick-start' },
+						{ label: 'Multi-Language and i18n', slug: 'getting-started/multilanguage-i18n' },
 						{ label: 'Running Demos', slug: 'getting-started/running-demos' },
 						{ label: 'Installation', slug: 'getting-started/installation' },
 					],
@@ -92,7 +93,7 @@ export default defineConfig({
 						{ label: 'Flows', slug: 'concepts/flows' },
 						{ label: 'Packs', slug: 'concepts/packs' },
 						{ label: 'Components', slug: 'concepts/components' },
-						{ label: 'Providers', slug: 'concepts/providers' },
+						{ label: 'Extensions', slug: 'concepts/extensions' },
 						{ label: 'Bundle Assets', slug: 'concepts/bundle-assets' },
 						{ label: 'Multi-Tenancy', slug: 'concepts/multi-tenancy' },
 					],
@@ -110,19 +111,18 @@ export default defineConfig({
 				{
 					label: 'Extensions',
 					items: [
-						{ label: 'Designer Extensions', slug: 'extensions/designer-extensions' },
-						{ label: 'Bundle Extensions', slug: 'extensions/bundle-extensions' },
-						{ label: 'Deploy Extensions', slug: 'extensions/deploy-extensions' },
-						{ label: 'Provider Extensions', slug: 'extensions/provider-extensions' },
-						{ label: 'Writing an Extension', slug: 'extensions/writing-extensions' },
-						{ label: 'Publishing Extensions', slug: 'extensions/publishing-extensions' },
-						{ label: 'GitHub Action', slug: 'extensions/github-action' },
-						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
-						{ label: 'Adaptive Cards (Example)', slug: 'extensions/adaptive-cards' },
+						{ label: 'Overview', slug: 'concepts/extensions' },
+						{ label: 'Writing Extension Packs', slug: 'extensions/writing-extensions' },
+						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
+						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },
+						{ label: 'Deployer Extensions', slug: 'extensions/deploy-extensions' },
+						{ label: 'Static Routes & Assets', slug: 'extensions/bundle-extensions' },
+						{ label: 'Publishing Extension Packs', slug: 'extensions/publishing-extensions' },
+						{ label: 'Extension CI', slug: 'extensions/github-action' },
 					],
 				},
 				{
-					label: 'Messaging Providers',
+					label: 'Messaging Extensions',
 					items: [
 						{ label: 'Overview', slug: 'providers/messaging/overview' },
 						{ label: 'Slack', slug: 'providers/messaging/slack' },
@@ -136,7 +136,7 @@ export default defineConfig({
 					],
 				},
 				{
-					label: 'Events Providers',
+					label: 'Event Extensions',
 					items: [
 						{ label: 'Overview', slug: 'providers/events/overview' },
 						{ label: 'Webhook', slug: 'providers/events/webhook' },
@@ -148,6 +148,7 @@ export default defineConfig({
 				{
 					label: 'Components',
 					items: [
+						{ label: 'Adaptive Cards', slug: 'components/adaptive-cards' },
 						{ label: 'fast2flow', slug: 'components/fast2flow' },
 						{ label: 'cards2pack', slug: 'components/cards2pack' },
 						{ label: 'flow2flow', slug: 'components/flow2flow' },

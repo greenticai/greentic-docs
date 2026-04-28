@@ -1,197 +1,86 @@
 ---
-title: Deploy Extensions
-description: Declare additional deployment targets for greentic-deployer via pluggable WASM extensions — no deployer fork required.
+title: Deployer Extensions
+description: Declare deployment planners and operations with greentic.deployer.v1 metadata.
 ---
 
-Deploy extensions let platforms, clouds, and local runtimes declare themselves as deployment targets for `greentic-deployer` without modifying the deployer itself. Each extension ships a signed `.gtxpack` archive that advertises one or more targets, exposes their credential and configuration JSON Schemas, and declares how `deploy` / `poll` / `rollback` should run.
+Deployer extensions describe how Greentic can deploy a bundle without baking every target into application packs. A deployer can target local development, Docker or Podman, Kubernetes, Terraform, AWS, Azure, GCP, private clouds, or a custom enterprise deployer.
 
-Deploy extensions sit alongside the runtime pack workflow — the deployer
-consumes the `.gtpack` artifacts produced by bundle extensions (or the
-legacy `greentic-bundle build` path) and ships them to the target
-environment.
+The current deployer path is `greentic.deployer.v1` metadata inside a `.gtpack`.
 
-Scaffold a new deploy extension with:
+## Contract Shape
+
+`greentic.deployer.v1` is not a `greentic.ext.capabilities.v1` offer list. It has its own validated contract:
+
+```yaml title="pack.yaml"
+extensions:
+  greentic.deployer.v1:
+    kind: greentic.deployer.v1
+    version: 1.0.0
+    inline:
+      schema_version: 1
+      planner:
+        flow_id: flows/plan.ygtc
+      capabilities:
+        - capability: plan
+          flow_id: flows/plan.ygtc
+        - capability: apply
+          flow_id: flows/apply.ygtc
+        - capability: destroy
+          flow_id: flows/destroy.ygtc
+        - capability: status
+          flow_id: flows/status.ygtc
+        - capability: rollback
+          flow_id: flows/rollback.ygtc
+```
+
+Supported deployer capabilities are:
+
+- `generate`
+- `plan`
+- `apply`
+- `destroy`
+- `status`
+- `rollback`
+
+Validation requires `schema_version: 1`, a non-empty planner `flow_id`, non-empty capability `flow_id` values, no duplicate capability entries, and at least the `plan` capability.
+
+## Create One with the Wizard
+
+Use the wizard and select the `deployer` extension type:
 
 ```bash
-gtdx new my-deploy-ext --kind deploy
+gtc wizard
 ```
 
-See the [`gtdx` CLI reference](./gtdx-cli/) and
-[Writing an Extension](./writing-extensions/) for the full authoring
-walkthrough. The rest of this page focuses on the deploy-specific
-surface.
-
-## How it works
-
-`greentic-deployer` ships with 12 built-in backends (AWS, Azure, GCP, Terraform, Helm, single-VM, Desktop, and six more). Deploy extensions sit on top of that core: a small WebAssembly component declares new target IDs and answers four metadata questions, while actual execution is delegated to either a built-in backend (Mode A) or to the extension itself (Mode B).
-
-A deploy extension answers four questions about each target it offers:
-
-1. **What targets do you provide?** — `list-targets()` returns IDs and display names.
-2. **What credentials does target X need?** — `credential-schema(target-id)` returns JSON Schema draft-07.
-3. **What config fields does target X accept?** — `config-schema(target-id)` returns JSON Schema.
-4. **Are these credentials valid?** — `validate-credentials(target-id, json)` returns zero or more diagnostics.
-
-The deployer loads extensions from `~/.greentic/extensions/deploy/` by default (override with `GREENTIC_DEPLOY_EXT_DIR` or `--ext-dir <PATH>`), queries these methods to drive its UI, and dispatches the actual deploy through one of two paths.
-
-### Execution modes
-
-| Mode | `execution.kind` | Metadata served by | `deploy` / `poll` / `rollback` runs in |
-|------|------------------|--------------------|----------------------------------------|
-| **A — Builtin delegated** | `"builtin"` | WASM extension | Deployer's native Rust backend (`BuiltinBackendId`) |
-| **B — Full WASM** | `"wasm"` | WASM extension | WASM extension via runtime host imports (`http`, `secrets`, `storage`) |
-
-Phase A (current) implements Mode A only. Mode B is declared in the WIT contract and returns `ExtensionError::ModeBNotImplemented` at dispatch time — it requires new host interfaces in `greentic-ext-runtime` that land in Phase B.
-
-## Enabling the feature
-
-The deploy extension host is feature-gated. Install the deployer with:
+For repeatable generation:
 
 ```bash
-cargo install greentic-deployer --features extensions --locked
+gtc wizard --schema
+gtc wizard --answers deployer-extension-answers.json
 ```
 
-Or build from source:
+The wizard catalog maps `deployer` to `greentic.deployer.v1`. It writes catalog answers under `extensions/`, updates `pack.yaml`, and scaffolds the files the selected template needs.
+
+## What a Deployer Does
+
+A deployer extension normally provides one or more flows:
+
+- a planner flow that turns bundle configuration into a deployment plan
+- an apply flow that performs the deployment
+- a status flow that reports deployment state
+- optional generate, destroy, or rollback flows
+
+This keeps deployment separate from business flows. The same application bundle can be planned locally, applied to Kubernetes, deployed to one of the major clouds, or handed to a platform-team deployer selected by the operator.
+
+## Validate
+
+Run:
 
 ```bash
-cargo install --path . --features extensions --locked
+gtc dev pack lint --in ./my-deployer-pack
+gtc dev pack resolve --in ./my-deployer-pack
+gtc dev pack build --in ./my-deployer-pack
+gtc dev pack doctor ./my-deployer-pack
 ```
 
-Without the feature, the `ext` subcommand is not compiled in — existing subcommands (`aws`, `azure`, `terraform`, `single-vm`, etc.) are unaffected and the binary size is unchanged.
-
-## Using the CLI
-
-Once installed with `--features extensions`, three subcommands become available under `ext`:
-
-```bash
-# List installed extensions and their target contributions
-greentic-deployer ext list
-
-# Print metadata and declared targets for one extension
-greentic-deployer ext info greentic.deploy-desktop
-
-# Validate a describe.json + referenced wasm at a given path
-greentic-deployer ext validate ~/.greentic/extensions/deploy/greentic.deploy-desktop
-```
-
-All `ext` subcommands accept a global `--ext-dir <PATH>` flag to override the default install directory.
-
-## Installing a reference extension
-
-The companion repository [`greentic-biz/greentic-deployer-extensions`](https://github.com/greentic-biz/greentic-deployer-extensions) ships `deploy-desktop` 0.1.0 as the first reference deploy extension. It declares two targets (`docker-compose-local` + `podman-local`) that route via Mode A to the deployer's built-in `desktop` backend.
-
-To install from a cloned checkout of the extensions repo:
-
-```bash
-# 1. Build the .gtxpack bundle
-(cd greentic-deployer-extensions/reference-extensions/deploy-desktop && ./build.sh)
-
-# 2. Install into your local extension dir
-mkdir -p ~/.greentic/extensions/deploy/greentic.deploy-desktop
-unzip -o greentic-deployer-extensions/reference-extensions/deploy-desktop/greentic.deploy-desktop-0.1.0.gtxpack \
-         -d ~/.greentic/extensions/deploy/greentic.deploy-desktop/
-
-# 3. Confirm the deployer sees the new targets
-greentic-deployer ext list
-# TARGET                   EXTENSION                   EXECUTION
-# docker-compose-local     greentic.deploy-desktop     builtin:desktop:docker-compose
-# podman-local             greentic.deploy-desktop     builtin:desktop:podman
-```
-
-## The `deploy-desktop` reference extension
-
-`greentic.deploy-desktop@0.1.0` declares two targets:
-
-| Target ID | Runtime | Rollback | Execution |
-|-----------|---------|----------|-----------|
-| `docker-compose-local` | `docker compose` | Yes (`docker compose down`) | Mode A → `desktop` backend, handler `docker-compose` |
-| `podman-local` | `podman play kube` + `podman pod` | Yes (`podman pod stop`) | Mode A → `desktop` backend, handler `podman` |
-
-### Configuration
-
-Both targets accept the same config shape (mirrors `DesktopConfig` in `greentic-deployer/src/desktop.rs`):
-
-| Field | Type | Default | Purpose |
-|-------|------|---------|---------|
-| `deploymentName` | string | required | Compose project / Podman pod name |
-| `composeFile` | string | `{projectDir}/docker-compose.yml` | Path to compose YAML or Kubernetes manifest |
-| `image` | string | optional | Primary image reference (informational) |
-| `ports` | array of strings | `[]` | Port mappings `host:container` |
-| `env` | array of strings | `[]` | Environment variables `KEY=VALUE` |
-| `projectDir` | string | `$TMPDIR/greentic-desktop` | Working directory for execution |
-
-Minimal config for a docker-compose deploy:
-
-```json
-{
-  "deploymentName": "my-app",
-  "composeFile": "/srv/apps/my-app/docker-compose.yml"
-}
-```
-
-### Credentials
-
-Local docker-compose and podman do not require any credentials. The credential schema accepts an empty object:
-
-```json
-{}
-```
-
-## Writing a new deploy extension
-
-Start with `gtdx new my-deploy-ext --kind deploy`. That generates a
-`wasm32-wasip2` guest crate (`mod bindings;`, `cargo-component` build)
-with a working `describe.json`, `schemas/`, `src/lib.rs`, and
-`build.sh` wired up for the `greentic:extension-deploy@0.1.0` contract.
-Then:
-
-1. Update `describe.json` metadata, `capabilities.offered`, and
-   `contributions.targets[]` to describe your targets.
-2. Replace the files in `schemas/` with your target's credential +
-   config JSON Schemas.
-3. Update `wit/world.wit` imports if your extension needs host
-   capabilities (`secrets`, `http`).
-4. Implement the four `targets::Guest` methods in `src/lib.rs` for your
-   targets.
-5. If you're porting from the existing `deploy-desktop` reference, the
-   companion repo [`greentic-biz/greentic-deployer-extensions`](https://github.com/greentic-biz/greentic-deployer-extensions)
-   has a fully worked example under `reference-extensions/deploy-desktop/`.
-
-For Mode B (full WASM execution), also implement
-`deployment::Guest::{deploy, poll, rollback}` and request the relevant
-`permissions.network` / `permissions.secrets` in `describe.json`. The
-runtime rejects unauthorized host calls. Mode B is a Phase B surface —
-prerequisites are tracked in the parent migration spec linked below.
-
-## Phase A scope
-
-- **Unsigned artifacts.** `describe.json` has no `metadata.author.publicKey`; no `.sig` files. The deployer accepts unsigned extensions while Phase A ships; set `GREENTIC_EXT_ALLOW_UNSIGNED=1` explicitly if you enable strict mode locally.
-- **Mode A only.** The WIT `deployment::{deploy, poll, rollback}` exports exist in every extension but return `ExtensionError::Internal(...)` in Phase A reference extensions. The dispatcher never calls them for Mode A targets.
-- **One reference extension.** Only `deploy-desktop` ships. Additional reference extensions (`deploy-aws`, `deploy-gcp`, `deploy-azure`, `deploy-cisco`) follow in Phase B.
-- **Structural CI.** CI validates `.gtxpack` structure, WIT sync, and WASM component validity. Live `docker compose up` tests require a developer machine (`scripts/smoke.sh` in the extensions repo).
-
-## Phase B roadmap
-
-1. **Signing.** Ed25519 keypair management, `describe.json.metadata.author.publicKey`, `.sig` sidecar in `.gtxpack`, CI signing on release tag, deployer `verify_ed25519` wiring.
-2. **New host interfaces.** `host::http`, `host::secrets`, `host::storage` land in `greentic-ext-runtime` (breaking bump to `greentic:extension-host@0.2.0`).
-3. **Mode B reference extension.** At least one extension implements full WASM deploy through the new host imports.
-4. **Additional Mode A reference extensions.** `deploy-aws`, `deploy-gcp`, `deploy-azure` ship as thin wrappers over the deployer's cloud backends once each backend exposes target-level handler variants (EKS vs ECS vs Lambda, etc.).
-
-## Troubleshooting
-
-- **`unknown subcommand: ext`** — your `greentic-deployer` is pre-v0.4.53 or was built without the `extensions` feature. Reinstall with `cargo install greentic-deployer --features extensions --locked`.
-- **`ext list` returns nothing** — the deployer scanned an empty `~/.greentic/extensions/deploy/`. Either unzip a `.gtxpack` there or pass `--ext-dir <path>`.
-- **`unknown target` errors** — the target ID in your command doesn't match any installed extension's `contributions.targets[].id`. Run `ext list` to see what's registered.
-- **Deployer accepts the extension but dispatch fails with `ModeBNotImplemented`** — your extension declares `execution.kind = "wasm"`. Phase A supports `"builtin"` only. Change `describe.json` to `execution.kind = "builtin"` and point at an existing backend.
-
-## Further reading
-
-- [Designer Extensions overview](./designer-extensions/)
-- [Writing an Extension](./writing-extensions/) — authoring walkthrough for all four kinds
-- [`gtdx` CLI reference](./gtdx-cli/)
-- [Publishing Extensions](./publishing-extensions/)
-- [GitHub Action](./github-action/) — automate publish from CI
-- [Bundle Extensions](./bundle-extensions/) — sibling pattern for packaging Greentic Designer output
-- Parent migration spec: [`greenticai/greentic-deployer/docs/superpowers/specs/2026-04-17-deploy-extension-migration-design.md`](https://github.com/greenticai/greentic-deployer/blob/main/docs/superpowers/specs/2026-04-17-deploy-extension-migration-design.md) — authoritative design document (Mode A vs Mode B semantics, canonical backend strings, WIT contract usage).
-- Host integration PR: [`greenticai/greentic-deployer#121`](https://github.com/greenticai/greentic-deployer/pull/121) — the `src/ext/` module, `BuiltinBackendId::Desktop` variant, and `Ext` CLI subcommand.
-- Reference extension repo: [`greentic-biz/greentic-deployer-extensions`](https://github.com/greentic-biz/greentic-deployer-extensions) — companion repo for shippable `.gtxpack` artifacts.
+Do not document the older `.gtxpack` deploy-extension contract or `gtdx` commands as the current path.
