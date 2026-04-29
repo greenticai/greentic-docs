@@ -127,20 +127,6 @@ gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/gre
 gtc start ./supply-chain-demo-bundle
 ```
 
-### incident
-
-Flow pembuatan incident berbasis adaptive card yang menargetkan WebChat dan Webex, lalu membuka incident di Better Stack.
-
-- **Channel:** WebChat GUI, Webex
-- **Layanan eksternal:** Better Stack (`betterstack_token` di setup-answers)
-- **ID demo:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
-```
-
 ### redbutton
 
 Skenario event tombol darurat: ingress webhook memicu flow yang memilih cabang acak, secara opsional memanggil endpoint HTTP, memutar audio lokal, dan membuat incident Better Stack.

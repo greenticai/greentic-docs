@@ -127,20 +127,6 @@ gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/gre
 gtc start ./supply-chain-demo-bundle
 ```
 
-### incident
-
-Flujo de creación de incidentes con adaptive cards que apunta a WebChat y Webex, y luego abre un incidente en Better Stack.
-
-- **Canales:** WebChat GUI, Webex
-- **Servicios externos:** Better Stack (`betterstack_token` en setup-answers)
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
-```
-
 ### redbutton
 
 Un escenario de evento de botón rojo: un ingress webhook dispara un flujo que elige una rama aleatoria, opcionalmente llama a un endpoint HTTP, reproduce audio local y crea un incidente en Better Stack.

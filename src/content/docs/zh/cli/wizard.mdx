@@ -142,7 +142,7 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-Substitute the demo ID for any of the published demos (`quickstart`, `hr-onboarding`, `helpdesk-itsm`, `sales-crm`, `supply-chain`, `incident`, `redbutton`, `cloud-deploy-demo`, `weather-mcp-demo`, ...). The full catalog with descriptions and required credentials lives on the [Running Demos](/getting-started/running-demos/) page.
+Substitute the demo ID for any of the published demos (`quickstart`, `hr-onboarding`, `helpdesk-itsm`, `sales-crm`, `supply-chain`, `redbutton`, `cloud-deploy-demo`, `weather-mcp-demo`, ...). The full catalog with descriptions and required credentials lives on the [Running Demos](/getting-started/running-demos/) page.
 
 <Aside type="tip">
 The wizard performs **capability-based dependency resolution**. When the demo's create-answers document references an extension that declares `required_capabilities` (e.g. messaging extensions needing `greentic:state/state-store`), the wizard automatically adds a satisfying pack such as `state-memory` to the generated bundle — you do not have to list it manually.

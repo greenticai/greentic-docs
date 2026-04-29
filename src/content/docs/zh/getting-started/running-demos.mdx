@@ -127,20 +127,6 @@ gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/gre
 gtc start ./supply-chain-demo-bundle
 ```
 
-### incident
-
-面向 WebChat 和 Webex 的 adaptive-card incident 创建 flow，随后会在 Better Stack 中打开一个 incident。
-
-- **Channels:** WebChat GUI、Webex
-- **External services:** Better Stack（setup-answers 中的 `betterstack_token`）
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
-```
-
 ### redbutton
 
 一个 red-button 事件场景：某个 webhook ingress 触发一个 flow，随机选择分支，可选调用一个 HTTP endpoint、播放本地音频，并在 Better Stack 中创建 incident。
