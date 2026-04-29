@@ -145,47 +145,60 @@ hello-world-pack/
 
 ## Bundle Structure
 
-A typical Greentic bundle looks like this:
+After creating the hello world pack, create a bundle that includes it:
 
-```
-my-bundle/
-├── greentic.demo.yaml      # Main configuration
-├── providers/
-│   └── messaging/
-│       └── messaging-telegram.gtpack
-├── apps/
-│   └── my-app/
-│       └── flows/
-│           └── on_message.ygtc
-└── seeds.yaml              # Seed data (optional)
+```bash
+gtc wizard --answers https://docs.greentic.ai/examples/hello-world-bundle-answers.json
 ```
 
-## Configuration File
+The answers document expects the pack artifact from the previous step at `./hello-world-pack/dist/hello-world-pack.gtpack`. It creates `./hello-world-bundle`, copies the pack into the bundle workspace, writes the bundle definition, and records default tenant access for the `hello-world` pack.
 
-The main configuration file (`greentic.demo.yaml`) defines your setup:
+The generated bundle looks like this:
 
-```yaml title="greentic.demo.yaml"
-name: my-digital-worker
-version: "1.0"
+```text
+hello-world-bundle/
+|-- bundle.yaml
+|-- bundle.lock.json
+|-- packs/
+|   `-- hello-world-pack.gtpack
+|-- tenants/
+|   `-- default/
+|       `-- tenant.gmap
+|-- resolved/
+|   `-- default.yaml
+`-- state/
+    `-- resolved/
+        `-- default.yaml
+```
 
-providers:
-  messaging-telegram:
-    pack: "providers/messaging/messaging-telegram.gtpack"
-    setup_flow: "setup_default"
+`bundle.yaml` is the source definition. It names the bundle, lists the app pack references, records the global pack mapping, and keeps extension providers, catalogs, hooks, subscriptions, capabilities, setup intent, and export intent explicit:
 
-apps:
-  my-app:
-    path: "apps/my-app"
-    default_flow: "on_message"
+```yaml title="hello-world-bundle/bundle.yaml"
+schema_version: 1
+bundle_id: hello-world-bundle
+bundle_name: Hello World Bundle
+locale: en
+mode: create
+advanced_setup: false
+app_packs:
+  - ./hello-world-pack/dist/hello-world-pack.gtpack
+app_pack_mappings:
+  - reference: ./hello-world-pack/dist/hello-world-pack.gtpack
+    scope: global
+extension_providers: []
+remote_catalogs: []
+hooks: []
+subscriptions: []
+capabilities: []
+setup_execution_intent: false
+export_intent: false
+```
 
-tenants:
-  demo:
-    name: Demo Tenant
-    teams:
-      default:
-        channels:
-          telegram:
-            provider: messaging-telegram
+`bundle.lock.json` records the resolved inputs for reproducible bundle operations. `packs/` contains the copied pack artifacts used by the bundle. `tenants/default/tenant.gmap` controls tenant access; in this example it allows `hello-world` and denies everything else:
+
+```text title="hello-world-bundle/tenants/default/tenant.gmap"
+_ = forbidden
+hello-world = public
 ```
 
 ## Next Steps
