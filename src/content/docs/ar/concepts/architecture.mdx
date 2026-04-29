@@ -120,7 +120,6 @@ my-bundle/
 | **App packs** | Digital-worker flows, custom WASM nodes, cards, templates, prompts, i18n | This is the business logic: the worker that answers, acts, plans, approves, or integrates. |
 | **Messaging provider packs** | Slack, Teams, Telegram, WhatsApp, WebChat, Webex, Email ingress/egress components | They decouple flows from platform-specific APIs so the same worker can run on many channels. |
 | **Events provider packs** | Webhook, timer, SendGrid email, Twilio SMS, and custom event ingress | They let workers start from business events, schedules, alerts, and system signals rather than only chat. |
-| **Component/tool packs** | Reusable LLM callers, template renderers, MCP tools, API clients, transformations | They keep flows composable and make integrations reusable across many workers. |
 | **Capability providers and extensions** | State/session providers, OAuth brokers, operation hooks, deploy extensions, admin/control surfaces, telemetry integrations | They make the runtime portable: the same worker can use different infrastructure and operations surfaces without changing the flow. |
 
 ## Capabilities And Extensions
