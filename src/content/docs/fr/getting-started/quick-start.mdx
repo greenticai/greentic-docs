@@ -120,25 +120,27 @@ greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
 
 See [Multi-Language and i18n](/getting-started/multilanguage-i18n/) for the practical Getting Started overview, then continue to [i18n Overview](/i18n/overview/) and [Cards Translation](/i18n/cards-translation/) for the full workflow.
 
-## Example: Hello World Flow
+## Example: Hello World Pack
 
-Create a simple flow that responds to messages:
+Create a pack with a `hello_world` messaging flow by replaying the hosted wizard answers:
 
-```yaml title="flows/hello.ygtc"
-name: hello_world
-version: "1.0"
-description: A simple greeting flow
+```bash
+gtc wizard --answers https://docs.greentic.ai/examples/hello-world-answers.json
+```
 
-nodes:
-  - id: greet
-    type: reply
-    config:
-      message: "Hello! I'm your digital worker."
+The answers document creates `./hello-world-pack`, scaffolds the pack, adds `flows/hello.ygtc`, runs doctor, resolves the pack lock, and writes the built pack to `dist/hello-world-pack.gtpack`.
 
-triggers:
-  - type: message
-    pattern: "hello"
-    target: greet
+The generated pack contains the hello world flow alongside the scaffolded default flow:
+
+```text
+hello-world-pack/
+|-- pack.yaml
+|-- pack.lock.cbor
+|-- flows/
+|   |-- hello.ygtc
+|   `-- main.ygtc
+`-- dist/
+    `-- hello-world-pack.gtpack
 ```
 
 ## Bundle Structure
