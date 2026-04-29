@@ -94,7 +94,7 @@ Translation rules:
   - Code blocks and inline code
   - Command-line examples
   - File paths, variable names, config keys
-  - Technical proper nouns: Greentic, WASM, WebAssembly, YAML, NATS, Redis, Rust, Tokio, Wasmtime, Axum, Docker, Ngrok, Cloudflared, etc.
+  - Technical proper nouns: Greentic, WASM, WebAssembly, YAML, Redis, Rust, Tokio, Wasmtime, Axum, Docker, Ngrok, Cloudflared, etc.
   - Brand/product names: Slack, Teams, Telegram, WhatsApp, GitHub, etc.
   - Component/tool names: greentic-runner, greentic-flow, gtc, etc.
 - Preserve all MDX/JSX syntax exactly (import statements, component tags like <Card>, <Steps>, <Tabs>, etc.)

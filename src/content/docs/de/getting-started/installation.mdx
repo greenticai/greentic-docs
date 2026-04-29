@@ -105,33 +105,6 @@ gtc doctor
 
 ## Optionale Abhängigkeiten
 
-### NATS (Message Bus)
-
-Für Produktions-Deployments:
-
-<Tabs>
-<TabItem label="Docker">
-
-```bash
-docker run -d --name nats -p 4222:4222 nats:latest
-```
-
-</TabItem>
-<TabItem label="Homebrew (macOS)">
-
-```bash
-brew install nats-server
-nats-server
-```
-
-</TabItem>
-<TabItem label="Direkter Download">
-
-Herunterladen von [nats.io](https://nats.io/download/)
-
-</TabItem>
-</Tabs>
-
 ### Redis (Session Storage)
 
 Für persistente Produktions-Sessions:
@@ -241,12 +214,6 @@ gtc wizard --dry-run
 **Error: "wasm32-wasip2 target not found"**
 ```bash
 rustup target add wasm32-wasip2
-```
-
-**Error: "Cannot connect to NATS"**
-```bash
-# Start embedded NATS with gtc start
-gtc start ./my-bundle --nats on
 ```
 
 **Error: "Permission denied"**

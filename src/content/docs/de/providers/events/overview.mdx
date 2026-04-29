@@ -52,7 +52,7 @@ External Service / Timer
     │
     ▼ Normalized Event
 ┌─────────────────────────────────────────┐
-│              NATS Bus                   │
+│           Runtime Router                │
 │    greentic.events.{env}.{tenant}.{type}│
 └─────────────────────────────────────────┘
     │
@@ -112,15 +112,6 @@ triggers:
     event_type: "order.created"
     target: process
 ```
-
-## NATS-Subjects
-
-Ereignisse fließen über NATS:
-
-| Subject | Zweck |
-|---------|---------|
-| `greentic.events.{env}.{tenant}.{type}` | Ereignisbenachrichtigungen |
-| `greentic.events.{env}.{tenant}.{type}.result` | Ergebnisse der Ereignisverarbeitung |
 
 ## Häufige Muster
 

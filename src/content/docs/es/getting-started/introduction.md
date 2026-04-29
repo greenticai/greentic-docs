@@ -57,7 +57,7 @@ Los flujos de trabajo se definen como **grafos dirigidos** en archivos YAML (`.y
 | Runtime WASM | Wasmtime v41 |
 | Target WASM | `wasm32-wasip2` |
 | Servidor HTTP | Axum v0.8 |
-| Bus de mensajería | NATS |
+| Enrutamiento de mensajes | Enrutamiento interno del runtime |
 | Serialización | serde + CBOR + YAML |
 
 ## Casos de uso

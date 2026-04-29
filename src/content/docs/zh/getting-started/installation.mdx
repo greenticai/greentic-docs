@@ -106,33 +106,6 @@ gtc doctor
 
 ## 可选依赖
 
-### NATS（消息总线）
-
-用于生产部署：
-
-<Tabs>
-<TabItem label="Docker">
-
-```bash
-docker run -d --name nats -p 4222:4222 nats:latest
-```
-
-</TabItem>
-<TabItem label="Homebrew (macOS)">
-
-```bash
-brew install nats-server
-nats-server
-```
-
-</TabItem>
-<TabItem label="Direct Download">
-
-从 [nats.io](https://nats.io/download/) 下载
-
-</TabItem>
-</Tabs>
-
 ### Redis（Session 存储）
 
 用于生产环境中的 session 持久化：
@@ -242,12 +215,6 @@ gtc wizard --dry-run
 **错误："wasm32-wasip2 target not found"**
 ```bash
 rustup target add wasm32-wasip2
-```
-
-**错误："Cannot connect to NATS"**
-```bash
-# Start embedded NATS with gtc start
-gtc start ./my-bundle --nats on
 ```
 
 **错误："Permission denied"**

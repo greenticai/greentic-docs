@@ -7,7 +7,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## High-Level Architecture
 
-Greentic is built around a small runtime core and a large pack ecosystem. The core runtime is responsible for loading bundles, enforcing tenant boundaries, routing ingress, coordinating the NATS message bus, and executing WebAssembly components. Domain-specific behavior — messaging platforms, event sources, business workflows, reusable tools, state/session storage, OAuth, deployment targets, observability, and control surfaces — is delivered through runtime packs, capability providers, or deploy/designer extensions.
+Greentic is built around a small runtime core and a large pack ecosystem. The core runtime is responsible for loading bundles, enforcing tenant boundaries, routing ingress, coordinating the runtime routing layer, and executing WebAssembly components. Domain-specific behavior — messaging platforms, event sources, business workflows, reusable tools, state/session storage, OAuth, deployment targets, observability, and control surfaces — is delivered through runtime packs, capability providers, or deploy/designer extensions.
 
 ```
 External users, systems, schedules, and APIs
@@ -154,7 +154,7 @@ Because these concerns sit behind explicit interfaces, an organization can repla
 | **Ingress** | HTTP route resolver | Public webhook, WebChat, event, and control endpoints |
 | **Pack Runtime** | `.gtpack` / `.gtbundle` loader | Signed pack verification, capability grants, dependency registration |
 | **Flow Runtime** | `.ygtc` graphs | Trigger routing, orchestration, branching, retries, node execution |
-| **Message Bus** | NATS (embedded or external) | Tenant-scoped message/event distribution and pub/sub |
+| **Message Bus** | internal runtime routing | Tenant-scoped message/event distribution and pub/sub |
 | **Capability Services** | Runtime packs, capability hooks, and deploy/designer extensions | State/session, secrets, OAuth, deploy, observe, control, policy |
 
 ## Data Flow
@@ -168,7 +168,7 @@ Because these concerns sit behind explicit interfaces, an organization can repla
    │
 3. Messaging provider ingress component validates and normalizes the payload
    │
-4. Runtime resolves env / tenant / team / channel and publishes a tenant-scoped normalized message through NATS
+4. Runtime resolves env / tenant / team / channel and publishes a tenant-scoped normalized message through runtime routing
    │
 5. Flow router selects the app flow and loads session state
    │
