@@ -156,7 +156,7 @@ Because workers, providers, and tools are packaged as portable components, you c
 | WASM Runtime | Wasmtime v41 |
 | WASM Target | `wasm32-wasip2` |
 | HTTP Server | Axum v0.8 |
-| Messaging Bus | NATS |
+| Message Routing | Internal runtime routing |
 | Serialization | serde + CBOR + YAML |
 
 ## Use Cases

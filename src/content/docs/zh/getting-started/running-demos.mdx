@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-在一个 bundle 中演示所有 event providers：webhooks、cron timers、通过 SendGrid 发送 transactional email，以及通过 Twilio 发送 SMS。
-
-- **Channels:** WebChat GUI
-- **External services:** SendGrid（可选）、Twilio（可选）、incoming webhook
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 交互式员工入职 wizard，包含任务跟踪、文档收集和权限开通。支持在多步流程之间持久化 session state。
@@ -139,20 +125,6 @@ gtc start ./sales-crm-demo-bundle
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-面向 WebChat 和 Webex 的 adaptive-card incident 创建 flow，随后会在 Better Stack 中打开一个 incident。
-
-- **Channels:** WebChat GUI、Webex
-- **External services:** Better Stack（setup-answers 中的 `betterstack_token`）
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ gtc setup ./<demo>-bundle --dry-run
 gtc stop ./<demo>-bundle
 ```
 
-这会关闭 runner，以及 `gtc start` 启动的所有辅助进程（NATS、tunnels）。
+这会关闭 runner，以及 `gtc start` 启动的所有辅助进程（runtime routing、tunnels）。
 
 ## 故障排查
 

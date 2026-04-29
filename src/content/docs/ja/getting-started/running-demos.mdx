@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-1 つの bundle であらゆる event provider を試します。webhooks、cron timers、SendGrid 経由の transactional email、Twilio 経由の SMS が含まれます。
-
-- **Channels:** WebChat GUI
-- **External services:** SendGrid（任意）、Twilio（任意）、incoming webhook
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 task tracking、document collection、access provisioning を備えた対話型の employee onboarding wizard です。複数ステップにまたがって session state を保持します。
@@ -139,20 +125,6 @@ inventory と supply-chain 向け assistant です。stock checks、order tracki
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-WebChat と Webex を対象にした adaptive-card ベースの incident 作成 flow で、Better Stack 上に incident を作成します。
-
-- **Channels:** WebChat GUI、Webex
-- **External services:** Better Stack（setup-answers 内の `betterstack_token`）
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ gtc setup ./<demo>-bundle --dry-run
 gtc stop ./<demo>-bundle
 ```
 
-これにより、runner と、`gtc start` が起動した補助プロセス（NATS、tunnels）が停止します。
+これにより、runner と、`gtc start` が起動した補助プロセス（runtime routing、tunnels）が停止します。
 
 ## Troubleshooting
 

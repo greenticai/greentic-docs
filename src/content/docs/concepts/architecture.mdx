@@ -7,7 +7,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## High-Level Architecture
 
-Greentic is built around a small runtime core and a large pack ecosystem. The core runtime is responsible for loading bundles, enforcing tenant boundaries, routing ingress, coordinating the NATS message bus, and executing WebAssembly components. Domain-specific behavior — messaging platforms, event sources, business workflows, reusable tools, state/session storage, OAuth, deployment targets, observability, and control surfaces — is delivered through runtime packs, capability providers, or deploy/designer extensions.
+Greentic is built around a small runtime core and a large pack ecosystem. The core runtime is responsible for loading bundles, enforcing tenant boundaries, routing ingress, coordinating the runtime routing layer, and executing WebAssembly components. Domain-specific behavior — messaging platforms, event sources, business workflows, reusable tools, state/session storage, OAuth, deployment targets, observability, and control surfaces — is delivered through runtime packs, capability providers, or deploy/designer extensions.
 
 ```
 External users, systems, schedules, and APIs
@@ -120,7 +120,6 @@ my-bundle/
 | **App packs** | Digital-worker flows, custom WASM nodes, cards, templates, prompts, i18n | This is the business logic: the worker that answers, acts, plans, approves, or integrates. |
 | **Messaging provider packs** | Slack, Teams, Telegram, WhatsApp, WebChat, Webex, Email ingress/egress components | They decouple flows from platform-specific APIs so the same worker can run on many channels. |
 | **Events provider packs** | Webhook, timer, SendGrid email, Twilio SMS, and custom event ingress | They let workers start from business events, schedules, alerts, and system signals rather than only chat. |
-| **Component/tool packs** | Reusable LLM callers, template renderers, MCP tools, API clients, transformations | They keep flows composable and make integrations reusable across many workers. |
 | **Capability providers and extensions** | State/session providers, OAuth brokers, operation hooks, deploy extensions, admin/control surfaces, telemetry integrations | They make the runtime portable: the same worker can use different infrastructure and operations surfaces without changing the flow. |
 
 ## Capabilities And Extensions
@@ -154,7 +153,7 @@ Because these concerns sit behind explicit interfaces, an organization can repla
 | **Ingress** | HTTP route resolver | Public webhook, WebChat, event, and control endpoints |
 | **Pack Runtime** | `.gtpack` / `.gtbundle` loader | Signed pack verification, capability grants, dependency registration |
 | **Flow Runtime** | `.ygtc` graphs | Trigger routing, orchestration, branching, retries, node execution |
-| **Message Bus** | NATS (embedded or external) | Tenant-scoped message/event distribution and pub/sub |
+| **Message Bus** | internal runtime routing | Tenant-scoped message/event distribution and pub/sub |
 | **Capability Services** | Runtime packs, capability hooks, and deploy/designer extensions | State/session, secrets, OAuth, deploy, observe, control, policy |
 
 ## Data Flow
@@ -168,7 +167,7 @@ Because these concerns sit behind explicit interfaces, an organization can repla
    │
 3. Messaging provider ingress component validates and normalizes the payload
    │
-4. Runtime resolves env / tenant / team / channel and publishes a tenant-scoped normalized message through NATS
+4. Runtime resolves env / tenant / team / channel and publishes a tenant-scoped normalized message through runtime routing
    │
 5. Flow router selects the app flow and loads session state
    │
@@ -260,27 +259,108 @@ Bundle access is controlled by `tenants/<tenant>/tenant.gmap` and optional `tena
 Greentic uses the **WebAssembly Interface Types (WIT)** specification for defining component interfaces:
 
 ```wit
-// greentic-interfaces/wit/component.wit
-package greentic:component;
+// greentic-interfaces/wit/greentic/component@0.6.0/package.wit
+package greentic:component@0.6.0;
 
-interface types {
-    record message {
-        id: string,
-        content: string,
-        sender: string,
-        timestamp: u64,
-    }
+interface control {
+  should-cancel: func() -> bool;
+  yield-now: func();
+}
 
-    record outcome {
-        success: bool,
-        data: option<string>,
-        error: option<string>,
-    }
+interface node {
+  use greentic:types-core/core@0.6.0.{capability-id, component-id, flow-id, node-error, step-id, tenant-ctx};
+
+  record invocation-envelope {
+    ctx: tenant-ctx,
+    flow-id: flow-id,
+    step-id: step-id,
+    component-id: component-id,
+    attempt: u32,
+    payload-cbor: list<u8>,
+    metadata-cbor: option<list<u8>>,
+  }
+
+  record invocation-result {
+    ok: bool,
+    output-cbor: list<u8>,
+    output-metadata-cbor: option<list<u8>>,
+  }
+
+  variant schema-source {
+    cbor-schema-id(string),
+    inline-cbor(list<u8>),
+    ref-pack-path(string),
+    ref-uri(string),
+  }
+
+  record io-schema {
+    schema: schema-source,
+    content-type: string,
+    schema-version: option<string>,
+  }
+
+  record example {
+    title: string,
+    input-cbor: list<u8>,
+    output-cbor: list<u8>,
+  }
+
+  record schema-ref {
+    id: string,
+    content-type: string,
+    blake3-hash: string,
+    version: string,
+    bytes: option<list<u8>>,
+    uri: option<string>,
+  }
+
+  record setup-example {
+    title: string,
+    answers-cbor: list<u8>,
+  }
+
+  record setup-template-scaffold {
+    template-ref: string,
+    output-layout: option<string>,
+  }
+
+  variant setup-output {
+    config-only,
+    template-scaffold(setup-template-scaffold),
+  }
+
+  record setup-contract {
+    qa-spec: schema-source,
+    answers-schema: schema-source,
+    examples: list<setup-example>,
+    outputs: list<setup-output>,
+  }
+
+  record op {
+    name: string,
+    summary: option<string>,
+    input: io-schema,
+    output: io-schema,
+    examples: list<example>,
+  }
+
+  record component-descriptor {
+    name: string,
+    version: string,
+    summary: option<string>,
+    capabilities: list<capability-id>,
+    ops: list<op>,
+    schemas: list<schema-ref>,
+    setup: option<setup-contract>,
+  }
+
+  describe: func() -> component-descriptor;
+  invoke: func(op: string, envelope: invocation-envelope) -> result<invocation-result, node-error>;
 }
 
 world component {
-    import types;
-    export execute: func(input: types.message) -> types.outcome;
+  import control;
+  export node;
 }
 ```
 

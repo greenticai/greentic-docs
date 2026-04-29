@@ -105,33 +105,6 @@ gtc doctor
 
 ## Dependensi Opsional
 
-### NATS (Message Bus)
-
-Untuk deployment produksi:
-
-<Tabs>
-<TabItem label="Docker">
-
-```bash
-docker run -d --name nats -p 4222:4222 nats:latest
-```
-
-</TabItem>
-<TabItem label="Homebrew (macOS)">
-
-```bash
-brew install nats-server
-nats-server
-```
-
-</TabItem>
-<TabItem label="Download Langsung">
-
-Download dari [nats.io](https://nats.io/download/)
-
-</TabItem>
-</Tabs>
-
 ### Redis (Penyimpanan Sesi)
 
 Untuk persistensi sesi produksi:
@@ -210,7 +183,7 @@ gtc install --manifest ./greentic-toolchain.json
 `gtc install` menginstal tool pendamping standar. Untuk pengembangan komponen mandiri, Anda juga dapat menginstal `cargo-component`:
 
 ```bash
-cargo install --locked cargo-component
+cargo binstall cargo-component
 ```
 
 Lalu gunakan permukaan komponen yang didelegasikan:
@@ -241,12 +214,6 @@ gtc wizard --dry-run
 **Error: "wasm32-wasip2 target not found"**
 ```bash
 rustup target add wasm32-wasip2
-```
-
-**Error: "Cannot connect to NATS"**
-```bash
-# Jalankan NATS embedded dengan gtc start
-gtc start ./my-bundle --nats on
 ```
 
 **Error: "Permission denied"**

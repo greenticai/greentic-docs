@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-Erprobt jeden Event-Provider in einem Bundle: Webhooks, Cron-Timer, transaktionale E-Mails über SendGrid und SMS über Twilio.
-
-- **Kanäle:** WebChat GUI
-- **Externe Dienste:** SendGrid (optional), Twilio (optional), eingehender Webhook
-- **Demo-ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 Interaktiver Mitarbeiter-Onboarding-Wizard mit Aufgabenverfolgung, Dokumentensammlung und Bereitstellung von Zugriffsrechten. Behält den Session-Status über mehrere Schritte hinweg bei.
@@ -139,20 +125,6 @@ Bestands- und Supply-Chain-Assistent — Lagerprüfungen, Auftragsverfolgung, Wa
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-Adaptive-card-Incident-Erstellungsflow für WebChat und Webex, der anschließend einen Incident in Better Stack eröffnet.
-
-- **Kanäle:** WebChat GUI, Webex
-- **Externe Dienste:** Better Stack (`betterstack_token` in setup-answers)
-- **Demo-ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ Beide Befehle unterstützen `--dry-run`, um die Ausgabe in der Vorschau anzuzeig
 gtc stop ./<demo>-bundle
 ```
 
-Dadurch werden der Runner und alle Hilfsprozesse (NATS, Tunnel) beendet, die `gtc start` gestartet hat.
+Dadurch werden der Runner und alle Hilfsprozesse (Tunnel) beendet, die `gtc start` gestartet hat.
 
 ## Fehlerbehebung
 

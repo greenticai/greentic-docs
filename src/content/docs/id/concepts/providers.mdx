@@ -44,7 +44,7 @@ External Service (Slack/Teams/Telegram)
     │
     ▼ Normalized Message
 ┌─────────────────┐
-│   NATS Bus      │ ← greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+│           Runtime Router                │ ← greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
 └─────────────────┘
     │
     ▼
@@ -54,7 +54,7 @@ External Service (Slack/Teams/Telegram)
     │
     ▼
 ┌─────────────────┐
-│   NATS Bus      │ ← greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+│           Runtime Router                │ ← greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
 └─────────────────┘
     │
     ▼ Platform-specific format
@@ -293,16 +293,6 @@ providers:
   }
 }
 ```
-
-## Subject NATS
-
-Provider berkomunikasi melalui NATS:
-
-| Subject Pattern | Purpose |
-|----------------|---------|
-| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | Pesan masuk |
-| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | Pesan keluar |
-| `greentic.events.{env}.{tenant}.{type}` | Notifikasi event |
 
 ## Provider yang Tersedia
 

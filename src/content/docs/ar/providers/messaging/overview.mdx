@@ -68,7 +68,7 @@ External Platform (Slack/Teams/Telegram)
     │
     ▼ Normalized Message
 ┌─────────────────────────────────────────┐
-│              NATS Bus                    │
+│           Runtime Router                │
 │  greentic.messaging.ingress.{tenant}... │
 └─────────────────────────────────────────┘
     │
@@ -80,7 +80,7 @@ External Platform (Slack/Teams/Telegram)
     │
     ▼
 ┌─────────────────────────────────────────┐
-│              NATS Bus                    │
+│           Runtime Router                │
 │  greentic.messaging.egress.{tenant}...  │
 └─────────────────────────────────────────┘
     │
@@ -148,15 +148,6 @@ Run `gtc setup ./my-bundle` interactively, or provide an answers file that match
   }
 }
 ```
-
-## NATS Subjects
-
-Messages flow through NATS with tenant-scoped subjects:
-
-| Subject | Direction |
-|---------|-----------|
-| `greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}` | Incoming |
-| `greentic.messaging.egress.{env}.{tenant}.{team}.{channel}` | Outgoing |
 
 ## Common Features
 

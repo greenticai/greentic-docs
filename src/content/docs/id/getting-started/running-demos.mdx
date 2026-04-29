@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-Menguji setiap provider event dalam satu bundle: webhook, cron timer, transactional email melalui SendGrid, dan SMS melalui Twilio.
-
-- **Channel:** WebChat GUI
-- **Layanan eksternal:** SendGrid (opsional), Twilio (opsional), incoming webhook
-- **ID demo:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 Wizard onboarding karyawan interaktif dengan pelacakan tugas, pengumpulan dokumen, dan provisioning akses. Menyimpan state sesi di beberapa langkah.
@@ -139,20 +125,6 @@ Asisten inventaris dan supply-chain: pengecekan stok, pelacakan pesanan, peringa
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-Flow pembuatan incident berbasis adaptive card yang menargetkan WebChat dan Webex, lalu membuka incident di Better Stack.
-
-- **Channel:** WebChat GUI, Webex
-- **Layanan eksternal:** Better Stack (`betterstack_token` di setup-answers)
-- **ID demo:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ Kedua perintah mendukung `--dry-run` untuk meninjau output tanpa menyentuh files
 gtc stop ./<demo>-bundle
 ```
 
-Ini mematikan runner dan proses tambahan apa pun (NATS, tunnel) yang dijalankan oleh `gtc start`.
+Ini mematikan runner dan proses tambahan apa pun (tunnel) yang dijalankan oleh `gtc start`.
 
 ## Pemecahan Masalah
 

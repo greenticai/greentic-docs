@@ -57,7 +57,7 @@ Workflows werden als **gerichtete Graphen** in YAML-Dateien (`.ygtc`) definiert:
 | WASM Runtime | Wasmtime v41 |
 | WASM Target | `wasm32-wasip2` |
 | HTTP Server | Axum v0.8 |
-| Messaging Bus | NATS |
+| Message Routing | Internal runtime routing |
 | Serialization | serde + CBOR + YAML |
 
 ## Anwendungsfälle

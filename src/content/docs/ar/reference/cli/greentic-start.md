@@ -46,11 +46,6 @@ Options:
       --tenant <TENANT>
 
       --team <TEAM>
-
-      --nats <NATS>
-          [default: off] [possible values: off, on, external]
-      --nats-url <NATS_URL>
-
       --config <CONFIG>
 
       --cloudflared <CLOUDFLARED>
@@ -64,7 +59,7 @@ Options:
       --runner-binary <RUNNER_BINARY>
 
       --restart <RESTART>
-          [possible values: all, cloudflared, ngrok, nats, gateway, egress, subscriptions]
+          [possible values: all, cloudflared, ngrok, gateway, egress, subscriptions]
       --log-dir <DIR>
 
       --verbose
@@ -96,11 +91,6 @@ Options:
       --tenant <TENANT>
 
       --team <TEAM>
-
-      --nats <NATS>
-          [default: off] [possible values: off, on, external]
-      --nats-url <NATS_URL>
-
       --config <CONFIG>
 
       --cloudflared <CLOUDFLARED>
@@ -114,7 +104,7 @@ Options:
       --runner-binary <RUNNER_BINARY>
 
       --restart <RESTART>
-          [possible values: all, cloudflared, ngrok, nats, gateway, egress, subscriptions]
+          [possible values: all, cloudflared, ngrok, gateway, egress, subscriptions]
       --log-dir <DIR>
 
       --verbose
@@ -160,11 +150,6 @@ Options:
       --tenant <TENANT>
 
       --team <TEAM>
-
-      --nats <NATS>
-          [default: off] [possible values: off, on, external]
-      --nats-url <NATS_URL>
-
       --config <CONFIG>
 
       --cloudflared <CLOUDFLARED>
@@ -178,7 +163,7 @@ Options:
       --runner-binary <RUNNER_BINARY>
 
       --restart <RESTART>
-          [possible values: all, cloudflared, ngrok, nats, gateway, egress, subscriptions]
+          [possible values: all, cloudflared, ngrok, gateway, egress, subscriptions]
       --log-dir <DIR>
 
       --verbose

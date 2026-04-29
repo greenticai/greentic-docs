@@ -57,34 +57,6 @@ Most demos can run with just **WebChat GUI** plus `state-memory`, which need no 
 
 Each release of `greentic-demo` publishes a `.gtpack`, a `*-create-answers.json`, and a `*-setup-answers.json` to the [latest release](https://github.com/greenticai/greentic-demo/releases/latest). Substitute the demo ID into the three commands shown above.
 
-### quickstart-event
-
-Exercises every event provider in one bundle: webhooks, cron timers, transactional email via SendGrid, and SMS via Twilio.
-
-- **Channels:** WebChat GUI
-- **External services:** SendGrid (optional), Twilio (optional), incoming webhook
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
-### greentic-ai
-
-A lead-capture and contact-routing digital worker for Greentic AI, wired for multiple messaging channels so the same flow can run across customer-facing entry points.
-
-- **Channels:** Slack, Teams, WebChat GUI, Webex, Telegram, WhatsApp, Email
-- **External services:** Messaging provider credentials for the channels you enable
-- **Demo ID:** `greentic-ai`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/greentic-ai-create-answers.json
-gtc setup ./greentic-ai-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/greentic-ai-setup-answers.json
-gtc start ./greentic-ai-demo-bundle
-```
-
 ### hr-onboarding
 
 Interactive employee onboarding wizard with task tracking, document collection, and access provisioning. Persists session state across multiple steps.
@@ -153,20 +125,6 @@ Inventory and supply-chain assistant — stock checks, order tracking, low-stock
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-Adaptive-card incident creation flow that targets WebChat and Webex, then opens an incident on Better Stack.
-
-- **Channels:** WebChat GUI, Webex
-- **External services:** Better Stack (`betterstack_token` in setup-answers)
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -330,7 +288,7 @@ Both commands support `--dry-run` for previewing output without touching the fil
 gtc stop ./<demo>-bundle
 ```
 
-This shuts down the runner and any auxiliary processes (NATS, tunnels) that `gtc start` brought up.
+This shuts down the runner and any auxiliary processes (tunnels) that `gtc start` brought up.
 
 ## Troubleshooting
 

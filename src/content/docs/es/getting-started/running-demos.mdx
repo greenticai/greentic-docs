@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-Ejercita todos los proveedores de eventos en un solo bundle: webhooks, temporizadores cron, correo transaccional mediante SendGrid y SMS mediante Twilio.
-
-- **Canales:** WebChat GUI
-- **Servicios externos:** SendGrid (opcional), Twilio (opcional), webhook entrante
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 Wizard interactivo de onboarding de empleados con seguimiento de tareas, recopilación de documentos y aprovisionamiento de accesos. Persiste el estado de la sesión a lo largo de varios pasos.
@@ -139,20 +125,6 @@ Asistente de inventario y supply-chain: comprobaciones de stock, seguimiento de 
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-Flujo de creación de incidentes con adaptive cards que apunta a WebChat y Webex, y luego abre un incidente en Better Stack.
-
-- **Canales:** WebChat GUI, Webex
-- **Servicios externos:** Better Stack (`betterstack_token` en setup-answers)
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ Ambos comandos admiten `--dry-run` para previsualizar la salida sin tocar el sis
 gtc stop ./<demo>-bundle
 ```
 
-Esto apaga el runner y cualquier proceso auxiliar (NATS, túneles) que `gtc start` haya levantado.
+Esto apaga el runner y cualquier proceso auxiliar (túneles) que `gtc start` haya levantado.
 
 ## Solución de Problemas
 

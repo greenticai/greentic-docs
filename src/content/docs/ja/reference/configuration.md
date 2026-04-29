@@ -17,7 +17,7 @@ The current high-confidence references are:
 | setup answers JSON | Provider or extension setup answers consumed by `greentic-setup`. |
 | tenant/team `.gmap` files | Runtime access and mapping files produced by setup/start tooling. |
 
-Older docs listed a broad `greentic.toml` runtime schema with NATS, Redis, logging, telemetry, and WASM settings. That schema is not validated by the current local docs/tooling pass, so it is not documented here as a canonical Greentic config file.
+Older docs listed a broad `greentic.toml` runtime schema with Redis, logging, telemetry, and WASM settings. That schema is not validated by the current local docs/tooling pass, so it is not documented here as a canonical Greentic config file.
 
 ## Wizard Answer Documents
 
