@@ -18,7 +18,7 @@ Before you begin, ensure you have:
 - **`gtc` CLI** installed — see [Installation](/getting-started/installation/)
 - **Rust** 1.95 or later (required for `cargo binstall gtc` and source builds)
 - A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only path
-- Any **LLM provider credentials** requested by the demo setup answers
+- An **LLM backend**: either use OpenAI with an API key from https://platform.openai.com/, or use Ollama locally by setting the setup answers to `http://localhost:<ollama_port>/v1`, choosing a model from `ollama list` or one you install with `ollama pull`, and entering any value in the API key field
 
 ## Launch the deep research demo
 
