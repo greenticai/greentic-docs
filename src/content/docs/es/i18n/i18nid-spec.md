@@ -1,156 +1,106 @@
 ---
-title: Especificación de I18nId
-description: Especificación determinista de identificadores de internacionalización
+title: Translation Keys
+description: Stable key naming for Greentic i18n catalogs
 ---
 
-## Resumen
+## Overview
 
-La especificación **I18nId v1** define cómo las cadenas se convierten en identificadores deterministas y resistentes a colisiones para internacionalización.
+Greentic translation catalogs are flat JSON key/value maps. Older docs referred to deterministic `I18nId` values, but the current demos and local tooling use readable stable keys such as:
 
-## Formato
-
-```
-i18n:v1:<hash>
-```
-
-Donde:
-- `i18n` - Identificador del protocolo
-- `v1` - Versión de la especificación
-- `<hash>` - Hash BLAKE3 de la cadena normalizada (codificado en hex, 16 caracteres)
-
-## Ejemplos
-
-| Cadena de origen | I18nId |
-|---------------|--------|
-| "Hello" | `i18n:v1:a5b9c3d7e8f0` |
-| "Hello, World!" | `i18n:v1:b6c8d4e9f1a2` |
-| "  Hello  " | `i18n:v1:a5b9c3d7e8f0` (igual después de la normalización) |
-
-## Normalización
-
-Antes de generar el hash, las cadenas se normalizan:
-
-1. **Recortar espacios** - Eliminar espacios al inicio y al final
-2. **Colapsar espacios internos** - Varios espacios → un solo espacio
-3. **Normalización Unicode** - Forma NFC
-4. **Minúsculas** (opcional, configurable)
-
-```rust
-fn normalize(input: &str) -> String {
-    input
-        .trim()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+```text
+card.main_menu.body_0.text
+card.customer_form.body_2.label
+qa.install.title
+cli.root.about
 ```
 
-## Generación del hash
+The practical rule is simple: keys must be stable, unique within the catalog, and meaningful enough that translators and reviewers can understand their context.
 
-```rust
-use blake3::Hasher;
+## Key Format
 
-fn generate_i18n_id(text: &str) -> String {
-    let normalized = normalize(text);
-    let hash = blake3::hash(normalized.as_bytes());
-    let hex = hex::encode(&hash.as_bytes()[..8]); // First 8 bytes = 16 hex chars
-    format!("i18n:v1:{}", hex)
-}
+Recommended key shape:
+
+```text
+{domain}.{screen_or_component}.{path}.{field}
 ```
 
-## Propiedades
+Examples:
 
-### Determinista
+| Key | Meaning |
+| --- | --- |
+| `card.main_menu.body_0.text` | First body text block in the main menu card. |
+| `card.main_menu.actions_0.title` | First action title in the main menu card. |
+| `card.customer_form.body_2.placeholder` | Placeholder text in a form input. |
+| `qa.install.title` | Component setup UI title. |
+| `qa.field.api_key.help` | Help text for a setup field. |
 
-La misma entrada siempre produce la misma salida:
+Some existing packs use variants such as `cards.about_card.body.i0.text`. Keep existing keys stable once a pack is published; do not rename keys only for style.
 
-```rust
-assert_eq!(
-    generate_i18n_id("Hello"),
-    generate_i18n_id("Hello")
-);
-```
+## Adaptive Card References
 
-### Resistente a colisiones
-
-BLAKE3 con 64 bits proporciona una resistencia de cumpleaños de ~2^32, adecuada para la mayoría de las aplicaciones.
-
-### Estable
-
-Los IDs se mantienen estables entre:
-- Diferentes plataformas
-- Diferentes lenguajes de programación
-- Diferentes versiones (dentro de v1)
-
-## Uso en Greentic
-
-### Mensajes de flujo
-
-```yaml
-- id: greet
-  type: reply
-  config:
-    message_key: "i18n:v1:a5b9c3d7e8f0"
-```
-
-### Tarjetas
+Use the key from the locale catalog in the card:
 
 ```json
 {
   "type": "TextBlock",
-  "text": "{{i18n:i18n:v1:a5b9c3d7e8f0}}"
+  "text": "{{i18n:card.main_menu.body_0.text}}"
 }
 ```
 
-### Plantillas
+Then define the value in each locale:
 
-```handlebars
-{{t "i18n:v1:a5b9c3d7e8f0"}}
+```json title="assets/i18n/en.json"
+{
+  "card.main_menu.body_0.text": "Welcome"
+}
 ```
 
-## Herramientas CLI
-
-### Generar ID
-
-```bash
-greentic-i18n id "Hello, World!"
-# Output: i18n:v1:b6c8d4e9f1a2
+```json title="assets/i18n/fr.json"
+{
+  "card.main_menu.body_0.text": "Bienvenue"
+}
 ```
 
-### Verificar ID
+## Normalization and Fallback
 
-```bash
-greentic-i18n verify "i18n:v1:b6c8d4e9f1a2" "Hello, World!"
-# Output: Valid
+The local Greentic i18n runtime normalizes BCP 47-ish locale tags before lookup:
+
+- `en_US.UTF-8` becomes `en-US`
+- `ja-JP` can fall back to `ja`
+- unknown locales fall back to `en` when an English catalog is available
+- missing keys fall back to the key or source text depending on the caller
+
+This is locale fallback, not hash generation.
+
+## Extracted Card Keys
+
+Card extraction helpers usually derive keys from:
+
+1. a prefix such as `card`
+2. the card id or filename
+3. the JSON path of the field
+4. the translated field name
+
+Example:
+
+```text
+card.welcome.body_0.text
+card.welcome.actions_0.title
+card.form.body_1.placeholder
+card.form.body_0_choices_2.title
 ```
 
-## Migración desde otros sistemas
+## Best Practices
 
-### Desde claves
+1. Keep keys stable after release.
+2. Do not translate keys, only values.
+3. Keep placeholders intact, for example `{{name}}` or `{tenant}`.
+4. Use `assets/i18n/en.json` as the source catalog unless your source language is different.
+5. Add the same keys to every translated locale file.
+6. Run `greentic-i18n-translator validate` for translated files.
+7. Prefer readable keys over opaque hashes for pack assets and cards.
 
-```json
-// Before
-{ "greeting.hello": "Hello" }
+## Next Steps
 
-// After (auto-migration)
-{ "i18n:v1:a5b9c3d7e8f0": "Hello" }
-```
-
-### Script de migración
-
-```bash
-greentic-i18n migrate ./old-translations.json --output ./new-translations.json
-```
-
-## Buenas prácticas
-
-1. **Usa siempre el CLI** para generar IDs
-2. **No modifiques los IDs manualmente** - regénéralos si cambia el origen
-3. **Guarda las cadenas fuente** junto con las traducciones como referencia
-4. **Versiona tus archivos de traducción** - permite hacer rollback
-5. **Prueba con múltiples locales** - detecta traducciones faltantes
-
-## Próximos pasos
-
-- [Traducción de Tarjetas](/es/i18n/cards-translation/)
-- [Resumen de i18n](/es/i18n/overview/)
+- [Cards Translation](/i18n/cards-translation/)
+- [i18n Overview](/i18n/overview/)

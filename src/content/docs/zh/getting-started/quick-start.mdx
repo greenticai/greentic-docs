@@ -1,67 +1,73 @@
 ---
-title: 快速开始
-description: 几分钟内运行你的第一个 Greentic digital worker
+title: Quick Start
+description: Get your first Greentic digital worker running in minutes
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-本指南将帮助你在几分钟内从零开始运行一个 Greentic digital worker。最快的方式是启动 [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog 中已发布的一个 demo，每个 demo 都遵循相同的三步流程。
+This guide gets you from zero to a running Greentic digital worker in a few minutes. The fastest path is to launch one of the published demos from the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog — every demo uses the same three-step flow.
 
 <Aside type="tip">
-想浏览所有可用 demo，并准确了解每个 demo 的功能？请跳转到[运行 Demo](/zh/getting-started/running-demos/)。
+Want to browse all available demos and see exactly what each one does? Jump to [Running Demos](/getting-started/running-demos/).
 </Aside>
 
-## 先决条件
+## Prerequisites
 
-开始之前，请确保你已具备：
+Before you begin, ensure you have:
 
-- 已安装 **`gtc` CLI**，参见[安装](/zh/getting-started/installation/)
-- **Rust** 1.91 或更高版本（仅在从源码构建时需要）
-- 用于 webhook providers 的**公开 URL**（例如 `ngrok` 或 `cloudflared`）；如果只是 WebChat quickstart，则不需要
+- **`gtc` CLI** installed — see [Installation](/getting-started/installation/)
+- **Rust** 1.95 or later (only needed if you build from source)
+- A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only path
+- Any **LLM provider credentials** requested by the demo setup answers
 
-## 启动 quickstart demo
+## Launch the deep research demo
 
-`quickstart` demo 是最小的端到端 bundle：包含 welcome card、about card，以及通过 WebChat 进行的 echo 交互。它不需要任何外部账户。
+The `deep-research-demo` bundle is a better first look at what a Greentic digital worker can do. It gives you a WebChat research assistant with two execution modes:
+
+- **Single Shot** - Ask a question and let one research analyst produce a fast answer.
+- **Agentic** - Route the same question through a research planner and analyst, showing how workers can collaborate across multiple flow steps.
+
+![Deep Research Digital Worker showing a research question, Single Shot and Agentic actions, and a Research Analyst response](/images/deep-research-demo.png)
 
 <Steps>
 
-1. **创建 bundle**，使用已发布的 create-answers 文档：
+1. **Create the bundle** from the published create-answers document:
 
    ```bash
-   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-create-answers.json
    ```
 
-   wizard 会下载 demo pack、解析 capability 依赖（例如由于 WebChat provider 需要 `greentic:state/state-store`，它会自动拉取 `state-memory`），并写出本地 bundle 目录。
+   The wizard downloads the research demo pack, resolves capability dependencies (e.g. it pulls in `state-memory` automatically because the WebChat provider needs `greentic:state/state-store`), and writes a local bundle directory.
 
-2. **配置 providers**，使用已发布的 setup-answers 文档：
+2. **Configure providers** with the published setup-answers document:
 
    ```bash
-   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+   gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
    ```
 
-   setup 会自动检测 bundle 的 tenant，按 provider 持久化 secrets，并验证所有必需 capability 都已满足。
+   Setup auto-detects the bundle's tenant, persists secrets per provider, and validates that every required capability is satisfied. If the research analyst uses an external LLM provider, the setup answers identify which credential values must be supplied.
 
-3. **启动 runtime**：
+3. **Start the runtime**:
 
    ```bash
-   gtc start ./quickstart-demo-bundle
+   gtc start ./deep-research-demo-bundle
    ```
 
-   runner 会打印公开的 WebChat URL，在浏览器中打开它后，你应该能看到 welcome card。
+   The runner prints the public WebChat URL. Open it in a browser, enter a research question, then choose **Single Shot** for a direct analyst answer or **Agentic** to run the planner-and-analyst workflow.
 
 </Steps>
 
 <Aside type="note">
-catalog 中的每个 demo 都适用同样的三步流程。若要尝试其他 demo，只需替换 demo ID，例如 `helpdesk-itsm`、`hr-onboarding` 或 `weather-mcp-demo`。完整列表请参见[运行 Demo](/zh/getting-started/running-demos/)。
+The same three-step flow works for every demo in the catalog. To try a different one, just substitute the demo ID — for example `helpdesk-itsm`, `hr-onboarding`, `telco-x-demo`, or `weather-mcp-demo`. See [Running Demos](/getting-started/running-demos/) for the complete list.
 </Aside>
 
-## 构建你自己的 bundle
+## Building your own bundle
 
-当你准备跳出已发布 catalog 时，仍然使用同样的三个命令，只是它们会读取你自己的文件，而不是 release URL：
+When you are ready to move beyond the published catalog, the same three commands apply — they just consume your own files instead of release URLs:
 
 <Steps>
 
-1. **创建一个 bundle**，使用 wizard。你可以交互式运行，也可以使用本地 answers 文档：
+1. **Create a bundle** with the wizard. You can run it interactively or with a local answers document:
 
    ```bash
    gtc wizard
@@ -69,7 +75,7 @@ catalog 中的每个 demo 都适用同样的三步流程。若要尝试其他 de
    gtc wizard --answers ./my-create-answers.json
    ```
 
-2. **配置 providers**，同样可以选择交互式或非交互式：
+2. **Configure providers**, again either interactively or non-interactively:
 
    ```bash
    gtc setup ./my-bundle
@@ -77,7 +83,7 @@ catalog 中的每个 demo 都适用同样的三步流程。若要尝试其他 de
    gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-3. **启动 runtime**：
+3. **Start the runtime**:
 
    ```bash
    gtc start ./my-bundle
@@ -85,11 +91,29 @@ catalog 中的每个 demo 都适用同样的三步流程。若要尝试其他 de
 
 </Steps>
 
-完整参考请参见 [gtc wizard](/zh/cli/wizard/) 和 [gtc setup](/zh/cli/setup/)，其中包括 capability flags 和 answers 文档 schema。
+See [gtc wizard](/cli/wizard/) and [gtc setup](/cli/setup/) for the full reference, including capability flags and answers-document schemas.
 
-## 示例：Hello World Flow
+## Multi-language and i18n
 
-创建一个简单的 flow，用于响应消息：
+Greentic supports multi-language workers at two levels:
+
+- **Code level** - Your components can be written in any language that compiles to WebAssembly components.
+- **Experience level** - User-facing text can be translated and selected by locale at runtime.
+
+For a WebChat or Adaptive Card worker, translations usually live in pack or bundle assets. Greentic can store locale files such as `assets/i18n/en.json` and `assets/i18n/de.json`, then resolve the correct text from the current session, team, tenant, or global default locale. If a translated string is missing, the worker should fall back to the source language rather than failing the flow.
+
+When you create bundles with `gtc wizard`, capability flags such as `greentic.cap.webchat.i18n.v1` tell the tooling to scaffold locale-aware WebChat assets. For cards, use the i18n workflow to extract strings, translate them, and package the locale files with the app pack.
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+See [Multi-Language and i18n](/getting-started/multilanguage-i18n/) for the practical Getting Started overview, then continue to [i18n Overview](/i18n/overview/) and [Cards Translation](/i18n/cards-translation/) for the full workflow.
+
+## Example: Hello World Flow
+
+Create a simple flow that responds to messages:
 
 ```yaml title="flows/hello.ygtc"
 name: hello_world
@@ -108,9 +132,9 @@ triggers:
     target: greet
 ```
 
-## Bundle 结构
+## Bundle Structure
 
-一个典型的 Greentic bundle 如下所示：
+A typical Greentic bundle looks like this:
 
 ```
 my-bundle/
@@ -125,9 +149,9 @@ my-bundle/
 └── seeds.yaml              # Seed data (optional)
 ```
 
-## 配置文件
+## Configuration File
 
-主配置文件（`greentic.demo.yaml`）定义了你的 setup：
+The main configuration file (`greentic.demo.yaml`) defines your setup:
 
 ```yaml title="greentic.demo.yaml"
 name: my-digital-worker
@@ -153,11 +177,11 @@ tenants:
             provider: messaging-telegram
 ```
 
-## 下一步
+## Next Steps
 
-现在你已经运行起了一个基础 setup，可以继续：
+Now that you have a basic setup running:
 
-- [了解 Flows](/zh/concepts/flows/) - 理解 flow 定义
-- [配置 Telegram](/zh/providers/messaging/telegram/) - 设置 Telegram bot
-- [配置 Slack](/zh/providers/messaging/slack/) - 连接到 Slack workspace
-- [构建自定义组件](/zh/concepts/components/) - 创建你自己的 WASM 组件
+- [Learn about Flows](/concepts/flows/) - Understand flow definitions
+- [Configure Telegram](/providers/messaging/telegram/) - Set up Telegram bot
+- [Configure Slack](/providers/messaging/slack/) - Connect to Slack workspace
+- [Build custom components](/concepts/components/) - Create your own WASM components

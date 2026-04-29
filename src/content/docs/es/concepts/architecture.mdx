@@ -17,7 +17,7 @@ Greentic sigue una arquitectura en capas con una clara separación de responsabi
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                   Gateway (HTTP/NATS)                    │
+│                    Gateway (HTTP)                       │
 │                 Public Endpoint Router                   │
 └─────────────────────────────────────────────────────────┘
                             │
@@ -66,7 +66,7 @@ Greentic sigue una arquitectura en capas con una clara separación de responsabi
 | **WASM Runtime** | Wasmtime v41 | Ejecución del modelo de componentes |
 | **Async Runtime** | Tokio v1 | I/O asíncrona, planificación de tareas |
 | **HTTP Server** | Axum v0.8 | API REST, webhooks |
-| **Message Bus** | NATS | Distribución de eventos, pub/sub |
+| **Message Bus** | Internal event bus | Distribución de eventos, pub/sub |
 | **Session Store** | Memory/Redis | Persistencia del estado del flow |
 | **Secrets** | AWS/Azure/GCP/Vault | Gestión de credenciales |
 
@@ -79,7 +79,7 @@ Greentic sigue una arquitectura en capas con una clara separación de responsabi
    │
 2. Webhook Handler (Provider Ingress)
    │
-3. NATS: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+3. Message bus: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
    │
 4. Flow Router (tenant/team resolution)
    │
@@ -89,7 +89,7 @@ Greentic sigue una arquitectura en capas con una clara separación de responsabi
    │
 7. Reply/Action Nodes
    │
-8. NATS: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+8. Message bus: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
    │
 9. Provider Egress → External Service
 ```

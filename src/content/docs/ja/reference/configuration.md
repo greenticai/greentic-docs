@@ -1,293 +1,171 @@
 ---
-title: Configuration リファレンス
-description: Greentic の完全な設定オプション
+title: Configuration Reference
+description: Current configuration files and answer documents used by Greentic tooling
 ---
 
-## 概要
+## Overview
 
-Greentic では複数の設定ファイルを使用します:
+Greentic configuration is mostly produced and consumed by wizards, setup flows, pack manifests, and runtime overlays. Prefer generated schemas over remembered examples.
+
+The current high-confidence references are:
 
 | File | Purpose |
-|------|---------|
-| `greentic.toml` | runtime 設定 |
-| `greentic.demo.yaml` | bundle 設定 |
-| `answers.json` | provider setup の回答 |
+| --- | --- |
+| `pack.yaml` | Pack source manifest. |
+| `.ygtc` | Flow definition file. |
+| `answers.json` | Wizard answer document for a specific CLI/wizard. |
+| setup answers JSON | Provider or extension setup answers consumed by `greentic-setup`. |
+| tenant/team `.gmap` files | Runtime access and mapping files produced by setup/start tooling. |
 
-## greentic.toml
+Older docs listed a broad `greentic.toml` runtime schema with NATS, Redis, logging, telemetry, and WASM settings. That schema is not validated by the current local docs/tooling pass, so it is not documented here as a canonical Greentic config file.
 
-runtime 設定ファイルです。
+## Wizard Answer Documents
 
-### 完全な schema
+Wizard answer files are schema-versioned JSON documents. Always inspect the installed schema before writing one by hand or with a coding agent:
 
-```toml
-# Server configuration
-[server]
-host = "0.0.0.0"
-port = 8080
-workers = 4                     # Number of worker threads
-graceful_shutdown_timeout = 30  # Seconds
-
-# NATS messaging configuration
-[nats]
-enabled = true
-url = "nats://localhost:4222"
-# For cluster:
-# urls = ["nats://nats1:4222", "nats://nats2:4222"]
-connection_timeout = 5          # Seconds
-max_reconnects = 10
-reconnect_delay = 2             # Seconds
-
-# Redis session/state store
-[redis]
-url = "redis://localhost:6379"
-pool_size = 10
-connection_timeout = 5
-
-# Session management
-[session]
-store = "memory"                # "memory" | "redis"
-default_timeout = 1800          # 30 minutes
-max_sessions_per_tenant = 10000
-
-# Logging
-[logging]
-level = "info"                  # "trace" | "debug" | "info" | "warn" | "error"
-format = "pretty"               # "pretty" | "json"
-file = "/var/log/greentic.log"  # Optional: log to file
-include_timestamp = true
-include_target = true
-
-# Telemetry (OpenTelemetry)
-[telemetry]
-enabled = true
-service_name = "greentic"
-otlp_endpoint = "http://localhost:4317"
-otlp_protocol = "grpc"          # "grpc" | "http"
-sampling_ratio = 1.0            # 0.0 to 1.0
-
-# Security
-[security]
-trusted_publishers = [
-    "greentic-official.pub",
-    "my-org.pub"
-]
-reject_unsigned_packs = true
-rate_limit_per_tenant = 100     # Requests per second
-cors_allowed_origins = ["*"]
-
-# WASM runtime
-[wasm]
-max_memory_mb = 256
-max_execution_time_ms = 30000
-enable_wasi_logging = true
-component_cache_size = 100      # Number of cached instances
-
-# Secrets provider
-[secrets]
-provider = "env"                # "env" | "vault" | "aws" | "azure" | "gcp"
-# Provider-specific config:
-# [secrets.vault]
-# address = "https://vault.example.com"
-# token = "${VAULT_TOKEN}"
+```bash
+gtc wizard --schema
+greentic-bundle wizard --schema
+greentic-pack wizard --schema
+greentic-component wizard --schema
+greentic-flow wizard --schema
 ```
 
-## greentic.demo.yaml
-
-bundle 設定ファイルです。
-
-### 完全な schema
-
-```yaml
-# Bundle metadata
-name: my-digital-worker
-version: "1.0.0"
-description: "My digital worker bundle"
-
-# Provider configurations
-providers:
-  messaging-telegram:
-    pack: "providers/messaging/messaging-telegram.gtpack"
-    setup_flow: "setup_default"
-    verify_flow: "verify_webhooks"
-    config:
-      api_base_url: "https://api.telegram.org"
-
-  messaging-slack:
-    pack: "providers/messaging/messaging-slack.gtpack"
-    setup_flow: "setup_default"
-    config:
-      api_base_url: "https://slack.com/api"
-
-  events-webhook:
-    pack: "providers/events/events-webhook.gtpack"
-
-  events-timer:
-    pack: "providers/events/events-timer.gtpack"
-
-# Application configurations
-apps:
-  support-bot:
-    pack: "apps/support-bot.gtpack"          # Or inline:
-    # path: "apps/support-bot"                # Local directory
-    default_flow: "on_message"
-    config:
-      greeting: "Hello!"
-
-  helpdesk:
-    path: "apps/helpdesk"
-    default_flow: "main"
-
-# Tenant configurations
-tenants:
-  demo:
-    name: "Demo Tenant"
-    settings:
-      timezone: "Asia/Jakarta"
-      language: "id"
-    teams:
-      default:
-        name: "Default Team"
-        channels:
-          telegram:
-            provider: messaging-telegram
-            app: support-bot
-          slack:
-            provider: messaging-slack
-            app: support-bot
-            config:
-              channel_id: "C123456"
-
-      vip:
-        name: "VIP Support"
-        channels:
-          telegram:
-            provider: messaging-telegram
-            app: helpdesk
-
-# Internationalization
-i18n:
-  default_locale: "en"
-  locales:
-    en: "i18n/en.json"
-    id: "i18n/id.json"
-    ja: "i18n/ja.json"
-
-# Component configurations
-components:
-  fast2flow:
-    pack: "components/fast2flow.gtpack"
-    config:
-      default_confidence_threshold: 0.7
-
-  llm-openai:
-    pack: "components/llm-openai.gtpack"
-    config:
-      default_model: "gpt-4"
-
-# MCP tools
-mcp:
-  tools:
-    - name: database_query
-      component: "tools/db-query.wasm"
-      manifest: "tools/db-query.yaml"
-    - name: send_email
-      component: "tools/email.wasm"
-
-# Seeds (initial data)
-seeds:
-  file: "seeds.yaml"
-```
-
-## answers.json
-
-provider setup の回答ファイルです。
-
-### 完全な schema
+A bundle wizard answer document has this outer shape:
 
 ```json
 {
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app",
-    "bot_token": "123456789:ABCdefGHI..."
-  },
-
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app",
-    "api_base_url": "https://slack.com/api",
-    "bot_token": "xoxb-xxx-xxx",
-    "slack_app_id": "A07XXXXXX",
-    "slack_configuration_token": "xoxe.xoxp-xxx",
-    "signing_secret": "xxx"
-  },
-
-  "messaging-teams": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app",
-    "app_id": "xxx",
-    "app_password": "xxx",
-    "tenant_id": "xxx"
-  },
-
-  "messaging-whatsapp": {
-    "enabled": false,
-    "public_base_url": "https://example.ngrok-free.app",
-    "phone_number_id": "xxx",
-    "access_token": "EAAxxxxx",
-    "verify_token": "xxx"
-  },
-
-  "messaging-webchat": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app",
-    "allowed_origins": ["https://mysite.com"]
-  },
-
-  "events-webhook": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app"
-  },
-
-  "events-timer": {
-    "enabled": true,
-    "timezone": "Asia/Jakarta"
-  },
-
-  "events-email-sendgrid": {
-    "enabled": true,
-    "api_key": "SG.xxx",
-    "from_email": "noreply@example.com"
-  },
-
-  "component-llm-openai": {
-    "api_key": "sk-xxx",
-    "default_model": "gpt-4"
+  "wizard_id": "greentic-bundle.wizard.run",
+  "schema_id": "greentic-bundle.wizard.answers",
+  "schema_version": "1.0.0",
+  "locale": "en",
+  "answers": {
+    "bundle_name": "Deep Research Demo",
+    "bundle_id": "deep-research-demo",
+    "app_packs": ["demos/deep-research-demo.gtpack"],
+    "extension_providers": [],
+    "setup_answers": {}
   }
 }
 ```
 
-## 環境変数
+The exact fields under `answers` depend on the wizard and installed tool version.
 
-すべての設定は環境変数で上書きできます:
+## Setup Answers
 
-| Variable | Config Path | Description |
-|----------|-------------|-------------|
-| `GREENTIC_HOST` | `server.host` | bind address |
-| `GREENTIC_PORT` | `server.port` | HTTP port |
-| `GREENTIC_LOG_LEVEL` | `logging.level` | log verbosity |
-| `GREENTIC_LOG_FORMAT` | `logging.format` | log format |
-| `GREENTIC_NATS_URL` | `nats.url` | NATS server URL |
-| `GREENTIC_REDIS_URL` | `redis.url` | Redis URL |
-| `GREENTIC_OTLP_ENDPOINT` | `telemetry.otlp_endpoint` | OTLP endpoint |
+`greentic-setup` accepts setup answer JSON for provider/extension configuration. The common pattern is a JSON object keyed by provider or extension id:
 
-## 設定の優先順位
+```json
+{
+  "messaging-webchat": {
+    "enabled": true,
+    "public_base_url": "http://localhost:8080"
+  },
+  "messaging-teams": {
+    "enabled": false,
+    "public_base_url": "http://localhost:8080",
+    "app_id": "00000000-0000-0000-0000-000000000000",
+    "app_password": "secret-ref-or-value",
+    "tenant_id": "00000000-0000-0000-0000-000000000000"
+  }
+}
+```
 
-1. 環境変数（最優先）
-2. 設定ファイル（`greentic.toml`）
-3. デフォルト値（最下位）
+Do not treat this as a universal schema. Each provider or extension contributes its own questions and answer fields. Use the bundle setup flow or provider QA schema to get the authoritative fields.
 
-## 次のステップ
+## Pack Configuration
 
-- [gtc start](/ja/cli/start/)
-- [gtc setup](/ja/cli/setup/)
+Pack configuration lives in `pack.yaml`:
+
+```yaml
+pack_id: quickstart-app
+version: 0.1.0
+kind: application
+publisher: Example Publisher
+
+components: []
+dependencies: []
+flows:
+  - id: on_message
+    file: flows/on_message.ygtc
+    tags: [messaging, default]
+    entrypoints: [default]
+assets:
+  - path: assets/i18n/en.json
+```
+
+See [Pack Format](/reference/pack-format/) for the current pack source shape.
+
+## Flow Configuration
+
+Flow configuration lives in `.ygtc` files:
+
+```yaml
+id: on_message
+type: messaging
+start: extract_event
+
+nodes:
+  extract_event:
+    component.exec:
+      component: component-msg2events
+      operation: extract
+      message: "{{in.input}}"
+    routing:
+      - to: echo_result
+```
+
+See [Flow YAML Schema](/reference/flow-schema/) for the current flow shape.
+
+## Locale Configuration
+
+Pack i18n assets are JSON files under `assets/i18n/`:
+
+```text
+assets/i18n/en.json
+assets/i18n/de.json
+assets/i18n/locales.json
+```
+
+The Greentic i18n runtime normalizes BCP-47-ish locale tags and falls back from exact locale to base language to English.
+
+## Public Base URL
+
+Several setup flows ask for `public_base_url`. It is the externally reachable runtime URL used for webhooks, OAuth callbacks, webchat links, or provider configuration. Local demos commonly use:
+
+```json
+{
+  "public_base_url": "http://localhost:8080"
+}
+```
+
+Some runtime code also accepts a configured public base URL from environment/runtime configuration, but provider setup answers remain the most visible place this value appears.
+
+## Secrets
+
+Secret values should be supplied through setup answers, `greentic-secrets`, or a configured secrets extension/manager. Do not hardcode credentials in `pack.yaml`, flow files, or component source.
+
+Useful commands:
+
+```bash
+greentic-secrets --help
+greentic-setup --help
+```
+
+## Configuration Precedence
+
+For wizard-created artifacts, use this practical precedence:
+
+1. Explicit CLI flags and `--answers` files
+2. Existing setup/runtime state for the selected tenant/team
+3. Pack defaults and generated wizard defaults
+4. Tool defaults
+
+Provider-specific setup screens can also prefill values from saved tenant/team state.
+
+## Next Steps
+
+- [Pack Format](/reference/pack-format/)
+- [Flow YAML Schema](/reference/flow-schema/)
+- [gtc CLI](/reference/cli/gtc/)
+- [greentic-setup CLI](/reference/cli/greentic-setup/)

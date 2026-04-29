@@ -14,7 +14,7 @@ El componente **Templates** proporciona plantillas basadas en Handlebars para ge
   type: template
   config:
     template: "Hello, {{name}}! Your order #{{order_id}} is ready."
-  next: send_message
+  to: send_message
 ```
 
 ## Sintaxis de plantillas

@@ -1,67 +1,73 @@
 ---
-title: クイックスタート
-description: 最初の Greentic digital worker を数分で動かす
+title: Quick Start
+description: Get your first Greentic digital worker running in minutes
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-このガイドでは、ゼロの状態から数分で Greentic digital worker を動かせるところまで進めます。最短ルートは、[`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog から公開済み demo の 1 つを起動することです。どの demo も同じ 3 ステップの flow を使います。
+This guide gets you from zero to a running Greentic digital worker in a few minutes. The fastest path is to launch one of the published demos from the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog — every demo uses the same three-step flow.
 
 <Aside type="tip">
-利用可能な demo をすべて見て、それぞれが何をするのか正確に確認したい場合は、[Running Demos](/ja/getting-started/running-demos/) に進んでください。
+Want to browse all available demos and see exactly what each one does? Jump to [Running Demos](/getting-started/running-demos/).
 </Aside>
 
 ## Prerequisites
 
-開始する前に、以下を確認してください:
+Before you begin, ensure you have:
 
-- **`gtc` CLI** がインストール済みであること。詳細は [Installation](/ja/getting-started/installation/)
-- **Rust** 1.91 以降（source から build する場合のみ必要）
-- webhook provider 用の **public URL**（例: `ngrok` または `cloudflared`）。WebChat-only quickstart では不要です
+- **`gtc` CLI** installed — see [Installation](/getting-started/installation/)
+- **Rust** 1.95 or later (only needed if you build from source)
+- A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only path
+- Any **LLM provider credentials** requested by the demo setup answers
 
-## quickstart demo を起動する
+## Launch the deep research demo
 
-`quickstart` demo は最小の end-to-end bundle です。welcome card、about card、WebChat 経由の echo interaction が含まれます。外部アカウントは不要です。
+The `deep-research-demo` bundle is a better first look at what a Greentic digital worker can do. It gives you a WebChat research assistant with two execution modes:
+
+- **Single Shot** - Ask a question and let one research analyst produce a fast answer.
+- **Agentic** - Route the same question through a research planner and analyst, showing how workers can collaborate across multiple flow steps.
+
+![Deep Research Digital Worker showing a research question, Single Shot and Agentic actions, and a Research Analyst response](/images/deep-research-demo.png)
 
 <Steps>
 
-1. **bundle を作成する**。公開されている create-answers document を使います:
+1. **Create the bundle** from the published create-answers document:
 
    ```bash
-   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-create-answers.json
    ```
 
-   wizard は demo pack をダウンロードし、capability dependencies を解決し（例: WebChat provider が `greentic:state/state-store` を必要とするため `state-memory` を自動的に取り込みます）、ローカル bundle directory を書き出します。
+   The wizard downloads the research demo pack, resolves capability dependencies (e.g. it pulls in `state-memory` automatically because the WebChat provider needs `greentic:state/state-store`), and writes a local bundle directory.
 
-2. **provider を設定する**。公開されている setup-answers document を使います:
+2. **Configure providers** with the published setup-answers document:
 
    ```bash
-   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+   gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
    ```
 
-   setup は bundle の tenant を自動検出し、provider ごとに secret を保存し、必要な capability がすべて満たされていることを検証します。
+   Setup auto-detects the bundle's tenant, persists secrets per provider, and validates that every required capability is satisfied. If the research analyst uses an external LLM provider, the setup answers identify which credential values must be supplied.
 
-3. **runtime を起動する**:
+3. **Start the runtime**:
 
    ```bash
-   gtc start ./quickstart-demo-bundle
+   gtc start ./deep-research-demo-bundle
    ```
 
-   runner が public WebChat URL を表示します。browser で開くと welcome card が表示されるはずです。
+   The runner prints the public WebChat URL. Open it in a browser, enter a research question, then choose **Single Shot** for a direct analyst answer or **Agentic** to run the planner-and-analyst workflow.
 
 </Steps>
 
 <Aside type="note">
-catalog 内のすべての demo で同じ 3 ステップの flow が使えます。別の demo を試すには、demo ID を置き換えるだけです。たとえば `helpdesk-itsm`、`hr-onboarding`、`weather-mcp-demo` などです。完全な一覧は [Running Demos](/ja/getting-started/running-demos/) を参照してください。
+The same three-step flow works for every demo in the catalog. To try a different one, just substitute the demo ID — for example `helpdesk-itsm`, `hr-onboarding`, `telco-x-demo`, or `weather-mcp-demo`. See [Running Demos](/getting-started/running-demos/) for the complete list.
 </Aside>
 
-## 独自の bundle を作成する
+## Building your own bundle
 
-公開 catalog を超えて進む準備ができたら、同じ 3 つのコマンドを使えます。違いは、release URLs の代わりに自分の file を使うことだけです:
+When you are ready to move beyond the published catalog, the same three commands apply — they just consume your own files instead of release URLs:
 
 <Steps>
 
-1. **wizard で bundle を作成する**。対話モードでも、ローカル answers document を使っても構いません:
+1. **Create a bundle** with the wizard. You can run it interactively or with a local answers document:
 
    ```bash
    gtc wizard
@@ -69,7 +75,7 @@ catalog 内のすべての demo で同じ 3 ステップの flow が使えます
    gtc wizard --answers ./my-create-answers.json
    ```
 
-2. **provider を設定する**。これも対話型でも非対話型でも可能です:
+2. **Configure providers**, again either interactively or non-interactively:
 
    ```bash
    gtc setup ./my-bundle
@@ -77,7 +83,7 @@ catalog 内のすべての demo で同じ 3 ステップの flow が使えます
    gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-3. **runtime を起動する**:
+3. **Start the runtime**:
 
    ```bash
    gtc start ./my-bundle
@@ -85,11 +91,29 @@ catalog 内のすべての demo で同じ 3 ステップの flow が使えます
 
 </Steps>
 
-capability flags や answers-document schemas を含む完全なリファレンスは、[gtc wizard](/ja/cli/wizard/) と [gtc setup](/ja/cli/setup/) を参照してください。
+See [gtc wizard](/cli/wizard/) and [gtc setup](/cli/setup/) for the full reference, including capability flags and answers-document schemas.
 
-## 例: Hello World Flow
+## Multi-language and i18n
 
-メッセージに応答するシンプルな flow を作成します:
+Greentic supports multi-language workers at two levels:
+
+- **Code level** - Your components can be written in any language that compiles to WebAssembly components.
+- **Experience level** - User-facing text can be translated and selected by locale at runtime.
+
+For a WebChat or Adaptive Card worker, translations usually live in pack or bundle assets. Greentic can store locale files such as `assets/i18n/en.json` and `assets/i18n/de.json`, then resolve the correct text from the current session, team, tenant, or global default locale. If a translated string is missing, the worker should fall back to the source language rather than failing the flow.
+
+When you create bundles with `gtc wizard`, capability flags such as `greentic.cap.webchat.i18n.v1` tell the tooling to scaffold locale-aware WebChat assets. For cards, use the i18n workflow to extract strings, translate them, and package the locale files with the app pack.
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+```
+
+See [Multi-Language and i18n](/getting-started/multilanguage-i18n/) for the practical Getting Started overview, then continue to [i18n Overview](/i18n/overview/) and [Cards Translation](/i18n/cards-translation/) for the full workflow.
+
+## Example: Hello World Flow
+
+Create a simple flow that responds to messages:
 
 ```yaml title="flows/hello.ygtc"
 name: hello_world
@@ -110,7 +134,7 @@ triggers:
 
 ## Bundle Structure
 
-一般的な Greentic bundle は次のようになります:
+A typical Greentic bundle looks like this:
 
 ```
 my-bundle/
@@ -127,7 +151,7 @@ my-bundle/
 
 ## Configuration File
 
-メイン設定ファイル（`greentic.demo.yaml`）はセットアップを定義します:
+The main configuration file (`greentic.demo.yaml`) defines your setup:
 
 ```yaml title="greentic.demo.yaml"
 name: my-digital-worker
@@ -155,9 +179,9 @@ tenants:
 
 ## Next Steps
 
-基本セットアップが動いたので、次は以下を参照してください:
+Now that you have a basic setup running:
 
-- [Learn about Flows](/ja/concepts/flows/) - flow definitions を理解する
-- [Configure Telegram](/ja/providers/messaging/telegram/) - Telegram bot を設定する
-- [Configure Slack](/ja/providers/messaging/slack/) - Slack workspace に接続する
-- [Build custom components](/ja/concepts/components/) - 独自の WASM components を作成する
+- [Learn about Flows](/concepts/flows/) - Understand flow definitions
+- [Configure Telegram](/providers/messaging/telegram/) - Set up Telegram bot
+- [Configure Slack](/providers/messaging/slack/) - Connect to Slack workspace
+- [Build custom components](/concepts/components/) - Create your own WASM components

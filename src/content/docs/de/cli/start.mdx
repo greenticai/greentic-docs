@@ -1,48 +1,70 @@
 ---
 title: gtc start
-description: Den Greentic-Runtime-Server starten
+description: Start the Greentic runtime server
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-## Überblick
+## Overview
 
-Der Befehl `gtc start` startet den Greentic-Runtime-Server. Er startet alle erforderlichen Dienste, einschließlich HTTP-Server, NATS-Bus und Flow-Executor.
+The `gtc start` command launches the Greentic runtime server. It starts all necessary services including the HTTP server, NATS bus, and flow executor.
 
-## Verwendung
+## Usage
 
 ```bash
 gtc start [OPTIONS] <BUNDLE_PATH>
 ```
 
-## Optionen
+## Options
 
-| Option | Beschreibung | Standard |
+| Option | Description | Default |
 |--------|-------------|---------|
-| `--host <HOST>` | Bind-Adresse | `0.0.0.0` |
-| `--port <PORT>` | HTTP-Port | `8080` |
-| `--cloudflared <on/off>` | Cloudflare-Tunnel aktivieren | `on` |
-| `--ngrok <on/off>` | ngrok-Tunnel aktivieren | `off` |
-| `--nats <on/off>` | Eingebettetes NATS aktivieren | `on` |
-| `--skip-setup` | Provider-Setup-Flows überspringen | `false` |
-| `--force-setup` | Setup-Flows erneut erzwingen | `false` |
-| `-v, --verbose` | Ausführliches/Debug-Logging aktivieren | `false` |
-| `-q, --quiet` | Minimale Ausgabe | `false` |
+| `--bundle <BUNDLE>` | Bundle path passed to the runtime | |
+| `--tenant <TENANT>` | Tenant identifier | |
+| `--team <TEAM>` | Team identifier | |
+| `--locale <LOCALE>` | UI locale as a BCP-47 tag | |
+| `--config <CONFIG>` | Runtime configuration file | |
+| `--cloudflared <on/off>` | Enable Cloudflare tunnel | `off` |
+| `--ngrok <on/off>` | Enable ngrok tunnel | `off` |
+| `--nats <off/on/external>` | NATS mode | `off` |
+| `--nats-url <NATS_URL>` | External NATS URL | |
+| `--restart <PART>` | Restart part of a running stack (`all`, `cloudflared`, `ngrok`, `nats`, `gateway`, `egress`, `subscriptions`) | |
+| `--log-dir <DIR>` | Log directory | |
+| `--verbose` | Enable verbose logging | `false` |
+| `--quiet` | Minimal output | `false` |
+| `--admin` | Enable the mTLS admin API endpoint | `false` |
+| `--admin-port <PORT>` | Admin API port | `8443` |
+| `--admin-certs-dir <DIR>` | Directory containing admin TLS certs | |
+| `--admin-allowed-clients <CNS>` | Comma-separated allowed admin client CNs | |
 
-## Grundlegende Verwendung
+## Basic Usage
 
-### Mit Standardwerten starten
+### Demo Flows
+
+Extensible demo after `wizard` and `setup`:
+
+```bash
+gtc start ./crates/cloud-deploy-demo/bundle
+```
+
+End-to-end demo after setup from a published bundle:
+
+```bash
+gtc start ./cloud-deploy-demo.gtbundle
+```
+
+### Start with Defaults
 
 ```bash
 gtc start ./my-bundle
 ```
 
-Dadurch werden gestartet:
-- HTTP-Server auf `0.0.0.0:8080`
-- Eingebetteter NATS-Server
-- Cloudflared-Tunnel (falls verfügbar)
+This starts:
+- The runtime services for the bundle
+- Any enabled tunnel or NATS mode you select with flags
+- Gateway, egress, and subscription processes as required by the bundle
 
-### Für die Entwicklung starten
+### Start for Development
 
 ```bash
 # Use ngrok instead of cloudflared
@@ -50,26 +72,23 @@ gtc start ./my-bundle --cloudflared off --ngrok on
 
 # With verbose logging
 gtc start ./my-bundle --verbose
-
-# Skip setup (if already configured)
-gtc start ./my-bundle --skip-setup
 ```
 
-### Für die Produktion starten
+### Start for Production
 
 ```bash
 # No tunnels, external NATS
 gtc start ./my-bundle --cloudflared off --ngrok off
 
-# Custom port
-gtc start ./my-bundle --port 3000 --cloudflared off
+# External runtime configuration file
+gtc start ./my-bundle --config ./runtime.toml --cloudflared off
 ```
 
-## Tunnel-Konfiguration
+## Tunnel Configuration
 
-### Cloudflared (Standard)
+### Cloudflared (Default)
 
-Cloudflared erstellt einen sicheren Tunnel zum Cloudflare-Netzwerk:
+Cloudflared creates a secure tunnel to Cloudflare's network:
 
 ```bash
 gtc start ./my-bundle --cloudflared on
@@ -80,12 +99,12 @@ gtc start ./my-bundle --cloudflared on
 ```
 
 <Aside type="note">
-Cloudflared-URLs ändern sich bei jedem Neustart, sofern du keinen persistenten Tunnel konfigurierst.
+Cloudflared URLs change on each restart unless you configure a persistent tunnel.
 </Aside>
 
 ### ngrok
 
-Verwende ngrok für eine stabile URL während der Entwicklung:
+Use ngrok for a stable URL during development:
 
 ```bash
 gtc start ./my-bundle --ngrok on
@@ -95,9 +114,9 @@ gtc start ./my-bundle --ngrok on
 # Webhook URLs will use: https://abc123.ngrok-free.app
 ```
 
-### Kein Tunnel
+### No Tunnel
 
-Für die Produktion mit einer öffentlichen Domain:
+For production with a public domain:
 
 ```bash
 gtc start ./my-bundle --cloudflared off --ngrok off
@@ -106,9 +125,9 @@ gtc start ./my-bundle --cloudflared off --ngrok off
 # and update provider webhooks with your domain
 ```
 
-## NATS-Konfiguration
+## NATS Configuration
 
-### Eingebettetes NATS (Standard)
+### Embedded NATS (Default)
 
 ```bash
 gtc start ./my-bundle --nats on
@@ -116,71 +135,49 @@ gtc start ./my-bundle --nats on
 # Starts embedded NATS on localhost:4222
 ```
 
-### Externes NATS
+### External NATS
 
 ```bash
-# Disable embedded, use external
-gtc start ./my-bundle --nats off
-
-# Set NATS URL via environment
-GREENTIC_NATS_URL=nats://nats.example.com:4222 gtc start ./my-bundle --nats off
+gtc start ./my-bundle --nats external --nats-url nats://nats.example.com:4222
 ```
 
-## Verhalten der Setup-Flows
+## Setup Flow Behavior
 
-### Normales Verhalten
-
-Standardmäßig führt `gtc start` Setup-Flows aus, wenn Provider noch nicht konfiguriert sind:
+Run `gtc setup` before `gtc start` when credentials, webhook URLs, or bundle assets need to be configured. Re-run `gtc setup` after credential or public URL changes, then restart the runtime:
 
 ```bash
+gtc setup ./my-bundle --answers answers.json
 gtc start ./my-bundle
-# Runs setup flows for unconfigured providers
 ```
 
-### Setup überspringen
+## Runtime Endpoints
 
-Setup-Flows vollständig überspringen (vorhandene Konfiguration verwenden):
+When running, the server exposes:
 
-```bash
-gtc start ./my-bundle --skip-setup
-```
-
-### Setup erzwingen
-
-Alle Setup-Flows erneut ausführen (nützlich nach URL-Änderungen):
-
-```bash
-gtc start ./my-bundle --force-setup
-```
-
-## Runtime-Endpunkte
-
-Während der Laufzeit stellt der Server Folgendes bereit:
-
-| Endpoint | Zweck |
+| Endpoint | Purpose |
 |----------|---------|
-| `GET /health` | Health-Check |
-| `GET /ready` | Readiness-Probe |
-| `POST /webhook/{provider}/{tenant}/{team}` | Provider-Webhooks |
-| `GET /api/v1/sessions` | Sitzungsverwaltung |
-| `POST /api/v1/messages` | Nachrichten senden |
-| `GET /auth/config` | OAuth-Konfigurationsendpunkt |
-| `POST /oauth/token-exchange` | Serverseitiger OIDC-Token-Exchange-Proxy |
+| `GET /health` | Health check |
+| `GET /ready` | Readiness probe |
+| `POST /webhook/{provider}/{tenant}/{team}` | Provider webhooks |
+| `GET /api/v1/sessions` | Session management |
+| `POST /api/v1/messages` | Send messages |
+| `GET /auth/config` | OAuth configuration endpoint |
+| `POST /oauth/token-exchange` | Server-side OIDC token exchange proxy |
 
-### Beispiel für einen Health-Check
+### Example Health Check
 
 ```bash
 curl http://localhost:8080/health
 # {"status": "healthy"}
 ```
 
-### OAuth-Unterstützung
+### OAuth Support
 
-Die Runtime stellt zwei Endpunkte für die OAuth/OIDC-Integration mit Messaging-Providern bereit, die eine Benutzerauthentifizierung erfordern (z. B. WebChat oder Teams).
+The runtime exposes two endpoints for OAuth/OIDC integration with messaging providers that require user authentication (such as WebChat or Teams).
 
 #### `GET /auth/config`
 
-Liest die OAuth-Konfiguration aus dem Secret-Store und gibt sie an den Client zurück. Clients verwenden diesen Endpunkt, um die Einstellungen des Identity Providers zu ermitteln, die zum Starten eines Autorisierungsflusses benötigt werden.
+Reads the OAuth configuration from the secrets store and returns it to the client. Clients use this endpoint to discover the identity provider settings needed to initiate an authorization flow.
 
 ```bash
 curl http://localhost:8080/auth/config
@@ -194,7 +191,7 @@ curl http://localhost:8080/auth/config
 
 #### `POST /oauth/token-exchange`
 
-Ein serverseitiger Token-Exchange-Proxy für den OIDC-Authorization-Code-Austausch. Dieser Endpunkt ermöglicht Clients, einen Autorisierungscode gegen Tokens auszutauschen, ohne an Browser-CORS-Beschränkungen zu scheitern, die auftreten, wenn Token-Endpunkte des Identity Providers direkt aus dem Frontend aufgerufen werden.
+A server-side token exchange proxy for OIDC authorization code exchange. This endpoint allows clients to exchange an authorization code for tokens without running into browser CORS restrictions that occur when calling identity provider token endpoints directly from the frontend.
 
 ```bash
 curl -X POST http://localhost:8080/oauth/token-exchange \
@@ -203,20 +200,20 @@ curl -X POST http://localhost:8080/oauth/token-exchange \
 ```
 
 <Aside type="tip">
-Der Token-Exchange-Proxy macht es überflüssig, dass der Browser den Token-Endpunkt des Identity Providers direkt kontaktiert, was andernfalls aufgrund von CORS-Richtlinien der meisten Identity Provider fehlschlagen würde.
+The token exchange proxy eliminates the need for the browser to contact the identity provider's token endpoint directly, which would otherwise fail due to CORS policies enforced by most identity providers.
 </Aside>
 
-### Statische Routen
+### Static Routes
 
-Statische Routen (wie Health-Checks und OAuth-Endpunkte) können konfiguriert werden, ohne dass eine explizite öffentliche Basis-URL erforderlich ist. Das bedeutet, dass diese Endpunkte sofort verfügbar sind, sobald der Server startet, noch bevor ein Tunnel oder eine öffentliche URL eingerichtet ist.
+Static routes (such as health checks and OAuth endpoints) can be configured without requiring an explicit public base URL. This means these endpoints are available immediately when the server starts, even before a tunnel or public URL is established.
 
 <Aside type="note">
-Provider-Webhooks benötigen weiterhin eine öffentliche Basis-URL, damit externe Dienste den Server erreichen können. Statische Routen sind nur lokal verfügbar und hängen nicht von der Verfügbarkeit eines Tunnels ab.
+Provider webhook endpoints still require a public base URL so that external services can reach the server. Static routes are local-only and do not depend on tunnel availability.
 </Aside>
 
 ## Logging
 
-### Log-Level
+### Log Levels
 
 ```bash
 # Debug (most verbose)
@@ -229,7 +226,7 @@ GREENTIC_LOG_LEVEL=info gtc start ./my-bundle
 GREENTIC_LOG_LEVEL=warn gtc start ./my-bundle
 ```
 
-### Verbose-Modus
+### Verbose Mode
 
 ```bash
 gtc start ./my-bundle --verbose
@@ -237,7 +234,7 @@ gtc start ./my-bundle --verbose
 # Equivalent to GREENTIC_LOG_LEVEL=debug
 ```
 
-### Log-Format
+### Log Format
 
 ```bash
 # JSON format (for production)
@@ -247,58 +244,57 @@ GREENTIC_LOG_FORMAT=json gtc start ./my-bundle
 GREENTIC_LOG_FORMAT=pretty gtc start ./my-bundle
 ```
 
-## Signale
+## Signals
 
-| Signal | Verhalten |
+| Signal | Behavior |
 |--------|----------|
-| `SIGTERM` | Graceful Shutdown |
-| `SIGINT` (Ctrl+C) | Graceful Shutdown |
-| `SIGHUP` | Konfiguration neu laden |
+| `SIGTERM` | Graceful shutdown |
+| `SIGINT` (Ctrl+C) | Graceful shutdown |
+| `SIGHUP` | Reload configuration |
 
-## Umgebungsvariablen
+## Environment Variables
 
-| Variable | Beschreibung |
+| Variable | Description |
 |----------|-------------|
-| `GREENTIC_HOST` | Bind-Adresse |
-| `GREENTIC_PORT` | HTTP-Port |
-| `GREENTIC_LOG_LEVEL` | Log-Ausführlichkeit |
-| `GREENTIC_LOG_FORMAT` | Log-Format (`json`/`pretty`) |
-| `GREENTIC_NATS_URL` | Externe NATS-URL |
-| `GREENTIC_REDIS_URL` | Redis-URL für Sitzungen |
+| `GREENTIC_HOST` | Bind address |
+| `GREENTIC_PORT` | HTTP port |
+| `GREENTIC_LOG_LEVEL` | Log verbosity |
+| `GREENTIC_LOG_FORMAT` | Log format (json/pretty) |
+| `GREENTIC_REDIS_URL` | Redis URL for sessions |
 
-## Fehlerbehebung
+## Troubleshooting
 
-### Port wird bereits verwendet
+### Port Already in Use
 
 ```
 Error: Address already in use (os error 48)
 ```
 
-Ein anderer Prozess verwendet Port 8080. Stoppe ihn oder verwende einen anderen Port:
+Another process is using the configured runtime port. Stop the process or point `gtc start` at a different runtime configuration:
 
 ```bash
-gtc start ./my-bundle --port 3000
+gtc start ./my-bundle --config ./runtime.toml
 ```
 
-### NATS-Verbindung fehlgeschlagen
+### NATS Connection Failed
 
 ```
 Error: Failed to connect to NATS
 ```
 
-Wenn du externes NATS verwendest, stelle sicher, dass es läuft und erreichbar ist. Andernfalls aktiviere das eingebettete NATS:
+If using external NATS, ensure it's running and accessible. Otherwise, enable embedded:
 
 ```bash
 gtc start ./my-bundle --nats on
 ```
 
-### Tunnel konnte nicht gestartet werden
+### Tunnel Failed to Start
 
 ```
 Error: Failed to start cloudflared tunnel
 ```
 
-Installiere cloudflared oder verwende stattdessen ngrok:
+Install cloudflared or use ngrok instead:
 
 ```bash
 # Install cloudflared
@@ -308,23 +304,23 @@ brew install cloudflared
 gtc start ./my-bundle --cloudflared off --ngrok on
 ```
 
-### Provider-Setup fehlgeschlagen
+### Provider Setup Failed
 
 ```
 Error: Setup flow failed for messaging-telegram
 ```
 
-Prüfe deine Zugangsdaten in der Answer-Datei und stelle sicher, dass die öffentliche URL erreichbar ist:
+Check your credentials in the answers file and ensure the public URL is accessible:
 
 ```bash
-# Re-run setup
-gtc start ./my-bundle --force-setup --verbose
+gtc setup ./my-bundle --answers answers.json --non-interactive --no-ui
+gtc start ./my-bundle --verbose
 ```
 
-## Docker-Deployment
+## Docker Deployment
 
 ```dockerfile title="Dockerfile"
-FROM rust:1.90 as builder
+FROM rust:1.95 as builder
 WORKDIR /app
 COPY . .
 RUN cargo build --release
@@ -342,8 +338,8 @@ docker build -t my-worker .
 docker run -p 8080:8080 my-worker
 ```
 
-## Nächste Schritte
+## Next Steps
 
-- [Packs erstellen](/de/cli/building-packs/) - Packs erstellen und verwalten
-- [Konfigurationsreferenz](/de/reference/configuration/) - Vollständige Konfigurationsoptionen
-- [Leitfaden zur Fehlerbehebung](/de/reference/troubleshooting/) - Häufige Probleme
+- [Building Packs](/cli/building-packs/) - Create and manage packs
+- [Configuration Reference](/reference/configuration/) - Full config options
+- [gtc setup](/cli/setup/) - Configure extensions and credentials

@@ -1,136 +1,142 @@
 ---
-title: Resumen de i18n
-description: Soporte de internacionalización en Greentic
+title: i18n Overview
+description: Internationalization support in Greentic
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
 
-## Introducción
+## Introduction
 
-Greentic ofrece soporte integral de internacionalización (i18n) mediante la biblioteca **greentic-i18n**. Esto permite:
+Greentic i18n is based on locale-specific JSON catalogs that travel with CLIs, components, application packs, extension packs, or bundle assets. Runtime code resolves a key for the active locale and falls back to broader locales or English/source text when needed.
 
-- Identificadores de cadenas deterministas
-- Recuperación de mensajes basada en locale
-- Traducción de Adaptive Cards
-- Cambio de idioma en runtime
+Use i18n for:
 
-## Características clave
+- Adaptive Card text, titles, labels, placeholders, and validation messages
+- WebChat labels and tenant-specific UI text
+- component QA/setup questions
+- CLI and wizard messages
+- templates, prompts, and app-specific messages that should vary by locale
+
+## Key Features
 
 <CardGrid>
-  <Card title="IDs deterministas" icon="puzzle">
-    La especificación I18nId v1 usa hashing BLAKE3 para identificadores consistentes y resistentes a colisiones.
+  <Card title="JSON Catalogs" icon="document">
+    Locale files are JSON key/value maps such as `assets/i18n/en.json`, `de.json`, and `ja.json`.
   </Card>
-  <Card title="Multiformato" icon="document">
-    Soporte para formatos de traducción JSON, YAML, PO y XLIFF.
+  <Card title="Pack Assets" icon="puzzle">
+    Application packs and bundle assets can carry translated strings next to the cards and flows that use them.
   </Card>
-  <Card title="Integración con tarjetas" icon="setting">
-    Soporte incorporado para traducir Adaptive Cards.
+  <Card title="Cards Integration" icon="setting">
+    Adaptive Cards can reference keys with `{{i18n:key}}` placeholders.
   </Card>
-  <Card title="Cambio en runtime" icon="random">
-    Cambia de idioma por sesión sin reiniciar.
+  <Card title="Locale Fallback" icon="random">
+    Locale lookup falls back from exact locale to base language, then English/source text.
   </Card>
 </CardGrid>
 
-## Cómo funciona
+## Catalog Format
 
-```
-Source String: "Hello, World!"
-       │
-       ▼
-┌─────────────────────────────────┐
-│     BLAKE3 Hash Function        │
-│  blake3(normalize(string))      │
-└─────────────────────────────────┘
-       │
-       ▼
-I18nId: "i18n:v1:abc123def456"
-       │
-       ▼
-┌─────────────────────────────────┐
-│      Translation Lookup         │
-│   locale_map[id] → "Halo!"     │
-└─────────────────────────────────┘
+Current Greentic packs and demos use flat JSON maps:
+
+```json title="assets/i18n/en.json"
+{
+  "card.main_menu.body_0.text": "Welcome",
+  "card.main_menu.actions_0.title": "Start",
+  "qa.install.title": "Configure the component"
+}
 ```
 
-## Inicio rápido
+Locale files use the same keys:
 
-### 1. Extraer cadenas
+```json title="assets/i18n/de.json"
+{
+  "card.main_menu.body_0.text": "Willkommen",
+  "card.main_menu.actions_0.title": "Starten",
+  "qa.install.title": "Komponente konfigurieren"
+}
+```
 
-Para Adaptive Cards:
+When a catalog is embedded in CLI tooling, the local i18n runtime normalizes locale tags and checks this chain:
+
+```text
+requested locale -> base language -> en -> key/source fallback
+```
+
+For example, `en-US` can use `en`, and `ja-JP` can use `ja` when only the base language catalog exists.
+
+## Adaptive Card References
+
+Cards can keep text fields as i18n references:
+
+```json title="assets/cards/main_menu.json"
+{
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "{{i18n:card.main_menu.body_0.text}}"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "{{i18n:card.main_menu.actions_0.title}}",
+      "data": { "action": "start" }
+    }
+  ]
+}
+```
+
+The Adaptive Card component or messaging surface can resolve those references using the active locale and available catalog files.
+
+## Translation Workflow
+
+1. Put source strings in `assets/i18n/en.json`.
+2. Reference those keys from cards, templates, QA, or UI assets.
+3. Generate or maintain translated JSON files with the same keys.
+4. Ship the locale files with the pack or as bundle-level asset overrides.
+5. Test at least one non-English locale before publishing.
+
+Use `greentic-i18n-translator` when you already have an English source map:
 
 ```bash
-greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+greentic-i18n-translator translate \
+  --langs fr,de,ja \
+  --en assets/i18n/en.json
 ```
 
-### 2. Traducir
-
-Usando `greentic-i18n-translator` (impulsado por Codex CLI):
+Validate translated files before publishing:
 
 ```bash
-greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
+greentic-i18n-translator validate \
+  --en assets/i18n/en.json \
+  --langs fr,de,ja
 ```
 
-O traduce automáticamente durante la generación del pack:
+<Aside type="note">
+The installed `greentic-cards2pack` CLI currently exposes pack generation only. It does not expose `extract-i18n` or `--auto-translate` in the current local CLI. Use existing pack locale files, project extraction helpers, or your own extraction workflow to create `en.json`, then translate and package the JSON assets.
+</Aside>
 
-```bash
-greentic-cards2pack generate \
-  --cards ./cards --out ./pack --name demo \
-  --auto-translate --langs fr,de,ja
+## Locale Lists
+
+Many demos include `assets/i18n/locales.json` to record bundled locales:
+
+```json title="assets/i18n/locales.json"
+[
+  "en",
+  "de",
+  "es",
+  "fr",
+  "ja",
+  "zh"
+]
 ```
 
-### 3. Cargar en runtime
+The exact supported locales are deployment and pack dependent. Do not promise a language unless the pack or bundle actually ships that locale file.
 
-```yaml
-i18n:
-  default_locale: "en"
-  locales:
-    en: "translations/en.json"
-    id: "translations/id.json"
-    ja: "translations/ja.json"
-```
+## Next Steps
 
-### 4. Usar en flows
-
-```yaml
-- id: greet
-  type: reply
-  config:
-    message_key: "i18n:v1:abc123"  # Resolved based on session locale
-```
-
-## Resolución de locale
-
-El locale se resuelve en este orden:
-
-1. Locale a nivel de sesión (establecido por usuario)
-2. Predeterminado a nivel de equipo
-3. Predeterminado a nivel de tenant
-4. Predeterminado global
-
-```yaml
-# Set session locale
-- id: set_language
-  type: state
-  config:
-    action: set
-    key: "locale"
-    value: "id"  # Indonesian
-```
-
-## Idiomas compatibles
-
-Se admite cualquier idioma. Configuraciones comunes:
-
-| Locale | Idioma |
-|--------|----------|
-| `en` | Inglés |
-| `id` | Indonesio |
-| `ja` | Japonés |
-| `zh` | Chino |
-| `es` | Español |
-| `de` | Alemán |
-
-## Próximos pasos
-
-- [Especificación de I18nId](/es/i18n/i18nid-spec/)
-- [Traducción de Tarjetas](/es/i18n/cards-translation/)
+- [Translation Keys](/i18n/i18nid-spec/)
+- [Cards Translation](/i18n/cards-translation/)
+- [Multi-Language and i18n](/getting-started/multilanguage-i18n/)

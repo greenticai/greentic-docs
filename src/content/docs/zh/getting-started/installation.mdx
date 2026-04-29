@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 | 组件 | 要求 |
 |-----------|-------------|
 | OS | Linux、macOS、Windows |
-| Rust | 1.90+ |
+| Rust | 1.95+ |
 | Memory | 4 GB RAM |
 | Disk | 2 GB 可用空间 |
 
@@ -20,7 +20,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 | 组件 | 要求 |
 |-----------|-------------|
-| Rust | 1.91（最新） |
+| Rust | 1.95+（最新支持版本） |
 | Memory | 8 GB RAM |
 | CPU | 多核处理器 |
 
@@ -35,7 +35,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 设置正确的 toolchain 版本：
 
 ```bash
-rustup default 1.90
+rustup default 1.95
 ```
 
 添加用于构建 components 的 WASM target：
@@ -46,11 +46,16 @@ rustup target add wasm32-wasip2
 
 ## 安装 GTC CLI
 
+先安装 `gtc` router，然后让 `gtc install` 安装 Greentic companion tools。正常使用时不要直接安装 `greentic-cli` 或单独的 companion crates；`gtc install` 会让 delegated binaries 与 router 保持一致。
+
 <Tabs>
-<TabItem label="Cargo (Recommended)">
+<TabItem label="cargo-binstall (Recommended)">
 
 ```bash
-cargo install greentic-cli
+cargo install cargo-binstall
+cargo binstall gtc
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -63,6 +68,8 @@ cargo build --release
 
 # Add to PATH
 export PATH="$PATH:$(pwd)/target/release"
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -93,12 +100,9 @@ curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-lin
 
 ```bash
 gtc --version
+gtc doctor
 ```
 
-预期输出：
-```
-gtc 0.4.x
-```
 
 ## 可选依赖
 
@@ -187,28 +191,33 @@ cloudflared tunnel --url http://localhost:8080
 
 ## 开发工具
 
-### Pack Builder
+### Greentic Toolchain
 
-构建 `.gtpack` 归档：
+安装或更新 `gtc` router 使用的 delegated Greentic binaries：
 
 ```bash
-cargo install greentic-pack
+gtc install
 ```
 
-### Flow Validator
-
-校验 flow 定义：
+使用 `gtc install --dry-run` 预览安装计划。对于受控环境，可以固定 toolchain：
 
 ```bash
-cargo install greentic-flow
+gtc install --release 1.0.15
+gtc install --manifest ./greentic-toolchain.json
 ```
 
 ### Component Authoring
 
-创建 WASM components：
+`gtc install` 会安装标准 companion tools。对于独立 component development，也可以安装 `cargo-component`：
 
 ```bash
-cargo install greentic-component
+cargo install --locked cargo-component
+```
+
+然后使用 delegated component surface：
+
+```bash
+gtc dev component --help
 ```
 
 ## 验证你的环境

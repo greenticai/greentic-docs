@@ -1,26 +1,30 @@
 ---
-title: GTC CLI Überblick
-description: Kommandozeilenschnittstelle für die Greentic-Plattform
+title: GTC CLI Overview
+description: Command-line interface for Greentic platform
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-## Einführung
+## Introduction
 
-Die **GTC CLI** (`gtc`) ist die primäre Kommandozeilenschnittstelle für die Greentic-Plattform. Sie stellt Befehle bereit für:
+The **GTC CLI** (`gtc`) is the primary command-line interface for the Greentic platform. It provides commands for:
 
-- Das Erstellen und Verwalten von Bundles
-- Das Einrichten von Providern
-- Das Ausführen des Runtime-Servers
-- Das Bauen und Validieren von Packs/Flows
+- Creating and managing bundles
+- Setting up extensions and runtime configuration
+- Running the runtime server
+- Installing and checking delegated Greentic tools
+- Delegating development operations to `greentic-dev`
 
 ## Installation
 
 <Tabs>
-<TabItem label="Cargo">
+<TabItem label="cargo-binstall">
 
 ```bash
-cargo install greentic-cli
+cargo install cargo-binstall
+cargo binstall gtc
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -31,77 +35,124 @@ git clone https://github.com/greenticai/greentic.git
 cd greentic/greentic
 cargo build --release
 export PATH="$PATH:$(pwd)/target/release"
+gtc install
+gtc doctor
 ```
 
 </TabItem>
 </Tabs>
 
-Installation überprüfen:
+`cargo binstall gtc` is the recommended install path. It installs the thin `gtc` router, and `gtc install` installs the companion binaries that the router delegates to. Do not install `greentic-cli` or individual companion crates directly for normal use; use `gtc install` so the toolchain stays consistent.
+
+Verify installation:
 
 ```bash
 gtc --version
+gtc doctor
 ```
 
-## CLI-Architektur
+## CLI Architecture
 
-Die `gtc`-Binärdatei setzt Unterbefehle aus mehreren Repositories zusammen:
+The `gtc` binary is a thin router. It owns the top-level UX, then delegates most work to companion binaries installed by `gtc install`:
 
-| Befehl | Source Repo | Zweck |
+| Command | Source Repo | Purpose |
 |---------|-------------|---------|
-| `gtc wizard` | `greentic-dev` | Assistent zur Bundle-Erstellung |
-| `gtc setup` | `greentic-setup` | Provider-Einrichtung/-Konfiguration |
-| `gtc start` | `greentic-start` | Runtime-Server |
-| `gtc pack` | `greentic-pack` | Pack-Build |
-| `gtc flow` | `greentic-flow` | Flow-Validierung |
+| `gtc install` | `gtc` toolchain installer | Install/update delegated Greentic binaries |
+| `gtc update` | `gtc` toolchain installer | Force-update companion binaries to the latest compatible release |
+| `gtc doctor` | `gtc` | Verify delegated binaries are available |
+| `gtc version` | `gtc` | Print router and toolchain version information |
+| `gtc wizard` | `greentic-dev` | Bundle creation wizard |
+| `gtc setup` | `greentic-setup` | Extension setup, credentials, and configuration |
+| `gtc start` | `greentic-start` | Runtime server |
+| `gtc stop` | `greentic-start` / deployer handoff | Stop a local runtime or destroy a deployed environment |
+| `gtc add-admin` | `gtc` | Register an admin client certificate identity for a local bundle |
+| `gtc remove-admin` | `gtc` | Remove an admin client certificate identity for a local bundle |
+| `gtc admin` | `greentic` + `greentic-deployer` + `greentic-start` | Admin access, health, status, and runtime control |
+| `gtc dev` | `greentic-dev` | Developer tooling, including pack, flow, component, MCP, GUI, secrets, and coverage passthroughs |
+| `gtc op` | `greentic-operator` | Operator tooling |
+| `gtc docs` | `gtc` docs helper | Generated schema documentation maintenance |
 
-## Befehlsreferenz
+`gtc` itself is intentionally small. Install it with `cargo binstall gtc`, then run `gtc install` to install or update the companion binaries behind those subcommands.
 
-### Globale Optionen
+## Command Reference
+
+### Global Options
 
 ```bash
 gtc [OPTIONS] <COMMAND>
 
 Options:
-  -v, --verbose     Enable verbose output
-  -q, --quiet       Suppress non-essential output
-  --config <PATH>   Path to config file
-  -h, --help        Print help
-  -V, --version     Print version
+  -h, --help            Print help
+  -V, --version         Print version
+      --locale <BCP47>  UI locale for gtc help/output
+      --debug-router    Print resolved binary and args before exec
 ```
 
-### Befehle
+### Commands
 
-| Befehl | Beschreibung |
+| Command | Description |
 |---------|-------------|
-| `wizard` | Ein neues Bundle aus Assistentenantworten erstellen |
-| `setup` | Provider in einem Bundle konfigurieren |
-| `start` | Den Runtime-Server starten |
-| `pack` | Pack-Verwaltung (build, verify, publish) |
-| `flow` | Flow-Verwaltung (validate, doctor) |
+| `version` | Print version and toolchain release information |
+| `doctor` | Verify that required delegated binaries are available |
+| `install` | Install or update delegated Greentic tool binaries |
+| `update` | Force-update companion binaries |
+| `add-admin` | Register an admin client certificate identity for a local bundle |
+| `remove-admin` | Remove an admin client certificate identity for a local bundle |
+| `wizard` | Create a new bundle from wizard answers |
+| `setup` | Configure extensions and runtime settings in a bundle |
+| `start` | Start the runtime server |
+| `stop` | Stop a runtime or destroy a deployed environment |
+| `admin` | Inspect and use the runtime admin API |
+| `dev` | Pass through to developer tools, including pack and flow operations |
+| `op` | Pass through to operator tooling |
+| `docs` | Documentation and generated-schema helpers |
 
-## Häufige Workflows
+## Common Workflows
 
-### Ein neues Projekt erstellen und ausführen
+### Create and Run a New Project
 
 ```bash
-# 1. Create bundle from wizard
-gtc wizard --answers wizard-answers.yaml
+# 1. Inspect the JSON answer schema
+gtc wizard --schema
 
-# 2. Setup providers (interactive)
+# 2. Validate and apply JSON wizard answers
+gtc wizard validate --answers wizard-answers.json
+gtc wizard apply --answers wizard-answers.json --yes
+
+# 3. Setup extensions and runtime configuration
 gtc setup ./my-bundle
 
-# 3. Start the runtime
+# 4. Start the runtime
 gtc start ./my-bundle
 ```
 
-### Entwicklungs-Workflow
+`gtc wizard` uses JSON answer files. Coding agents can inspect `gtc wizard --schema`, generate an answers file, validate it, then apply it non-interactively.
+
+### Install and Update the Toolchain
+
+```bash
+# Install or repair companion binaries
+gtc install
+
+# Preview the install plan
+gtc install --dry-run
+
+# Pin a controlled release or manifest
+gtc install --release 1.0.15
+gtc install --manifest ./greentic-toolchain.json
+
+# Force-update companion binaries to the latest compatible release
+gtc update
+```
+
+### Development Workflow
 
 ```bash
 # Validate flows
-gtc flow doctor ./my-bundle/apps/my-app/flows/
+gtc dev flow doctor ./my-bundle/apps/my-app/flows/
 
 # Build a pack
-gtc pack build ./my-pack/
+gtc dev pack build --in ./my-pack/
 
 # Start with verbose logging
 gtc start ./my-bundle --verbose
@@ -110,7 +161,7 @@ gtc start ./my-bundle --verbose
 gtc start ./my-bundle --ngrok on
 ```
 
-### Produktions-Deployment
+### Production Deployment
 
 ```bash
 # Setup with answers file (non-interactive)
@@ -120,9 +171,9 @@ gtc setup --answers production-answers.json ./my-bundle
 gtc start ./my-bundle --cloudflared off --ngrok off
 ```
 
-## Konfigurationsdatei
+## Configuration File
 
-GTC kann eine Konfigurationsdatei (`greentic.toml`) verwenden:
+GTC can use a configuration file (`greentic.toml`):
 
 ```toml title="greentic.toml"
 [runtime]
@@ -142,40 +193,43 @@ enabled = true
 otlp_endpoint = "http://localhost:4317"
 ```
 
-## Umgebungsvariablen
+## Environment Variables
 
-| Variable | Beschreibung | Standard |
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `GREENTIC_LOG_LEVEL` | Log-Ausführlichkeit | `info` |
-| `GREENTIC_CONFIG` | Pfad zur Konfigurationsdatei | `greentic.toml` |
-| `GREENTIC_NATS_URL` | NATS-Server-URL | `nats://localhost:4222` |
-| `GREENTIC_REDIS_URL` | Redis-URL | `redis://localhost:6379` |
+| `GREENTIC_LOG_LEVEL` | Log verbosity | `info` |
+| `GREENTIC_CONFIG` | Config file path | `greentic.toml` |
+| `GREENTIC_REDIS_URL` | Redis URL | `redis://localhost:6379` |
 
-## Exit-Codes
+## Exit Codes
 
-| Code | Bedeutung |
+| Code | Meaning |
 |------|---------|
-| `0` | Erfolg |
-| `1` | Allgemeiner Fehler |
-| `2` | Konfigurationsfehler |
-| `3` | Runtime-Fehler |
-| `4` | Validierungsfehler |
+| `0` | Success |
+| `1` | General error |
+| `2` | Configuration error |
+| `3` | Runtime error |
+| `4` | Validation error |
 
-## Hilfe erhalten
+## Getting Help
 
 ```bash
 # General help
 gtc --help
+gtc install --help
+gtc doctor
 
 # Command-specific help
 gtc wizard --help
 gtc setup --help
 gtc start --help
+gtc admin --help
 ```
 
-## Nächste Schritte
+## Next Steps
 
-- [gtc wizard](/de/cli/wizard/) - Bundle-Erstellung
-- [gtc setup](/de/cli/setup/) - Provider-Einrichtung
-- [gtc start](/de/cli/start/) - Runtime-Server
-- [Packs erstellen](/de/cli/building-packs/) - Pack-Verwaltung
+- [gtc wizard](/cli/wizard/) - Bundle creation
+- [gtc setup](/cli/setup/) - Extension setup
+- [gtc start](/cli/start/) - Runtime server
+- [Admin Access](/admin/admin-access/) - Runtime admin API access and usage
+- [Building Packs](/cli/building-packs/) - Pack management

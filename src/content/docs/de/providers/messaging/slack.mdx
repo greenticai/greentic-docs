@@ -271,9 +271,9 @@ nodes:
     config:
       conditions:
         - expression: "action_id == 'help_clicked'"
-          next: show_help
+          to: show_help
         - expression: "action_id == 'create_ticket'"
-          next: create_ticket
+          to: create_ticket
       default: unknown_action
 
   - id: show_help
@@ -294,9 +294,9 @@ triggers:
   config:
     conditions:
       - expression: "selected_value == 'technical'"
-        next: technical_flow
+        to: technical_flow
       - expression: "selected_value == 'billing'"
-        next: billing_flow
+        to: billing_flow
 ```
 
 ## Slash-Befehle
