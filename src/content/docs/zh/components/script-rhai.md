@@ -114,14 +114,14 @@ user.age = 25;
       } else {
         #{ valid: false, error: "Invalid email format" }
       }
-  next: check_result
+  to: check_result
 
 - id: check_result
   type: branch
   config:
     conditions:
       - expression: "script_result.valid"
-        next: continue_flow
+        to: continue_flow
     default: show_error
 ```
 

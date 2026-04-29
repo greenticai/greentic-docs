@@ -255,9 +255,9 @@ nodes:
     config:
       conditions:
         - expression: "data.action == 'help'"
-          next: show_help
+          to: show_help
         - expression: "data.action == 'ticket'"
-          next: create_ticket
+          to: create_ticket
       default: unknown_action
 
   - id: show_help

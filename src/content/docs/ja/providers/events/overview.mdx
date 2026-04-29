@@ -105,7 +105,7 @@ nodes:
         // Process the event
         let payload = event.payload;
         process_payload(payload)
-    next: respond
+    to: respond
 
 triggers:
   - type: event
@@ -133,9 +133,9 @@ nodes:
     config:
       conditions:
         - expression: "event.event_type == 'order.created'"
-          next: send_confirmation
+          to: send_confirmation
         - expression: "event.event_type == 'order.shipped'"
-          next: send_tracking
+          to: send_tracking
 ```
 
 ### Scheduled Tasks
@@ -147,7 +147,7 @@ nodes:
     config:
       method: GET
       url: "https://api.example.com/reports/daily"
-    next: send_email
+    to: send_email
 
 triggers:
   - type: timer

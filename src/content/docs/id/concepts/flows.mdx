@@ -1,338 +1,337 @@
 ---
 title: Flows
-description: Memahami definisi flow di Greentic
+description: Understanding flow definitions in Greentic
 ---
 
-import { Aside, Code } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
-## Apa Itu Flow?
+## What is a Flow?
 
-**Flow** adalah graf orkestrasi yang didefinisikan dalam YAML dan menjelaskan bagaimana pesan dan data bergerak melalui digital worker Anda. Flow disimpan dalam file `.ygtc` dan mendefinisikan:
+A **Flow** is a YAML orchestration graph for a digital worker. It says where a message, event, timer, webhook, or pub/sub payload enters, which component-backed steps run, and where the result goes next.
 
-- **Nodes** - Langkah pemrosesan individual (komponen WASM)
-- **Edges** - Koneksi antar node
-- **Triggers** - Apa yang memulai flow
-- **Conditions** - Logika percabangan
+Flows are stored in `.ygtc` files. In day-to-day work you usually do **not** hand-author every node. The practical workflow is:
 
-## Struktur Dasar Flow
+1. Use `gtc wizard` to create a bundle with providers, tenants, apps, and starter flows.
+2. Use `greentic-flow wizard` or `greentic-flow add-step` to add and update component-backed steps.
+3. Use a coding agent to fetch the wizard schemas, fill the answer files, and run the CLI non-interactively.
+4. Use `greentic-flow doctor` to validate the final flow and keep component resolve sidecars in sync.
 
-```yaml title="flows/hello.ygtc"
-name: hello_world
-version: "1.0"
-description: A simple greeting flow
+<Aside type="tip">
+The flow file is the readable orchestration document. Component locations, pins, and local/remote bindings are tracked in sidecar files such as `main.ygtc.resolve.json`, so flow YAML can stay focused on behavior.
+</Aside>
 
-# Define the nodes (processing steps)
+## Flow Shape
+
+Modern Greentic flows use the YGTc v2 shape: `nodes` is a map, every node has one operation key, and `routing` declares where execution continues.
+
+```yaml title="flows/main.ygtc"
+id: main
+title: Research Assistant
+description: Answer research questions from a chat message.
+type: messaging
+start: answer_question
+
 nodes:
-  - id: greet
-    type: reply
-    config:
-      message: "Hello! How can I help you today?"
+  answer_question:
+    component.exec:
+      component: deep-research-analyst
+      operation: answer
+      question: "{{in.input.text}}"
+      source_provider: webchat
+    routing:
+      - to: send_answer
 
-# Define what triggers this flow
-triggers:
-  - type: message
-    pattern: "hello|hi|hey"
-    target: greet
+  send_answer:
+    emit.response:
+      messages:
+        - type: text
+          text: "{{prev.answer}}"
+    routing:
+      - out: true
 ```
 
-## Komponen Flow
+The important fields are:
 
-### Nodes
+| Field | Purpose |
+|-------|---------|
+| `id` | Stable flow identifier. |
+| `title` / `description` | Human-readable summary for operators and tooling. |
+| `type` | Flow kind: `messaging`, `webhook`, `timer`, `websocket`, or `pubsub`. |
+| `start` | First node for the default entrypoint. |
+| `entrypoints` | Optional named entrypoints when one flow needs multiple starts. |
+| `nodes` | Named steps. Each step has one operation key plus optional routing, telemetry, retry, timeout, and metadata. |
 
-Node adalah building block dari sebuah flow. Setiap node merepresentasikan komponen WASM yang memproses data:
+## Nodes
+
+A node is a single unit of work. The operation key determines what runs:
 
 ```yaml
 nodes:
-  - id: unique_node_id
-    type: node_type           # Component type
-    config:                   # Component-specific configuration
-      key: value
-    next: next_node_id        # Optional: next node to execute
+  present_telco:
+    component.exec:
+      component: component-telco-present
+      operation: present
+      query: "{{in.input.text}}"
+      metadata: "{{in.input.metadata}}"
+      message: "{{in.input}}"
+      source_provider: webchat
+    routing:
+      - to: respond_telco
 ```
 
-#### Jenis Node Umum
+Common operation families include:
 
-| Type | Purpose |
-|------|---------|
-| `reply` | Mengirim pesan kembali ke pengguna |
-| `llm` | Memanggil LLM (OpenAI, dll.) |
-| `template` | Merender template Handlebars |
-| `script` | Mengeksekusi script Rhai |
-| `branch` | Percabangan kondisional |
-| `http` | Membuat request HTTP |
-| `state` | Mengelola state session |
+| Operation | Purpose |
+|-----------|---------|
+| `component.exec` | Call a WASM component operation. |
+| `emit.response` | Return one or more messages to the originating provider. |
+| `template` | Render a wizard/config fragment, often inside component dev flows. |
+| `questions` | Ask setup/config questions in component config flows. |
+| `qa.process`, `mcp.exec`, `templating.handlebars` | Component or adapter operations used by specific packs. |
 
-### Edges
+Component-backed nodes normally come from component manifests and their `dev_flows`. For example, `component-templates` exposes a `text` operation and a config flow that can ask for the Handlebars text, output path, wrapping mode, and routing target. The CLI can use that contract to generate a valid node instead of making you remember the exact YAML shape.
 
-Edge menghubungkan node satu sama lain. Edge dapat bersifat implisit (melalui `next`) atau eksplisit:
+## Routing
+
+Routing is explicit and lives on each node:
 
 ```yaml
+routing:
+  - to: send_response
+```
+
+Terminal routes finish the flow:
+
+```yaml
+routing:
+  - out: true
+```
+
+The schema accepts explicit route arrays such as `{ to: next_node }`, terminal output routes such as `{ out: true }`, and reply routes such as `{ reply: true }`. Prefer the forms produced by the wizard and demo bundles unless you are editing a flow by hand for a specific reason.
+
+Conditional routing can be represented with route conditions:
+
+```yaml
+routing:
+  - to: approve_request
+    condition: "prev.confidence >= 0.8"
+  - to: escalate_request
+    condition: "prev.confidence < 0.8"
+```
+
+## Inputs and Outputs
+
+Flows use template expressions to pass data between nodes:
+
+| Expression | Meaning |
+|------------|---------|
+| `{{in}}` | Current flow input envelope. |
+| `{{in.input}}` | Provider-specific inbound message or event payload. |
+| `{{in.input.text}}` | Common chat message text field. |
+| `{{prev}}` | Output from the previous node. |
+| `{{prev.messages}}` | Example output passed directly into `emit.response`. |
+
+The Telco-X demo uses this pattern:
+
+```yaml
+respond_telco:
+  emit.response:
+    messages: "{{prev.messages}}"
+  routing:
+    - out: true
+```
+
+That keeps the presentation component responsible for producing provider-ready messages, while the flow only routes the output.
+
+## Messaging and Event Flows
+
+Messaging flows usually start from chat extensions such as WebChat, Teams, Slack, Telegram, WhatsApp, Webex, or email. The deep research demo starts with an Adaptive Card menu, then routes either to a single research analyst or through a planner-and-analyst sequence:
+
+```yaml title="flows/main.ygtc"
+id: main
+title: Deep Research Demo
+description: Adaptive-card deep research flow with single-shot and agentic research modes
+type: messaging
+start: main_menu
+
 nodes:
-  - id: start
-    type: template
-    config:
-      template: "Processing your request..."
-    next: process
+  main_menu:
+    component-adaptive-card.render:
+      card_source: asset
+      card_spec:
+        asset_path: assets/cards/main_menu.json
+    routing:
+      - status: agentic
+        to: research_planner
+      - status: single_shot
+        to: research_analyst
+      - out: true
 
-  - id: process
-    type: llm
-    config:
-      model: "gpt-4"
-      prompt: "{{message}}"
-    next: respond
+  research_planner:
+    component.exec:
+      component: component-llm-openai
+      operation: handle_message
+      input:
+        messages:
+          - role: system
+            content: "Turn the research goal into a focused plan."
+          - role: user
+            content: "{{entry.input.metadata.user_question}}"
+    routing:
+      - to: research_analyst
 
-  - id: respond
-    type: reply
-    config:
-      message: "{{llm_response}}"
+  research_analyst:
+    component.exec:
+      component: component-llm-openai
+      operation: handle_message
+      input:
+        messages:
+          - role: system
+            content: "Produce a concise final research report."
+          - role: user
+            content: "{{entry.input.metadata.user_question}}"
+    routing:
+      - to: show_final_report
+
+  show_final_report:
+    component-adaptive-card.render:
+      card_source: asset
+      card_spec:
+        asset_path: assets/cards/final_report.json
+    routing:
+      - out: true
 ```
 
-### Triggers
+Event flows use the same graph model, but the entry payload comes from an event extension instead of a chat extension. Use `webhook`, `timer`, or `pubsub` as the flow `type` depending on the ingress.
 
-Trigger mendefinisikan apa yang memulai flow:
+## Let the Wizard Build the Flow
 
-```yaml
-triggers:
-  # Message pattern trigger
-  - type: message
-    pattern: "order|purchase|buy"
-    target: handle_order
+There are two wizard layers:
 
-  # Default trigger (catch-all)
-  - type: default
-    target: fallback_handler
+| Tool | Use it for |
+|------|------------|
+| `gtc wizard` | Creating the bundle: providers, tenants, apps, starter flows, assets, and setup scaffolding. |
+| `greentic-flow wizard` | Editing flows inside an existing pack or bundle through a declarative action plan. |
 
-  # Event trigger
-  - type: event
-    event_type: "user.created"
-    target: welcome_user
-```
-
-## Percabangan Kondisional
-
-Gunakan node `branch` untuk logika kondisional:
-
-```yaml
-nodes:
-  - id: check_intent
-    type: branch
-    config:
-      conditions:
-        - expression: "intent == 'greeting'"
-          next: greet_user
-        - expression: "intent == 'help'"
-          next: show_help
-        - expression: "intent == 'order'"
-          next: process_order
-      default: fallback
-
-  - id: greet_user
-    type: reply
-    config:
-      message: "Hello! Nice to meet you!"
-
-  - id: show_help
-    type: reply
-    config:
-      message: "Here's what I can help you with..."
-
-  - id: fallback
-    type: reply
-    config:
-      message: "I'm not sure I understand. Can you rephrase?"
-```
-
-## Bekerja dengan State
-
-Flow dapat membaca dan menulis state session:
-
-```yaml
-nodes:
-  - id: save_name
-    type: state
-    config:
-      action: set
-      key: "user_name"
-      value: "{{extracted_name}}"
-    next: confirm
-
-  - id: get_name
-    type: state
-    config:
-      action: get
-      key: "user_name"
-      output: "stored_name"
-    next: greet_by_name
-```
-
-## Integrasi LLM
-
-Integrasikan LLM untuk respons berbasis AI:
-
-```yaml
-nodes:
-  - id: analyze
-    type: llm
-    config:
-      model: "gpt-4"
-      system_prompt: |
-        You are a helpful customer service agent.
-        Extract the user's intent and any relevant entities.
-      prompt: "User message: {{message}}"
-      output_format: json
-    next: process_result
-```
-
-## Rendering Template
-
-Gunakan template Handlebars untuk konten dinamis:
-
-```yaml
-nodes:
-  - id: format_response
-    type: template
-    config:
-      template: |
-        Hi {{user_name}}!
-
-        Here's your order summary:
-        {{#each items}}
-        - {{name}}: ${{price}}
-        {{/each}}
-
-        Total: ${{total}}
-    next: send_response
-```
-
-## Validasi Flow
-
-Validasi flow Anda sebelum deployment:
+For a new bundle, start at the bundle level:
 
 ```bash
-greentic-flow doctor ./flows/
+gtc wizard --answers deep-research-demo-create-answers.json --out ./deep-research-demo
+```
 
-# Or with the GTC CLI
-gtc flow validate ./flows/hello.ygtc
+For a flow inside an existing pack, let `greentic-flow` create or edit the `.ygtc` file:
+
+```bash
+greentic-flow new --flow flows/main.ygtc --id main --type messaging --name "Research Assistant"
+
+greentic-flow add-step --flow flows/main.ygtc \
+  --node-id format_answer \
+  --component oci://ghcr.io/greenticai/components/templates:0.1.2 \
+  --operation text \
+  --mode config \
+  --routing-reply
+```
+
+The CLI handles the repetitive parts: node insertion, route rewiring, component manifest lookup, config-flow prompts, answer validation, and sidecar updates.
+
+## Coding Agent Workflow
+
+Coding agents work best when they use the same schemas as the CLI instead of inventing YAML by hand.
+
+Ask the agent to:
+
+1. Inspect the existing flow and its sidecar.
+2. Fetch the wizard plan schema:
+
+   ```bash
+   greentic-flow wizard --schema
+   ```
+
+3. Fetch the component answer schema for each component step:
+
+   ```bash
+   greentic-flow component-schema oci://ghcr.io/greenticai/components/templates:0.1.2 --mode default
+   ```
+
+4. Write a plan file with actions such as `add-flow`, `add-step`, `update-step`, or `delete-step`.
+5. Apply it non-interactively:
+
+   ```bash
+   greentic-flow wizard ./my-pack --answers flow-plan.json
+   ```
+
+6. Run validation:
+
+   ```bash
+   greentic-flow doctor ./my-pack
+   ```
+
+This is the recommended path for larger changes. The agent can reason about the intent, but `greentic-flow` still performs the schema-aware mutations and catches invalid routing or missing answers.
+
+## Component Config Flows
+
+Components can ship `dev_flows` that describe how to create their own flow nodes. The `component-templates` pack includes:
+
+```yaml title="component-templates/flows/custom.ygtc"
+id: ai.greentic.component-templates.custom
+kind: component-config
+description: Auto-generated custom config for ai.greentic.component-templates
+nodes:
+  ask_config:
+    questions:
+      fields:
+        - id: text
+          prompt: Handlebars template used to render the reply
+          type: string
+        - id: output_path
+          prompt: Dot path where the rendered string is stored
+          type: string
+          default: text
+        - id: wrap
+          prompt: Wrap output in an object when true; emit a raw string when false
+          type: boolean
+          default: true
+    routing:
+      - to: emit_config
+```
+
+That means a human, CI job, or coding agent can answer component-specific questions and let the component emit the correct `component.exec` node. This is why generated flows are safer than copying snippets from documentation.
+
+## Validation
+
+Validate flows before committing or packaging:
+
+```bash
+greentic-flow doctor flows/
+```
+
+Useful related commands:
+
+```bash
+greentic-flow doctor --json flows/main.ygtc
+greentic-flow answers --component ./component-templates --operation text --name templates
+greentic-flow doctor-answers --schema templates.schema.json --answers templates.example.json
+greentic-flow bind-component --flow flows/main.ygtc --step format_answer --component oci://ghcr.io/greenticai/components/templates:0.1.2 --write
 ```
 
 <Aside type="tip">
-Gunakan `greentic-flow doctor` untuk menangkap masalah seperti:
-- Referensi node yang hilang
-- Jenis node yang tidak valid
-- Dependensi sirkular
-- Pelanggaran skema
+Run `greentic-flow doctor` after manual edits. It validates the embedded flow schema, checks routing targets, validates component payloads when schemas are available, and prunes stale sidecar bindings.
 </Aside>
 
-## Praktik Terbaik
+## Best Practices
 
-1. **Jaga flow tetap fokus** - Satu flow per intent pengguna atau workflow
-2. **Gunakan ID yang bermakna** - ID node harus menjelaskan tujuannya
-3. **Dokumentasikan dengan komentar** - Tambahkan deskripsi pada flow yang kompleks
-4. **Uji secara bertahap** - Validasi setelah setiap perubahan
-5. **Versikan flow Anda** - Gunakan semantic versioning
+1. Start with `gtc wizard` or a demo bundle rather than a blank directory.
+2. Use `greentic-flow wizard` plans for multi-step changes.
+3. Use `greentic-flow add-step` and `update-step` for component-backed nodes.
+4. Keep node IDs stable and descriptive.
+5. Prefer component config flows and answer files over handwritten payloads.
+6. Commit `.ygtc` files together with their `.ygtc.resolve.json` sidecars.
+7. Use `--pin` for remote components when you need reproducible builds.
+8. Run `greentic-flow doctor` before packaging or deployment.
 
-## Contoh: Flow Layanan Pelanggan Lengkap
+## Next Steps
 
-```yaml title="flows/customer_service.ygtc"
-name: customer_service
-version: "1.0"
-description: Handle customer inquiries with AI assistance
-
-nodes:
-  # Analyze the incoming message
-  - id: analyze_intent
-    type: llm
-    config:
-      model: "gpt-4"
-      system_prompt: |
-        Classify the customer's intent into one of:
-        - greeting
-        - order_status
-        - product_question
-        - complaint
-        - other
-
-        Respond with JSON: {"intent": "...", "confidence": 0.0-1.0}
-      prompt: "{{message}}"
-      output_format: json
-    next: route_intent
-
-  # Route based on intent
-  - id: route_intent
-    type: branch
-    config:
-      conditions:
-        - expression: "intent.intent == 'greeting'"
-          next: handle_greeting
-        - expression: "intent.intent == 'order_status'"
-          next: handle_order_status
-        - expression: "intent.intent == 'complaint'"
-          next: handle_complaint
-      default: handle_general
-
-  # Handle greeting
-  - id: handle_greeting
-    type: reply
-    config:
-      message: "Hello! Welcome to our support. How can I help you today?"
-
-  # Handle order status
-  - id: handle_order_status
-    type: http
-    config:
-      method: GET
-      url: "https://api.example.com/orders/{{order_id}}"
-    next: format_order_response
-
-  - id: format_order_response
-    type: template
-    config:
-      template: |
-        Your order #{{order_id}} is currently: {{status}}
-        Expected delivery: {{delivery_date}}
-    next: send_order_response
-
-  - id: send_order_response
-    type: reply
-    config:
-      message: "{{formatted_response}}"
-
-  # Handle complaints with escalation
-  - id: handle_complaint
-    type: reply
-    config:
-      message: "I'm sorry to hear that. Let me connect you with a specialist who can help resolve this."
-    next: escalate_to_human
-
-  - id: escalate_to_human
-    type: event
-    config:
-      event_type: "escalation.requested"
-      payload:
-        reason: "complaint"
-        conversation_id: "{{session_id}}"
-
-  # General handler
-  - id: handle_general
-    type: llm
-    config:
-      model: "gpt-4"
-      system_prompt: "You are a helpful customer service agent. Be friendly and concise."
-      prompt: "{{message}}"
-    next: send_general_response
-
-  - id: send_general_response
-    type: reply
-    config:
-      message: "{{llm_response}}"
-
-triggers:
-  - type: message
-    target: analyze_intent
-```
-
-## Langkah Berikutnya
-
-- [Packs](/id/concepts/packs/) - Kemas flow Anda untuk deployment
-- [Components](/id/concepts/components/) - Buat jenis node kustom
-- [Flow Schema Reference](/id/reference/flow-schema/) - Skema YAML lengkap
+- [Packs](/concepts/packs/) - Package your flows for deployment
+- [Components](/concepts/components/) - Create custom node types
+- [greentic-flow CLI](/reference/cli/greentic-flow/) - Command reference for flow tooling
+- [Flow Schema Reference](/reference/flow-schema/) - Complete YAML schema

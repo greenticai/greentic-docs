@@ -1,83 +1,84 @@
 ---
 title: gtc setup
-description: Provider in Ihrem Greentic-Bundle konfigurieren
+description: Configure extensions and secrets in your Greentic bundle
 ---
 
-import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Überblick
+## Overview
 
-Der Befehl `gtc setup` konfiguriert Provider in Ihrem Greentic-Bundle. Er führt Setup-Flows für jeden aktivierten Provider aus, sammelt Zugangsdaten und konfiguriert Webhooks.
+The `gtc setup` command configures extension packs in your Greentic bundle. It runs setup flows for enabled messaging, event, OAuth, secrets, and runtime extensions, collecting credentials and configuring webhooks where needed.
 
-## Verwendung
+## Usage
 
 ```bash
 gtc setup [OPTIONS] <BUNDLE_PATH>
 ```
 
-## Optionen
+## Options
 
-| Option | Beschreibung |
+| Option | Description |
 |--------|-------------|
-| `--answers <FILE>` | Pfad zur Answers-Datei (nicht interaktiv) |
-| `--dry-run` | Setup in der Vorschau anzeigen, ohne Änderungen vorzunehmen |
-| `--emit-answers <FILE>` | Answers-Vorlage erzeugen |
-| `--advanced` | Optionale Felder in die Answers-Vorlage aufnehmen |
-| `--provider <NAME>` | Nur einen bestimmten Provider einrichten |
-| `--skip <NAME>` | Bestimmten Provider überspringen |
-| `-v, --verbose` | Ausführliche Ausgabe aktivieren |
+| `--answers <FILE>` | Path to answers file (non-interactive) |
+| `--key <KEY>` | Encryption/decryption key for answer documents that include secrets |
+| `--dry-run` | Preview setup without making changes |
+| `--emit-answers <FILE>` | Generate answers template |
+| `--advanced` | Include optional fields in answers template |
+| `--tenant <TENANT>` | Tenant identifier (default: `demo`) |
+| `--team <TEAM>` | Team identifier |
+| `--env <ENV>` | Environment (`dev`, `staging`, `prod`; default: `dev`) |
+| `--locale <LOCALE>` | UI locale as a BCP-47 tag |
+| `--ui` / `--no-ui` | Enable or disable the web setup UI |
+| `--non-interactive` | Fail instead of prompting when answers are incomplete |
 
-## Interaktives Setup
+## Interactive Setup
 
-Führen Sie das Setup interaktiv aus, um für jeden Provider abgefragt zu werden:
+Run setup interactively to be prompted for each extension:
 
 ```bash
 gtc setup ./my-bundle
 ```
 
-Die CLI fragt nach:
-- Provider-Zugangsdaten (API keys, Tokens)
-- Öffentliche URL für Webhooks
-- Optionalen Konfigurationsoptionen
+The CLI will prompt for:
+- Extension credentials (API keys, tokens)
+- Public URL for webhooks
+- Optional configuration options
 
-## Nicht interaktives Setup
+## Non-Interactive Setup
 
-### Demo-Katalog-Flows
+### Demo Catalog Flows
 
-Jede Demo im Katalog [`greentic-demo`](https://github.com/greenticai/greentic-demo) veröffentlicht zusammen mit ihrem Pack ein `*-setup-answers.json`-Dokument. Wenden Sie es auf ein Bundle an, das Sie mit `gtc wizard` erstellt haben:
+Every demo in the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog publishes a `*-setup-answers.json` document alongside its pack. Apply it to a bundle that you created with `gtc wizard`:
 
 ```bash
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
 ```
 
-Dasselbe Muster funktioniert für jede Demo. Ersetzen Sie einfach die Demo-ID. Unter [Demos ausführen](/de/getting-started/running-demos/) finden Sie den vollständigen Katalog mit Beschreibungen und erforderlichen Zugangsdaten.
+The same pattern works for any demo — just substitute the demo ID. See [Running Demos](/getting-started/running-demos/) for the full catalog with descriptions and required credentials.
 
-Sie können `gtc setup` auch direkt auf ein veröffentlichtes `.gtbundle`-Artefakt zeigen lassen:
+You can also point `gtc setup` directly at a published `.gtbundle` artifact:
 
 ```bash
 gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
 ```
 
 <Aside type="note">
-`gtc setup` erkennt den Tenant des Bundles automatisch aus dem Verzeichnis `tenants/`, sodass Secrets in den korrekten Tenant-URI geschrieben werden, selbst wenn das Bundle nicht mit dem Standard-Tenant `demo` erstellt wurde. Außerdem führt es eine **Validierung der Abhängigkeits-Capabilities** für jedes Pack im Bundle aus und warnt, wenn eine erforderliche Capability (z. B. `greentic:state/state-store`) noch nicht erfüllt ist.
+`gtc setup` auto-detects the bundle's tenant from the `tenants/` directory, so secrets are written to the correct tenant URI even when the bundle was not created with the default `demo` tenant. It also runs **dependency capability validation** across every pack in the bundle and warns if any required capability (e.g. `greentic:state/state-store`) is still unsatisfied.
 </Aside>
 
-### Answers-Vorlage erzeugen
+### Generate Answers Template
 
-Erzeugen Sie zunächst eine Vorlage mit allen erforderlichen Feldern:
+First, generate a template with all required fields:
 
 ```bash
-# Grundlegende Vorlage (nur erforderliche Felder)
+# Basic template (required fields only)
 gtc setup --dry-run --emit-answers answers.json ./my-bundle
 
-# Vollständige Vorlage (einschließlich optionaler Felder)
+# Full template (including optional fields)
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 ```
 
-### Format der Answers-Datei
-
-<Tabs>
-<TabItem label="JSON">
+### Answers File Format
 
 ```json title="answers.json"
 {
@@ -100,37 +101,15 @@ gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 }
 ```
 
-</TabItem>
-<TabItem label="YAML">
+Setup answers are JSON. Use `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to generate the current schema-backed file instead of hand-writing one from memory.
 
-```yaml title="answers.yaml"
-messaging-telegram:
-  enabled: true
-  public_base_url: https://xxx.ngrok-free.app
-  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-
-messaging-slack:
-  enabled: true
-  public_base_url: https://xxx.ngrok-free.app
-  api_base_url: https://slack.com/api
-  bot_token: xoxb-xxx-xxx-xxx
-  slack_app_id: A07XXXXXX
-  slack_configuration_token: xoxe.xoxp-xxx
-
-messaging-teams:
-  enabled: false
-```
-
-</TabItem>
-</Tabs>
-
-### Answers anwenden
+### Apply Answers
 
 ```bash
 gtc setup --answers answers.json ./my-bundle
 ```
 
-## Provider-spezifische Konfiguration
+## Extension-Specific Configuration
 
 ### Telegram
 
@@ -144,10 +123,10 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-**So erhalten Sie Zugangsdaten:**
-1. Schreiben Sie [@BotFather](https://t.me/botfather) auf Telegram
-2. Senden Sie `/newbot` und folgen Sie den Anweisungen
-3. Kopieren Sie den Bot-Token
+**How to get credentials:**
+1. Message [@BotFather](https://t.me/botfather) on Telegram
+2. Send `/newbot` and follow prompts
+3. Copy the bot token
 
 ### Slack
 
@@ -163,12 +142,12 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-**So erhalten Sie Zugangsdaten:**
-1. Gehen Sie zu [api.slack.com/apps](https://api.slack.com/apps)
-2. Erstellen Sie eine neue App oder wählen Sie eine vorhandene aus
-3. Holen Sie den Bot Token aus OAuth & Permissions
-4. Holen Sie die App ID aus Basic Information
-5. Holen Sie den Configuration Token aus App Manifest
+**How to get credentials:**
+1. Go to [api.slack.com/apps](https://api.slack.com/apps)
+2. Create a new app or select existing
+3. Get Bot Token from OAuth & Permissions
+4. Get App ID from Basic Information
+5. Get Configuration Token from App Manifest
 
 ### Microsoft Teams
 
@@ -198,147 +177,140 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-## Konfiguration der öffentlichen URL
+## Public URL Configuration
 
 <Aside type="caution">
-Provider, die Webhooks verwenden, benötigen eine öffentlich erreichbare URL. Die `public_base_url` wird automatisch ersetzt, wenn Sie `ngrok` oder `cloudflared` mit `gtc start` verwenden.
+Webhook-based extensions require a publicly accessible URL. The `public_base_url` will be automatically replaced when using ngrok or cloudflared with `gtc start`.
 </Aside>
 
-### ngrok verwenden
+### Using ngrok
 
 ```bash
-# ngrok in einem separaten Terminal starten
+# Start ngrok in separate terminal
 ngrok http 8080
 
-# HTTPS-URL kopieren (z. B. https://abc123.ngrok-free.app)
-# Diese als public_base_url in answers verwenden
+# Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
+# Use this as public_base_url in answers
 ```
 
-### Cloudflared verwenden
+### Using Cloudflared
 
 ```bash
-# Cloudflared erzeugt die URL automatisch mit gtc start
+# Cloudflared generates URL automatically with gtc start
 gtc start ./my-bundle --cloudflared on
 ```
 
-## Bundle-Capabilities
+## Bundle Capabilities
 
-Die Datei `bundle.yaml` kann Capabilities deklarieren, die zusätzliches Verhalten während des Setups freischalten. Capabilities werden als Array von Capability-Identifiern aufgeführt.
+The `bundle.yaml` file can declare capabilities that unlock additional behavior during setup. Capabilities are listed as an array of capability identifiers.
 
-### Bundle-Assets (`greentic.cap.bundle_assets.read.v1`)
+### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
 
-Wenn die Capability `greentic.cap.bundle_assets.read.v1` in `bundle.yaml` vorhanden ist, erstellt `gtc setup` ein Verzeichnis `assets/` im Bundle-Root und scaffoldet Asset-Dateien aus Provider-Packs hinein.
+When the `greentic.cap.bundle_assets.read.v1` capability is present in `bundle.yaml`, `gtc setup` creates an `assets/` directory at the bundle root and scaffolds eligible asset files from extension packs into it.
 
 ```yaml title="bundle.yaml"
 capabilities:
   - greentic.cap.bundle_assets.read.v1
 ```
 
-Konkret werden Assets aus Provider-Packs, etwa Einträge unter `assets/webchat-gui/`, in das Bundle-weite Verzeichnis `assets/` kopiert. Dadurch erhalten Sie einen Ort, an dem Sie Provider-Assets anpassen können, zum Beispiel `webchat-gui`-Skins und Konfigurationsdateien, ohne den ursprünglichen Inhalt des Packs zu ändern.
+Specifically, public assets from extension packs (currently `assets/webchat-gui/` entries) are copied into the bundle-level `assets/` directory. This gives you a place to customize extension assets -- for example, webchat-gui skins and configuration files -- without modifying the original pack contents.
 
-**So funktioniert es:**
+**How it works:**
 
-- Während des Setups werden bei Provider-Packs, die Asset-Verzeichnisse enthalten (z. B. `assets/webchat-gui/`), diese Dateien in das Root-Verzeichnis `assets/` des Bundles scaffoldet.
-- Sie können diese Dateien anschließend frei bearbeiten. Assets auf Bundle-Ebene überschreiben die Standardwerte des Packs zur Laufzeit.
-- Das ist nützlich, um das Erscheinungsbild von WebChat-Widgets anzupassen, Konfigurationen zu ändern oder gebrandete Skins anzuwenden.
+- During setup, extension packs that include eligible asset directories (e.g., `assets/webchat-gui/`) have those files scaffolded into the bundle root `assets/` directory.
+- You can then edit these files freely. Bundle-level asset files override pack defaults at runtime.
+- This is useful for customizing the look and feel of webchat widgets, adjusting configuration, or applying branded skins.
 
 <Aside type="tip">
-Nachdem das Setup die Assets scaffoldet hat, können Sie sie sicher ändern. Ihre Anpassungen auf Bundle-Ebene haben Vorrang vor den Standardwerten des Packs, wenn die Runtime Assets lädt.
+After setup scaffolds the assets, you can safely modify them. Your bundle-level customizations take precedence over the pack defaults when the runtime loads assets.
 </Aside>
 
-## Ausführung des Setup-Flows
+## Setup Flow Execution
 
-Wenn Sie `gtc setup` ausführen, passiert Folgendes:
+When you run `gtc setup`, it:
 
 <Steps>
 
-1. **Bundle-Konfiguration laden**
+1. **Loads bundle configuration**
 
-   Liest `greentic.demo.yaml`, um Provider zu finden.
+   Reads `bundle.yaml` and the resolved bundle metadata to find extension packs and setup requirements.
 
-2. **Answers validieren**
+2. **Validates answers**
 
-   Prüft, dass alle erforderlichen Felder vorhanden sind.
+   Checks all required fields are present.
 
-3. **Setup-Flows ausführen**
+3. **Runs setup flows**
 
-   Führt den `setup_flow` jedes Providers aus (z. B. Webhook-Registrierung).
+   Executes each extension's setup flow (e.g., webhook registration).
 
-4. **Zugangsdaten speichern**
+4. **Stores credentials**
 
-   Speichert Zugangsdaten im konfigurierten Secrets Store.
+   Saves credentials to the configured secrets store.
 
-5. **Verifizierung ausführen**
+5. **Runs verification**
 
-   Führt `verify_flow` aus, um zu bestätigen, dass das Setup funktioniert hat.
+   Executes `verify_flow` to confirm setup worked.
 
 </Steps>
 
-## Selektives Setup
+## Re-run Setup
 
-### Einzelnen Provider einrichten
-
-```bash
-gtc setup --provider messaging-telegram ./my-bundle
-```
-
-### Bestimmten Provider überspringen
+`gtc setup` is idempotent. Re-run it with the same answers file after credential or public URL changes:
 
 ```bash
-gtc setup --skip messaging-teams ./my-bundle
+gtc setup ./my-bundle --answers answers.json
 ```
 
-### Setup erneut ausführen
+For headless automation, combine an answers file with strict non-interactive mode:
 
 ```bash
-# Erneutes Setup erzwingen (nützlich nach URL-Änderungen)
-gtc start ./my-bundle --force-setup
+gtc setup ./my-bundle --answers answers.json --non-interactive --no-ui
 ```
 
-## Fehlerbehebung
+## Troubleshooting
 
-### Registrierung des Webhooks fehlgeschlagen
+### Webhook Registration Failed
 
 ```
 Error: Failed to register webhook: 401 Unauthorized
 ```
 
-Prüfen Sie, ob Ihr Bot-Token korrekt und nicht abgelaufen ist.
+Check that your bot token is correct and not expired.
 
-### Erforderliches Feld fehlt
+### Missing Required Field
 
 ```
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-Stellen Sie sicher, dass alle erforderlichen Felder in Ihrer Answers-Datei enthalten sind.
+Ensure all required fields are in your answers file.
 
-### Öffentliche URL nicht erreichbar
+### Public URL Not Accessible
 
 ```
 Error: Webhook verification failed: Connection refused
 ```
 
-Stellen Sie sicher, dass Ihre öffentliche URL aus dem Internet erreichbar ist. Prüfen Sie, ob `ngrok` oder `cloudflared` läuft.
+Ensure your public URL is accessible from the internet. Check ngrok/cloudflared is running.
 
-### Zugangsdaten nicht gefunden
+### Credential Not Found
 
 ```
 Error: Secret 'slack_bot_token' not found
 ```
 
-Führen Sie `gtc setup` aus, um den Provider zu konfigurieren, oder prüfen Sie Ihre Answers-Datei.
+Run `gtc setup` to configure the extension, or check your answers file.
 
 ## Best Practices
 
-1. **Answers-Dateien in CI/CD verwenden** - Vermeiden Sie interaktive Eingaben in automatisierten Pipelines
-2. **Zugangsdaten sicher aufbewahren** - Committen Sie keine Answers-Dateien mit echten Tokens in git
-3. **Umgebungsvariablen verwenden** - Referenzieren Sie Secrets über `$ENV_VAR` in Answers
-4. **Mit dry-run testen** - Zeigen Sie das Setup in der Vorschau an, bevor Sie Änderungen vornehmen
-5. **Bei URL-Änderungen neu erzeugen** - Führen Sie das Setup erneut aus, wenn sich Ihre öffentliche URL ändert
+1. **Use answers files in CI/CD** - Avoid interactive prompts in automated pipelines
+2. **Keep credentials secure** - Don't commit answers files with real tokens to git
+3. **Use environment variables** - Reference secrets via `$ENV_VAR` in answers
+4. **Test with dry-run** - Preview setup before making changes
+5. **Regenerate on URL change** - Re-run setup when your public URL changes
 
-## Nächste Schritte
+## Next Steps
 
-- [gtc start](/de/cli/start/) - Den Runtime-Server ausführen
-- [Telegram einrichten](/de/providers/messaging/telegram/) - Detaillierte Telegram-Anleitung
-- [Slack einrichten](/de/providers/messaging/slack/) - Detaillierte Slack-Anleitung
+- [gtc start](/cli/start/) - Run the runtime server
+- [Telegram Setup](/providers/messaging/telegram/) - Detailed Telegram guide
+- [Slack Setup](/providers/messaging/slack/) - Detailed Slack guide

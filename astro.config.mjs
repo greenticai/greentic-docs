@@ -41,6 +41,15 @@ export default defineConfig({
 					label: 'Deutsch',
 					lang: 'de',
 				},
+				fr: {
+					label: 'Français',
+					lang: 'fr',
+				},
+				ar: {
+					label: 'العربية',
+					lang: 'ar',
+					dir: 'rtl',
+				},
 			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/greenticai' }],
 			head: [
@@ -96,6 +105,7 @@ export default defineConfig({
 						{ label: 'Extensions', slug: 'concepts/extensions' },
 						{ label: 'Bundle Assets', slug: 'concepts/bundle-assets' },
 						{ label: 'Multi-Tenancy', slug: 'concepts/multi-tenancy' },
+						{ label: 'Secrets', slug: 'concepts/secrets' },
 					],
 				},
 				{
@@ -148,12 +158,13 @@ export default defineConfig({
 				{
 					label: 'Components',
 					items: [
+						{ label: 'Templates (Handlebars)', slug: 'components/templates' },
 						{ label: 'Adaptive Cards', slug: 'components/adaptive-cards' },
+						{ label: 'QA', slug: 'components/qa' },
 						{ label: 'fast2flow', slug: 'components/fast2flow' },
 						{ label: 'cards2pack', slug: 'components/cards2pack' },
 						{ label: 'flow2flow', slug: 'components/flow2flow' },
 						{ label: 'LLM OpenAI', slug: 'components/llm-openai' },
-						{ label: 'Templates (Handlebars)', slug: 'components/templates' },
 						{ label: 'Script (Rhai)', slug: 'components/script-rhai' },
 					],
 				},
@@ -177,6 +188,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Flow YAML Schema', slug: 'reference/flow-schema' },
 						{ label: 'Pack Format', slug: 'reference/pack-format' },
+						{ label: 'Bundle Format', slug: 'reference/bundle-format' },
 						{ label: 'WIT Interfaces', slug: 'reference/wit-interfaces' },
 						{ label: 'Configuration', slug: 'reference/configuration' },
 						{

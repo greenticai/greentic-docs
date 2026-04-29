@@ -1,0 +1,181 @@
+---
+title: Admin Access
+description: How to access the Greentic admin API, which commands are available, and how the cloud access model works across AWS, Azure, and GCP.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Admin Access
+
+The Greentic admin API is a secure runtime control surface exposed by `greentic-start`.
+
+It is used for:
+
+- health and runtime status checks
+- listing active runtimes and admin client CNs
+- stopping a runtime
+- adding and removing allowed admin client CNs
+
+## Overview
+
+The admin API itself is cloud-agnostic.
+
+What differs by target is the access path:
+
+- **AWS** uses a local tunnel path
+- **Azure** uses a public HTTPS admin relay path
+- **GCP** uses a public HTTPS admin relay path
+
+This keeps the runtime contract generic while letting the deploy layer materialize the access method for each cloud.
+
+## Available Commands
+
+The `gtc admin` surface currently supports:
+
+- `gtc admin access`
+- `gtc admin certs`
+- `gtc admin token`
+- `gtc admin health`
+- `gtc admin status`
+- `gtc admin list`
+- `gtc admin admins`
+- `gtc admin stop`
+- `gtc admin add-client --cn <NAME>`
+- `gtc admin remove-client --cn <NAME>`
+- `gtc admin tunnel` for AWS only
+
+## Access Models
+
+### AWS
+
+AWS uses a local tunnel to the runtime-local admin listener.
+
+Start the tunnel first:
+
+```bash
+gtc admin tunnel ./cloud-deploy-demo-bundle --target aws
+```
+
+Then use the normal admin commands:
+
+```bash
+gtc admin health ./cloud-deploy-demo-bundle --target aws
+gtc admin status ./cloud-deploy-demo-bundle --target aws
+gtc admin admins ./cloud-deploy-demo-bundle --target aws
+```
+
+### Azure And GCP
+
+Azure and GCP use a public admin relay URL exposed by the deployed runtime.
+
+The relay:
+
+- accepts a bearer token on the public side
+- forwards internally to the local admin server
+- keeps the actual admin server on the runtime-local listener
+
+Use the same `gtc admin` commands directly:
+
+```bash
+gtc admin access ./cloud-deploy-demo-bundle --target azure
+gtc admin health ./cloud-deploy-demo-bundle --target azure
+gtc admin status ./cloud-deploy-demo-bundle --target azure
+```
+
+```bash
+gtc admin access ./cloud-deploy-demo-bundle --target gcp
+gtc admin health ./cloud-deploy-demo-bundle --target gcp
+gtc admin status ./cloud-deploy-demo-bundle --target gcp
+```
+
+<Aside type="note">
+`gtc admin tunnel` remains AWS-only. Azure and GCP do not use a tunnel flow anymore; they use the relay endpoint instead.
+</Aside>
+
+## Typical Usage
+
+### 1. Inspect The Access Plan
+
+```bash
+gtc admin access ./cloud-deploy-demo-bundle --target gcp
+```
+
+This shows the current admin access model and the public endpoint when one exists.
+
+### 2. Run A Health Check
+
+```bash
+gtc admin health ./cloud-deploy-demo-bundle --target gcp
+```
+
+Expected result:
+
+- HTTP `200`
+- `{"data":"healthy","success":true}`
+
+### 3. Read Runtime Status
+
+```bash
+gtc admin status ./cloud-deploy-demo-bundle --target gcp
+```
+
+### 4. Inspect Current Admin Client CNs
+
+```bash
+gtc admin admins ./cloud-deploy-demo-bundle --target gcp
+```
+
+### 5. Add Or Remove An Allowed Client CN
+
+```bash
+gtc admin add-client ./cloud-deploy-demo-bundle --target gcp --cn ops-admin
+gtc admin remove-client ./cloud-deploy-demo-bundle --target gcp --cn ops-admin
+```
+
+### 6. Stop A Runtime
+
+```bash
+gtc admin stop ./cloud-deploy-demo-bundle --target gcp
+```
+
+## Manual Token And Certificate Access
+
+You can also materialize the raw credentials if you need them for debugging.
+
+### Relay Token
+
+For Azure and GCP:
+
+```bash
+gtc admin token ./cloud-deploy-demo-bundle --target gcp
+```
+
+### Admin Client Certificates
+
+For any target:
+
+```bash
+gtc admin certs ./cloud-deploy-demo-bundle --target gcp
+```
+
+This writes the local admin certificate material under the bundle's `.greentic/admin/certs/` directory.
+
+## Manual Relay Probe
+
+For Azure and GCP, you can call the relay endpoint directly if needed.
+
+```bash
+TOKEN="$(gtc admin token ./cloud-deploy-demo-bundle --target gcp)"
+ENDPOINT="$(gtc admin access ./cloud-deploy-demo-bundle --target gcp --output json | jq -r .admin_public_endpoint)"
+
+curl -i \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "${ENDPOINT}/health"
+```
+
+## Notes
+
+- `gtc` stays an orchestration layer. It does not own cloud-specific deploy semantics.
+- `greentic-start` owns the generic admin API and relay behavior.
+- `greentic-deployer` owns how each cloud target materializes access to that admin API.
+- `destroy` does not require special handling for the admin relay resources. They live in the same Terraform graph and are removed through the normal destroy path.

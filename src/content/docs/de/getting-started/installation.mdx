@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 | Komponente | Anforderung |
 |-----------|-------------|
 | OS | Linux, macOS, Windows |
-| Rust | 1.90+ |
+| Rust | 1.95+ |
 | Memory | 4 GB RAM |
 | Disk | 2 GB freier Speicherplatz |
 
@@ -20,7 +20,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 | Komponente | Anforderung |
 |-----------|-------------|
-| Rust | 1.91 (latest) |
+| Rust | 1.95+ (latest supported) |
 | Memory | 8 GB RAM |
 | CPU | Mehrkernprozessor |
 
@@ -35,7 +35,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 Setzen Sie die richtige Toolchain-Version:
 
 ```bash
-rustup default 1.90
+rustup default 1.95
 ```
 
 Fügen Sie das WASM-Ziel zum Bauen von Komponenten hinzu:
@@ -46,11 +46,16 @@ rustup target add wasm32-wasip2
 
 ## GTC CLI installieren
 
+Installieren Sie zuerst den `gtc`-Router und lassen Sie danach `gtc install` die Greentic-Begleitwerkzeuge installieren. Installieren Sie `greentic-cli` oder einzelne Begleit-Crates nicht direkt für den normalen Gebrauch; `gtc install` hält die delegierten Binärdateien passend zum Router.
+
 <Tabs>
-<TabItem label="Cargo (Empfohlen)">
+<TabItem label="cargo-binstall (Empfohlen)">
 
 ```bash
-cargo install greentic-cli
+cargo install cargo-binstall
+cargo binstall gtc
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -63,6 +68,8 @@ cargo build --release
 
 # Add to PATH
 export PATH="$PATH:$(pwd)/target/release"
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -93,11 +100,7 @@ curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-lin
 
 ```bash
 gtc --version
-```
-
-Erwartete Ausgabe:
-```
-gtc 0.4.x
+gtc doctor
 ```
 
 ## Optionale Abhängigkeiten
@@ -187,28 +190,33 @@ cloudflared tunnel --url http://localhost:8080
 
 ## Entwicklungswerkzeuge
 
-### Pack Builder
+### Greentic Toolchain
 
-`.gtpack`-Archive bauen:
+Die delegierten Greentic-Binärdateien installieren oder aktualisieren:
 
 ```bash
-cargo install greentic-pack
+gtc install
 ```
 
-### Flow Validator
-
-Flow-Definitionen validieren:
+Mit `gtc install --dry-run` können Sie den Installationsplan prüfen. Für kontrollierte Umgebungen kann die Toolchain gepinnt werden:
 
 ```bash
-cargo install greentic-flow
+gtc install --release 1.0.15
+gtc install --manifest ./greentic-toolchain.json
 ```
 
 ### Komponenten-Erstellung
 
-WASM-Komponenten erstellen:
+`gtc install` installiert die Standard-Begleitwerkzeuge. Für eigenständige Komponentenentwicklung kann zusätzlich `cargo-component` installiert werden:
 
 ```bash
-cargo install greentic-component
+cargo install --locked cargo-component
+```
+
+Danach nutzen Sie die delegierte Komponentenoberfläche:
+
+```bash
+gtc dev component --help
 ```
 
 ## Ihr Setup verifizieren

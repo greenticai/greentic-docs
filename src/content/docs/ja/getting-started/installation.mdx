@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 | Component | 要件 |
 |-----------|------|
 | OS | Linux, macOS, Windows |
-| Rust | 1.90+ |
+| Rust | 1.95+ |
 | Memory | 4 GB RAM |
 | Disk | 2 GB の空き容量 |
 
@@ -20,7 +20,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 | Component | 要件 |
 |-----------|------|
-| Rust | 1.91 (latest) |
+| Rust | 1.95+ (latest supported) |
 | Memory | 8 GB RAM |
 | CPU | マルチコア processor |
 
@@ -35,7 +35,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 正しい toolchain version を設定します:
 
 ```bash
-rustup default 1.90
+rustup default 1.95
 ```
 
 component を build するための WASM target を追加します:
@@ -46,11 +46,16 @@ rustup target add wasm32-wasip2
 
 ## GTC CLI のインストール
 
+まず `gtc` router をインストールし、その後 `gtc install` で Greentic companion tools をインストールします。通常利用では `greentic-cli` や個別の companion crates を直接インストールしないでください。`gtc install` が delegated binaries を router と揃えます。
+
 <Tabs>
-<TabItem label="Cargo (Recommended)">
+<TabItem label="cargo-binstall (Recommended)">
 
 ```bash
-cargo install greentic-cli
+cargo install cargo-binstall
+cargo binstall gtc
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -63,6 +68,8 @@ cargo build --release
 
 # Add to PATH
 export PATH="$PATH:$(pwd)/target/release"
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -93,11 +100,7 @@ curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-lin
 
 ```bash
 gtc --version
-```
-
-期待される出力:
-```
-gtc 0.4.x
+gtc doctor
 ```
 
 ## オプション依存関係
@@ -187,28 +190,33 @@ cloudflared tunnel --url http://localhost:8080
 
 ## Development Tools
 
-### Pack Builder
+### Greentic Toolchain
 
-`.gtpack` archive を build します:
+`gtc` router が使う delegated Greentic binaries をインストールまたは更新します:
 
 ```bash
-cargo install greentic-pack
+gtc install
 ```
 
-### Flow Validator
-
-flow definition を検証します:
+Install plan を確認するには `gtc install --dry-run` を使います。Controlled environments では toolchain を pin できます:
 
 ```bash
-cargo install greentic-flow
+gtc install --release 1.0.15
+gtc install --manifest ./greentic-toolchain.json
 ```
 
 ### Component Authoring
 
-WASM component を作成します:
+`gtc install` は standard companion tools をインストールします。Standalone component development では `cargo-component` も利用できます:
 
 ```bash
-cargo install greentic-component
+cargo install --locked cargo-component
+```
+
+その後、delegated component surface を使います:
+
+```bash
+gtc dev component --help
 ```
 
 ## セットアップの検証

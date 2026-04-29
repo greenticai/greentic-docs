@@ -187,9 +187,9 @@ nodes:
     config:
       conditions:
         - expression: "callback_data == 'action:help'"
-          next: show_help
+          to: show_help
         - expression: "callback_data == 'action:settings'"
-          next: show_settings
+          to: show_settings
       default: unknown_action
 
   - id: show_help

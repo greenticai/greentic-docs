@@ -233,7 +233,7 @@ nodes:
     config:
       key: "public_base_url"
       output: "base_url"
-    next: set_webhook
+    to: set_webhook
 
   - id: set_webhook
     type: http
@@ -242,14 +242,14 @@ nodes:
       url: "https://api.telegram.org/bot{{secrets.telegram_bot_token}}/setWebhook"
       body:
         url: "{{base_url}}/webhook/telegram/{{tenant_id}}/{{team_id}}"
-    next: verify_result
+    to: verify_result
 
   - id: verify_result
     type: branch
     config:
       conditions:
         - expression: "http_response.ok == true"
-          next: success
+          to: success
       default: failure
 
   - id: success

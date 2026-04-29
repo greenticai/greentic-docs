@@ -1,315 +1,294 @@
 ---
 title: Multi-Tenancy
-description: 理解 Greentic 中的多租户架构
+description: Understanding tenant, team, and invocation isolation in Greentic
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-## 概述
+## Overview
 
-Greentic 从设计之初就是为 **多租户部署** 而构建的。平台的每一个方面都支持租户隔离，使单个部署能够安全地服务多个组织。
+Greentic multi-tenancy is built around explicit runtime context, not hidden global configuration. A bundle can expose the same application packs to many tenants, restrict packs per tenant or team, and pass tenant identity through every component and host capability call.
 
-## 租户层级
+The current model is defined by `greentic-types` and `greentic-interfaces`:
+
+- `greentic-types::TenantCtx` is the Rust type shared across host-side crates.
+- `greentic:types-core@0.6.0` defines the canonical WIT `tenant-ctx` used by component interfaces.
+- `greentic:interfaces-types@0.1.0` keeps compatibility fields for older host capability surfaces.
+- `greentic-bundle` materializes tenant/team access files and resolved manifests from `bundle.yaml`.
+
+## Runtime Scope
 
 ```
-Workspace
-└── Tenant (organization)
-    └── Environment (prod, staging, dev)
-        └── Team (department, group)
-            └── Channel (messaging provider instance)
-                └── Session (user conversation)
+Bundle workspace
+├── app packs                  # Digital worker applications and flows
+├── extension providers        # Messaging, state, secrets, telemetry, etc.
+└── tenants/
+    └── <tenant>/
+        ├── tenant.gmap        # Tenant-level access policy
+        └── teams/
+            └── <team>/
+                └── team.gmap  # Optional team-level policy overlay
 ```
+
+Tenant and team directories are access scopes. They are not YAML tenant profiles and they do not store channel configuration directly. The runtime combines the selected tenant/team, access policy, app-pack mappings, setup state, and incoming message metadata to build the invocation context.
 
 ## TenantCtx
 
-`TenantCtx` 结构体会贯穿所有操作：
+`TenantCtx` is the context carried with invocations, host calls, state, secrets, telemetry, and messaging. In `greentic-types`, it is richer than the old three-field examples:
 
 ```rust
 pub struct TenantCtx {
-    pub tenant_id: String,
-    pub env_id: String,
-    pub team_id: Option<String>,
+    pub env: EnvId,
+    pub tenant: TenantId,
+    pub tenant_id: TenantId,
+    pub team: Option<TeamId>,
+    pub team_id: Option<TeamId>,
+    pub user: Option<UserId>,
+    pub user_id: Option<UserId>,
+    pub session_id: Option<String>,
+    pub flow_id: Option<String>,
+    pub node_id: Option<String>,
+    pub provider_id: Option<String>,
+    pub trace_id: Option<String>,
+    pub i18n_id: Option<String>,
+    pub correlation_id: Option<String>,
+    pub attributes: BTreeMap<String, String>,
+    pub deadline: Option<InvocationDeadline>,
+    pub attempt: u32,
+    pub idempotency_key: Option<String>,
+    pub impersonation: Option<Impersonation>,
 }
 ```
 
-每次 API 调用、flow 执行和数据访问都限定在某个 `TenantCtx` 范围内。
+The duplicate pairs such as `tenant` / `tenant_id`, `team` / `team_id`, and `user` / `user_id` exist for compatibility with older interface surfaces. New code should keep them aligned by using the helpers such as `TenantCtx::new(...)`, `with_team(...)`, and `with_user(...)`.
 
-## 配置
+The canonical component WIT shape in `greentic:types-core@0.6.0` uses the `_id` names:
 
-### 租户定义
-
-```yaml title="tenants/acme/tenant.gmap"
-tenant:
-  id: acme
-  name: "ACME Corporation"
-  settings:
-    timezone: "America/New_York"
-    language: "en-US"
-
-environments:
-  - id: prod
-    name: "Production"
-  - id: staging
-    name: "Staging"
+```wit
+record tenant-ctx {
+  tenant-id: tenant-id,
+  team-id: option<team-id>,
+  user-id: option<user-id>,
+  env-id: env-id,
+  trace-id: trace-id,
+  correlation-id: correlation-id,
+  deadline-ms: u64,
+  attempt: u32,
+  idempotency-key: option<string>,
+  i18n-id: string,
+}
 ```
-
-### Team 定义
-
-```yaml title="tenants/acme/teams/support/team.gmap"
-team:
-  id: support
-  name: "Customer Support"
-  tenant_id: acme
-
-channels:
-  slack:
-    provider: messaging-slack
-    config:
-      workspace_id: "T123456"
-      channel_id: "C789012"
-
-  telegram:
-    provider: messaging-telegram
-    config:
-      chat_id: "-1001234567890"
-```
-
-### Bundle 配置
-
-```yaml title="greentic.demo.yaml"
-tenants:
-  acme:
-    name: "ACME Corporation"
-    teams:
-      support:
-        name: "Customer Support"
-        channels:
-          slack:
-            provider: messaging-slack
-          telegram:
-            provider: messaging-telegram
-
-      sales:
-        name: "Sales Team"
-        channels:
-          teams:
-            provider: messaging-teams
-
-  bigcorp:
-    name: "BigCorp Inc."
-    teams:
-      helpdesk:
-        channels:
-          webchat:
-            provider: messaging-webchat
-```
-
-## 数据隔离
-
-### Session 存储
-
-Sessions 按租户上下文隔离：
-
-```
-sessions/
-├── acme/
-│   ├── prod/
-│   │   ├── support/
-│   │   │   ├── session_001.cbor
-│   │   │   └── session_002.cbor
-│   │   └── sales/
-│   │       └── session_003.cbor
-│   └── staging/
-│       └── support/
-│           └── session_004.cbor
-└── bigcorp/
-    └── prod/
-        └── helpdesk/
-            └── session_005.cbor
-```
-
-### 状态隔离
-
-工作内存（state）按每个 session 进行作用域隔离：
-
-```rust
-// State key format
-let key = format!(
-    "state:{}:{}:{}:{}",
-    tenant_ctx.tenant_id,
-    tenant_ctx.env_id,
-    tenant_ctx.team_id.unwrap_or("default"),
-    session_id
-);
-```
-
-### NATS Subject 隔离
-
-消息路由使用带租户作用域的 subjects：
-
-```
-greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
-                          │      │       │      │
-                          │      │       │      └─ Channel ID (slack, telegram)
-                          │      │       └──────── Team ID
-                          │      └─────────────── Tenant ID
-                          └────────────────────── Environment (prod, staging)
-```
-
-## Secret 隔离
-
-Secrets 会按租户范围进行存储和读取：
-
-```rust
-// Secret retrieval includes tenant context
-let secret = secrets_client
-    .get_secret(&tenant_ctx, "api_key")
-    .await?;
-```
-
-### Secret 命名空间
-
-```
-secrets/
-├── global/           # Platform-wide secrets
-│   └── signing_key
-├── acme/             # Tenant: ACME
-│   ├── slack_bot_token
-│   ├── openai_api_key
-│   └── teams/
-│       └── support/
-│           └── webhook_secret
-└── bigcorp/          # Tenant: BigCorp
-    └── telegram_bot_token
-```
-
-## Flow 隔离
-
-每个租户都可以拥有不同的 flows 和配置：
-
-```yaml title="tenants/acme/apps/support-bot/flows/on_message.ygtc"
-name: acme_support_flow
-version: "1.0"
-
-# ACME-specific support flow
-nodes:
-  - id: greet
-    type: reply
-    config:
-      message: "Welcome to ACME Support! How can I help?"
-```
-
-```yaml title="tenants/bigcorp/apps/helpdesk/flows/on_message.ygtc"
-name: bigcorp_helpdesk_flow
-version: "1.0"
-
-# BigCorp-specific helpdesk flow
-nodes:
-  - id: greet
-    type: reply
-    config:
-      message: "BigCorp Helpdesk here. What's your issue?"
-```
-
-## 访问控制
 
 <Aside type="caution">
-租户隔离是在运行时层面强制执行的。在自定义 components 中始终要验证 `TenantCtx`。
+Do not invent a smaller custom tenant context for a component or extension. Import the Greentic WIT types or use `greentic-types` so tenant identity, tracing, retries, deadlines, and localization survive across runtimes.
 </Aside>
 
-### Component 访问
+## Bundle Workspace
 
-Components 会接收 `TenantCtx`，并且必须遵守边界：
+`bundle.yaml` is the workspace state file. It records app packs, extension providers, capabilities, remote catalogs, and optional app-pack mappings:
 
-```rust
-impl Guest for MyComponent {
-    fn process(input: Input, ctx: &TenantCtx) -> Output {
-        // Verify tenant has access to requested resource
-        if !has_permission(ctx, &input.resource_id) {
-            return Output::error("Access denied");
-        }
+```yaml title="bundle.yaml"
+schema_version: 1
+bundle_id: support-bundle
+bundle_name: Support Bundle
+locale: en
+mode: create
+app_packs:
+  - oci://ghcr.io/greenticai/packs/apps/support-agent:latest
+app_pack_mappings:
+  - reference: oci://ghcr.io/greenticai/packs/apps/support-agent:latest
+    scope: tenant
+    tenant: acme
+  - reference: oci://ghcr.io/greenticai/packs/apps/field-service:latest
+    scope: team
+    tenant: acme
+    team: ops
+extension_providers:
+  - oci://ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:latest
+  - oci://ghcr.io/greenticai/packs/state/state-memory:latest
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+```
 
-        // Process with tenant scope
-        process_for_tenant(ctx, input)
+Mapping scopes are:
+
+| Scope | Meaning |
+|-------|---------|
+| `global` | The app pack is available to every tenant/team that policy allows. |
+| `tenant` | The app pack is mapped to one tenant. |
+| `team` | The app pack is mapped to one tenant team. |
+
+The wizard stores these mappings in JSON AnswerDocuments using `app_pack_entries[].mapping.scope`. The generated workspace persists them in `bundle.yaml`.
+
+## Access Policy
+
+`.gmap` files are policy files, not tenant metadata documents. Each non-comment line is:
+
+```text
+<pack>[/<flow>[/<node>]] = public|forbidden
+```
+
+Examples:
+
+```text title="tenants/acme/tenant.gmap"
+_ = forbidden
+support-agent = public
+support-agent/intake = public
+support-agent/admin = forbidden
+```
+
+```text title="tenants/acme/teams/ops/team.gmap"
+support-agent/admin = public
+support-agent/admin/delete-ticket = forbidden
+```
+
+Evaluation uses the most specific matching rule. Team policy overlays tenant policy: if a team rule matches, it wins; otherwise the tenant rule is used. The default generated policy is `_ = forbidden`, so a pack, flow, or node must be made public before it is available to that tenant/team.
+
+Wizard AnswerDocuments express the same policy as `access_rules`:
+
+```json title="create-answers.json"
+{
+  "answers": {
+    "delegate_answer_document": {
+      "answers": {
+        "access_rules": [
+          {
+            "tenant": "acme",
+            "policy": "public",
+            "rule_path": "support-agent"
+          },
+          {
+            "tenant": "acme",
+            "team": "ops",
+            "policy": "public",
+            "rule_path": "support-agent/admin"
+          }
+        ]
+      }
     }
+  }
 }
 ```
 
-### API 访问
+## Resolved Manifests
 
-REST API 会强制执行租户作用域：
-
-```http
-GET /api/v1/sessions
-Authorization: Bearer <token>
-X-Tenant-ID: acme
-X-Team-ID: support
-```
-
-## 部署模型
-
-### 单租户
-
-每个租户一个 Greentic 实例：
+When the bundle workspace is synchronized, Greentic writes resolved manifests for each tenant/team:
 
 ```
-┌─────────────────┐
-│ Greentic (ACME) │
-└─────────────────┘
+resolved/
+├── acme.yaml
+└── acme.ops.yaml
 
-┌─────────────────┐
-│ Greentic (BigCorp)│
-└─────────────────┘
+state/resolved/
+├── acme.yaml
+└── acme.ops.yaml
 ```
 
-### 共享式多租户
+Those files summarize the effective bundle, policy sources, extension providers, capabilities, and app-pack policy decisions:
 
-多个租户共享同一套基础设施：
-
-```
-┌───────────────────────────────────┐
-│         Greentic Instance         │
-│  ┌─────────┐  ┌─────────────────┐│
-│  │  ACME   │  │    BigCorp     ││
-│  │ (prod)  │  │    (prod)      ││
-│  └─────────┘  └─────────────────┘│
-│  ┌─────────┐  ┌─────────────────┐│
-│  │  ACME   │  │    BigCorp     ││
-│  │(staging)│  │   (staging)    ││
-│  └─────────┘  └─────────────────┘│
-└───────────────────────────────────┘
-```
-
-### 混合模式
-
-混合使用专属资源和共享资源：
-
-```
-┌───────────────────────────────────┐
-│    Shared Greentic Instance       │
-│  ┌─────────┐  ┌─────────────────┐│
-│  │ Small   │  │   Medium        ││
-│  │ Tenants │  │   Tenants       ││
-│  └─────────┘  └─────────────────┘│
-└───────────────────────────────────┘
-
-┌───────────────────────────────────┐
-│  Dedicated: Enterprise Tenant     │
-│  (Custom SLA, dedicated resources)│
-└───────────────────────────────────┘
+```yaml title="resolved/acme.ops.yaml"
+version: 1
+tenant: acme
+team: ops
+bundle:
+  bundle_id: support-bundle
+  bundle_name: Support Bundle
+policy:
+  default: forbidden
+  source:
+    tenant_gmap: tenants/acme/tenant.gmap
+    team_gmap: tenants/acme/teams/ops/team.gmap
+app_packs:
+  - reference: oci://ghcr.io/greenticai/packs/apps/support-agent:latest
+    policy: public
+extension_providers:
+  - oci://ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:latest
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
 ```
 
-## 最佳实践
+## State And Sessions
 
-1. **始终传递 TenantCtx** - 不要硬编码 tenant ID
-2. **在边界处校验** - 在 API 和 component 层检查租户访问权限
-3. **使用带租户作用域的日志** - 所有日志项都包含 tenant ID
-4. **隔离 secrets** - 不要在租户之间共享 secrets
-5. **测试隔离性** - 验证一个租户无法访问另一个租户的数据
-6. **按租户监控** - 按租户跟踪使用情况和错误
+State and session host interfaces receive the tenant context. In WIT compatibility surfaces, state operations accept an optional `tenant-ctx`:
 
-## 下一步
+```wit
+read: func(key: state-key, ctx: option<tenant-ctx>) -> result<list<u8>, host-error>;
+write: func(key: state-key, bytes: list<u8>, ctx: option<tenant-ctx>) -> result<op-ack, host-error>;
+delete: func(key: state-key, ctx: option<tenant-ctx>) -> result<op-ack, host-error>;
+```
 
-- [Architecture Overview](/zh/concepts/architecture/)
-- [Session Management](/zh/concepts/sessions/)
-- [Configuration Reference](/zh/reference/configuration/)
+The important rule is that state keys are resolved together with `TenantCtx`. Components should pass the context they receive from the host and avoid embedding tenant IDs into ad hoc string keys.
+
+## Secrets
+
+Secrets use the canonical `SecretScope` from `greentic-types`:
+
+```rust
+pub struct SecretScope {
+    pub env: String,
+    pub tenant: String,
+    pub team: Option<String>,
+}
+```
+
+Setup and extension packs can declare `SecretRequirement`s with an expected scope. Runtime storage commonly uses a URI-like namespace such as:
+
+```text
+secrets://{env}/{tenant}/{team-or-_}/{provider}/{key}
+```
+
+The scope is environment + tenant + optional team. Use the structured scope where possible; treat URI strings as storage addresses, not as the source of truth for authorization.
+
+## Messaging And Events
+
+Ingress providers normalize platform-specific payloads into Greentic messages/events and attach tenant context before the flow runs. A WebChat, Teams, Slack, webhook, or timer event should all end up with the same identity fields:
+
+- `env` / `env_id`
+- `tenant` / `tenant_id`
+- `team` / `team_id`
+- `user` / `user_id` when known
+- `session_id` for conversation continuity
+- `provider_id`, `flow_id`, `node_id`
+- trace, correlation, attempt, deadline, and idempotency metadata
+
+Messaging channels are therefore not the tenant hierarchy. They are ingress surfaces that resolve to a tenant/team context.
+
+## Component Responsibilities
+
+Components should trust the host-provided `TenantCtx` as the authority for the current invocation and should not accept tenant override fields from user payloads.
+
+```rust
+fn handle(input: Input, ctx: TenantCtx) -> Result<Output, Error> {
+    let identity = ctx.identity();
+    audit("tenant", identity.tenant_id.as_str());
+
+    // Use ctx for state, secrets, telemetry, and outbound calls.
+    // Do not derive tenant scope from untrusted input.
+    process_for_current_scope(input, ctx)
+}
+```
+
+This keeps a component portable across single-tenant, shared multi-tenant, local, and cloud deployments.
+
+## Deployment Models
+
+### Single Tenant
+
+Run one bundle workspace per customer. This is simple operationally and useful for strict data residency or customer-managed deployments.
+
+### Shared Multi-Tenant
+
+Run one Greentic deployment with multiple tenant/team scopes. App packs and extensions can be shared, while access policy, secrets, state, sessions, and telemetry remain scoped by `TenantCtx`.
+
+### Hybrid
+
+Run shared infrastructure for lower-risk tenants and dedicated workspaces for regulated tenants. The same pack can move between models because tenant identity is passed through the same `TenantCtx` and WIT contracts.
+
+## Best Practices
+
+1. **Use `gtc wizard --schema`** - Generate tenant/team access and app-pack mappings from the current JSON AnswerDocument schema.
+2. **Keep `.gmap` for policy only** - Do not put tenant profiles, channel settings, or secrets in `tenant.gmap` or `team.gmap`.
+3. **Default deny** - Keep `_ = forbidden` and explicitly publish the packs, flows, or nodes a tenant/team may run.
+4. **Pass `TenantCtx` unchanged** - State, secrets, telemetry, HTTP, and messaging calls should use the host-provided context.
+5. **Keep compatibility fields aligned** - If you construct `TenantCtx` manually, keep `tenant` with `tenant_id`, `team` with `team_id`, and `user` with `user_id`.
+6. **Use structured scopes** - Prefer `SecretScope`, `TenantIdentity`, and `TenantContext` over ad hoc path strings.

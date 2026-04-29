@@ -33,6 +33,8 @@ const LANGUAGES = {
   zh: "Simplified Chinese (中文简体)",
   es: "Spanish (Español)",
   de: "German (Deutsch)",
+  fr: "French (Français)",
+  ar: "Arabic (العربية)",
 };
 
 // ── CLI args ─────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 | Komponen | Persyaratan |
 |----------|-------------|
 | OS | Linux, macOS, Windows |
-| Rust | 1.90+ |
+| Rust | 1.95+ |
 | Memori | 4 GB RAM |
 | Disk | 2 GB ruang kosong |
 
@@ -20,7 +20,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 | Komponen | Persyaratan |
 |----------|-------------|
-| Rust | 1.91 (terbaru) |
+| Rust | 1.95+ (terbaru yang didukung) |
 | Memori | 8 GB RAM |
 | CPU | Prosesor multi-core |
 
@@ -35,7 +35,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 Atur versi toolchain yang benar:
 
 ```bash
-rustup default 1.90
+rustup default 1.95
 ```
 
 Tambahkan target WASM untuk build komponen:
@@ -46,11 +46,16 @@ rustup target add wasm32-wasip2
 
 ## Menginstal GTC CLI
 
+Instal router `gtc` terlebih dahulu, lalu biarkan `gtc install` menginstal tool pendamping Greentic. Jangan instal `greentic-cli` atau crate pendamping satu per satu untuk penggunaan normal; `gtc install` menjaga binary yang didelegasikan tetap selaras dengan router.
+
 <Tabs>
-<TabItem label="Cargo (Rekomendasi)">
+<TabItem label="cargo-binstall (Rekomendasi)">
 
 ```bash
-cargo install greentic-cli
+cargo install cargo-binstall
+cargo binstall gtc
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -63,6 +68,8 @@ cargo build --release
 
 # Tambahkan ke PATH
 export PATH="$PATH:$(pwd)/target/release"
+gtc install
+gtc doctor
 ```
 
 </TabItem>
@@ -93,11 +100,7 @@ curl -LO https://github.com/greenticai/greentic/releases/latest/download/gtc-lin
 
 ```bash
 gtc --version
-```
-
-Output yang diharapkan:
-```
-gtc 0.4.x
+gtc doctor
 ```
 
 ## Dependensi Opsional
@@ -187,28 +190,33 @@ cloudflared tunnel --url http://localhost:8080
 
 ## Tool Development
 
-### Pack Builder
+### Greentic Toolchain
 
-Build arsip `.gtpack`:
+Instal atau perbarui binary Greentic yang didelegasikan dan digunakan oleh router `gtc`:
 
 ```bash
-cargo install greentic-pack
+gtc install
 ```
 
-### Flow Validator
-
-Validasi definisi flow:
+Gunakan `gtc install --dry-run` untuk melihat rencana instalasi. Untuk lingkungan terkontrol, pin toolchain:
 
 ```bash
-cargo install greentic-flow
+gtc install --release 1.0.15
+gtc install --manifest ./greentic-toolchain.json
 ```
 
 ### Pembuatan Komponen
 
-Buat komponen WASM:
+`gtc install` menginstal tool pendamping standar. Untuk pengembangan komponen mandiri, Anda juga dapat menginstal `cargo-component`:
 
 ```bash
-cargo install greentic-component
+cargo install --locked cargo-component
+```
+
+Lalu gunakan permukaan komponen yang didelegasikan:
+
+```bash
+gtc dev component --help
 ```
 
 ## Memverifikasi Setup Anda

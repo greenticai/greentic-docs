@@ -223,11 +223,11 @@ nodes:
     config:
       conditions:
         - expression: "button.id == 'help'"
-          next: show_help
+          to: show_help
         - expression: "button.id == 'status'"
-          next: check_status
+          to: check_status
         - expression: "button.id == 'human'"
-          next: escalate
+          to: escalate
       default: unknown
 
   - id: show_help
@@ -291,7 +291,7 @@ WhatsApp erzwingt ein 24-Stunden-Nachrichtenfenster. Nach 24 Stunden ohne Benutz
   config:
     conditions:
       - expression: "last_message_time + 86400 > now"
-        next: send_freeform
+        to: send_freeform
       default: send_template
 
 - id: send_freeform

@@ -1,0 +1,238 @@
+---
+title: Adaptive Cards
+description: How Greentic stores, renders, validates, routes, and delivers Adaptive Cards across messaging channels.
+---
+
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What Adaptive Cards Are
+
+[Adaptive Cards](https://learn.microsoft.com/en-us/adaptive-cards/) are JSON UI payloads. A card describes content, layout, inputs, and actions; the host application decides how that JSON is rendered in its own UI. Microsoft describes them as platform-agnostic snippets of UI that are authored in JSON and transformed by the receiving app into native UI.
+
+That distinction matters in Greentic:
+
+- The pack stores the card as data.
+- A flow renders or validates the card with `component-adaptive-card`.
+- The messaging extension delivers either the original Adaptive Card or a channel-specific representation.
+- The flow handles returned action data and decides what happens next.
+
+Cards are useful for menus, forms, approvals, summaries, dashboards, OAuth prompts, research reports, and multi-step worker applications where plain chat text is too loose.
+
+## Where Cards Live in a Pack
+
+Cards are stored as JSON assets in the pack, usually under `assets/cards/`:
+
+```text
+my-worker-pack/
+├── pack.yaml
+├── flows/
+│   └── main.ygtc
+├── components/
+│   └── component_adaptive_card.wasm
+├── assets/
+│   ├── cards/
+│   │   ├── welcome.json
+│   │   ├── form.json
+│   │   └── result.json
+│   └── i18n/
+│       └── en.json
+└── dist/
+    └── my-worker-pack.gtpack
+```
+
+The pack format already treats assets as first-class pack content, and the existing reference docs use `assets/cards/` as the card directory. The demos follow the same pattern: for example, the deep research demo stores `main_menu.json`, `research_plan.json`, and `final_report.json` in `assets/cards/`.
+
+Use assets for cards that should travel with the pack. Use inline cards only for small generated cases or tests. Use catalog or remote references only when the host/import workflow resolves them into pack assets before runtime.
+
+## The Adaptive Card Component
+
+Greentic uses `component-adaptive-card` for card work inside flows. The component exposes a `card` operation and supports three sources:
+
+| Source | Use it for |
+| --- | --- |
+| `asset` | Normal pack cards such as `assets/cards/welcome.json`. |
+| `inline` | Small one-off cards passed directly in operation input. |
+| `catalog` | Named cards resolved through configured catalog references. |
+
+The component can render, validate, or render and validate:
+
+```json
+{
+  "card_source": "asset",
+  "card_spec": {
+    "asset_path": "assets/cards/research_plan.json",
+    "template_params": {
+      "user_question": "What is the most common programming language?",
+      "planner_output": "Research Stack Overflow, GitHub, and survey data.",
+      "researchPlanVisible": true,
+      "generatingVisible": false
+    }
+  },
+  "mode": "renderAndValidate",
+  "locale": "en"
+}
+```
+
+The component handles:
+
+- resolving card JSON from asset, inline, or catalog input
+- binding placeholders from payload, session, state, and `template_params`
+- injecting `lang` and `rtl` when multilingual rendering is enabled
+- validating card shape, required fields, input ids, action requirements, and common element errors
+- producing a feature summary such as used elements, used actions, media, `Action.ShowCard`, and `Action.ToggleVisibility`
+- normalizing action interactions into events with action id, verb, inputs, card id, and card instance id
+
+<Aside type="note">
+`component-adaptive-card` does not perform network delivery and does not own channel rendering. It emits canonical Adaptive Card JSON and metadata. Messaging extensions decide how that output becomes a Teams activity, WebChat attachment, Slack Block Kit message, Telegram keyboard, WhatsApp interactive message, email, or text fallback.
+</Aside>
+
+## Native and Transformed Delivery
+
+Adaptive Cards are native in some places and not native in others.
+
+| Channel | Delivery model |
+| --- | --- |
+| WebChat | Greentic WebChat accepts Bot Framework-style attachments with `contentType: "application/vnd.microsoft.card.adaptive"` and inline card `content`. The WebChat client renders the card through the Adaptive Cards renderer. |
+| Microsoft Teams | Teams supports Adaptive Cards for bots and message extensions and lists Adaptive Cards as the recommended card type for new Teams development. Teams also has surface-specific action rules, so validate against the Teams surface you target. |
+| Webex | Webex supports Adaptive Cards with a documented subset; the local component README treats Adaptive Cards 1.3 as the safe target for Webex. |
+| Slack | Slack does not consume Adaptive Card JSON directly. Transform the intent into Block Kit blocks, elements, and composition objects. Buttons and menus become Block Kit interactive elements; sections, facts, and images become Slack blocks. |
+| Telegram | Telegram bots use messages plus inline or reply keyboards. Transform card actions into buttons where possible and summarize unsupported layout/input constructs as text. |
+| WhatsApp | WhatsApp Business messages use interactive formats such as reply buttons, lists, flows, product/catalog messages, and media messages. Transform cards into those native structures or fall back to text. |
+| Email | Outlook Actionable Messages use Adaptive Cards, but generic email clients do not. For ordinary email, render a readable HTML/text representation and preserve action links where possible. |
+
+The safe design rule is: author the card once, but know the delivery tier. Rich Microsoft/WebChat surfaces can receive the card. Other channels need a transformation that preserves intent rather than pixel-perfect layout.
+
+## Transformation Rules
+
+When a channel cannot render full Adaptive Card JSON, transform by intent:
+
+| Adaptive Card construct | Slack | Telegram | WhatsApp | Email fallback |
+| --- | --- | --- | --- | --- |
+| `TextBlock`, `FactSet` | `section`, `context`, or `rich_text` blocks | message text | body text | HTML/text paragraphs or table |
+| `Image` | image block or accessory | image/media message or link | media header if the target message type supports it | inline image or link |
+| `Action.OpenUrl` | button with URL | URL button | CTA URL button where available | link |
+| `Action.Submit` / `Action.Execute` | button/select action id payload | callback button data | reply button, list row, or WhatsApp Flow data | link to a hosted action or instruction |
+| `Input.Text`, `Input.ChoiceSet`, `Input.Toggle` | modal/input workflow when available, otherwise prompt next | ask as follow-up message or keyboard choice | list, reply button, WhatsApp Flow, or follow-up prompt | form link or reply instructions |
+| `Action.ShowCard`, `ToggleVisibility` | split into follow-up blocks or modal | send next message | send next interactive step | expand inline or link to detail |
+
+Unsupported features should degrade predictably:
+
+- keep a plain-text summary
+- keep action ids or route metadata
+- never drop required user instructions
+- include accessible top-level text for channels that need it
+- validate returned inputs on the server side
+
+## Flow Integration
+
+Cards become powerful when they are part of a flow rather than isolated UI.
+
+In the deep research demo, the main menu card asks for a research question and has two `Action.Submit` buttons:
+
+```json
+{
+  "type": "Action.Submit",
+  "title": "Single Shot",
+  "data": { "action": "single_shot" }
+}
+```
+
+```json
+{
+  "type": "Action.Submit",
+  "title": "Agentic",
+  "style": "positive",
+  "data": { "action": "agentic" }
+}
+```
+
+The generated flow routes by that action metadata:
+
+```json
+[
+  { "condition": "response.action == \"agentic\"", "to": "research_planner" },
+  { "condition": "response.action == \"single_shot\"", "to": "research_analyst" },
+  { "condition": "response.action == \"start_research_analysis\"", "to": "research_analyst" },
+  { "out": true }
+]
+```
+
+That makes the card a workflow screen:
+
+1. `main_menu` renders `assets/cards/main_menu.json`.
+2. User submits `single_shot` or `agentic`.
+3. `single_shot` routes directly to the analyst LLM.
+4. `agentic` routes first to the planner LLM.
+5. `show_research_plan` renders `assets/cards/research_plan.json` with `planner_output` in `template_params`.
+6. The user can submit `start_research_analysis`.
+7. `research_analyst` creates the final report.
+8. `show_final_report` renders `assets/cards/final_report.json` with `report_output`.
+
+This same pattern works for helpdesk intake, HR onboarding, supply-chain workflows, CRM updates, incident creation, OAuth connection prompts, and operator dashboards.
+
+## Complex Card Applications
+
+Complex Adaptive Card applications are usually a state machine made of cards, components, and flows:
+
+<CardGrid>
+  <Card title="Cards">
+    Screens, forms, menus, confirmations, result views, and error states stored as pack assets.
+  </Card>
+  <Card title="Flows">
+    Routing, branching, validation, retries, long-running work, and handoff between digital workers.
+  </Card>
+  <Card title="Components">
+    Business logic, LLM calls, API calls, card rendering, state access, and transformation helpers.
+  </Card>
+  <Card title="Messaging">
+    Channel-specific delivery, native rendering where supported, transformation where required, and inbound action handling.
+  </Card>
+</CardGrid>
+
+For a multi-step card app, keep the flow in charge:
+
+- Store stable card screens under `assets/cards/`.
+- Put route intent in action data, such as `action`, `routeToCardId`, `step`, or `verb`.
+- Use `template_params` to fill dynamic fields from previous steps.
+- Keep state in the runtime/session layer, not hidden in card text.
+- Re-render cards after long-running work instead of mutating the original JSON in place.
+- Treat every submitted card action as untrusted input and validate it before calling systems of record.
+- Design a text fallback for every card if the worker may run in Slack, Telegram, WhatsApp, email, SMS, or other non-Adaptive-Card channels.
+
+## Creating Cards
+
+Use the [Adaptive Card Designer](https://adaptivecards.microsoft.com/designer/) for early layout work, then store the JSON in the pack. For pack generation from card directories, use [cards2pack](/components/cards2pack/). For flow-based apps, use `gtc wizard` or the flow wizard to add `component-adaptive-card` steps rather than wiring every node by hand.
+
+For components that emit Adaptive Cards directly to WebChat, use the canonical attachment shape:
+
+```json
+{
+  "text": "Here is your card:",
+  "extensions": {
+    "attachments": [
+      {
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "content": {
+          "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+          "type": "AdaptiveCard",
+          "version": "1.5",
+          "body": [
+            { "type": "TextBlock", "text": "Welcome!", "wrap": true }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+## References
+
+- [Microsoft Adaptive Cards overview](https://learn.microsoft.com/en-us/adaptive-cards/)
+- [Adaptive Cards for Bot Developers](https://learn.microsoft.com/en-us/adaptive-cards/getting-started/bots)
+- [Microsoft Teams cards documentation](https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/what-are-cards)
+- [Slack Block Kit](https://docs.slack.dev/block-kit/)
+- [Telegram bot buttons](https://core.telegram.org/api/bots/buttons)
+- [WebChat attachment envelope](/providers/messaging/webchat/#attachment-envelope-shape)
+- [QA](/components/qa/)
+- [cards2pack](/components/cards2pack/)

@@ -14,7 +14,7 @@ Die **Templates**-Komponente bietet Handlebars-basiertes Templating zur Erzeugun
   type: template
   config:
     template: "Hello, {{name}}! Your order #{{order_id}} is ready."
-  next: send_message
+  to: send_message
 ```
 
 ## Template-Syntax

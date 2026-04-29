@@ -45,7 +45,7 @@ description: 与 OpenAI 兼容的 LLM 集成组件
   config:
     model: "gpt-4"
     prompt: "What is the capital of France?"
-  next: use_response
+  to: use_response
 ```
 
 ### 配合 System Prompt
@@ -61,7 +61,7 @@ description: 与 OpenAI 兼容的 LLM 集成组件
       Respond with JSON: {"intent": "...", "confidence": 0.0-1.0}
     prompt: "{{message}}"
     output_format: json
-  next: route_intent
+  to: route_intent
 ```
 
 ### Chat Completion
@@ -127,7 +127,7 @@ description: 与 OpenAI 兼容的 LLM 集成组件
     model: "gpt-4"
     prompt: "{{question}}"
   output: llm_response
-  next: use_response
+  to: use_response
 
 - id: use_response
   type: reply
@@ -146,7 +146,7 @@ description: 与 OpenAI 兼容的 LLM 集成组件
     timeout: 30000
     retry_count: 3
   on_error: handle_error
-  next: success
+  to: success
 
 - id: handle_error
   type: reply

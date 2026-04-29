@@ -1,0 +1,330 @@
+---
+title: Packs
+description: Understanding Greentic application packs, extension packs, and capability declarations
+---
+
+import { Aside, Card, CardGrid, FileTree } from '@astrojs/starlight/components';
+
+A **Pack** is a signed, portable unit of Greentic functionality. Packs are how you ship digital-worker behavior, runtime integrations, deployers, control-plane helpers, observability hooks, schemas, assets, and capability contracts without rebuilding the core runtime.
+
+There are two pack families to understand:
+
+| Pack family | Artifact | Used for |
+|-------------|----------|----------|
+| **Application packs** | `.gtpack` | Runtime digital-worker logic: flows, WASM components, cards, templates, i18n, assets, and app metadata. |
+| **Extension packs** | `.gtpack` | Capability and platform extensions: messaging, events, OAuth, state, secrets, telemetry, deployers, control, observer hooks, contracts, and ops metadata. |
+
+Do not classify packs by one file type inside them. A Greentic pack can contain flows, components, assets, and extension metadata together. What matters is the **capabilities** it offers, requires, and consumes.
+
+## Why Packs?
+
+Greentic uses packs so digital workers can grow as a system of independently shipped building blocks.
+
+<CardGrid>
+  <Card title="Portable" icon="rocket">
+    Move a complete app or extension between local development, cloud deployments, and custom deployers.
+  </Card>
+  <Card title="Auditable" icon="list-format">
+    Keep flows, components, assets, dependencies, SBOM metadata, and signatures together.
+  </Card>
+  <Card title="Capability-based" icon="setting">
+    Declare what a pack offers, what it requires, and how those capabilities are bound at bundle/setup time.
+  </Card>
+  <Card title="Sandboxed" icon="approve-check">
+    WASM components run with explicit runtime grants for host APIs such as messaging, events, secrets, state, telemetry, filesystem, and HTTP.
+  </Card>
+</CardGrid>
+
+## Application Packs
+
+An **application pack** is the pack you create for your digital worker. It usually contains:
+
+- `.ygtc` flows that orchestrate message, event, webhook, timer, or pub/sub handling
+- WASM components used by those flows
+- cards, templates, images, locale files, and other assets
+- setup metadata and capability declarations
+- optional extension metadata when the app exposes reusable capability offers
+
+Example layout:
+
+<FileTree>
+- research-assistant.gtpack
+  - pack.yaml Application metadata and extension/capability declarations
+  - flows/
+    - main.ygtc Message flow
+    - on_event.ygtc Event flow
+  - components/
+    - research-analyst.wasm WASM component
+  - assets/
+    - cards/
+      - research-result.json Adaptive Card
+    - i18n/
+      - en.json Locale strings
+  - extensions/
+    - capability-offer.json Optional extension answers/metadata
+  - sbom.json Software Bill of Materials
+  - signature.sig Pack signature
+</FileTree>
+
+Application packs are normally referenced from a bundle as `app_packs`. Bundles can map them globally, per tenant, or per tenant/team depending on the generated bundle metadata.
+
+```yaml title="bundle.yaml"
+bundle_id: research-demo
+bundle_name: Research Demo
+
+app_packs:
+  - ./apps/research-assistant.gtpack
+
+capabilities:
+  - greentic.cap.bundle_assets.read.v1
+```
+
+## Extension Packs
+
+An **extension pack** adds a capability to the platform or to other packs. Extensions can be runtime-capability packs, deployer packs, contract packs, ops packs, or packaged integration surfaces for messaging/events/OAuth/state/secrets/telemetry/control.
+
+Extension packs are important because they let a pack say:
+
+- "I can provide this capability."
+- "I need this capability before setup or runtime."
+- "I consume this capability in shared, exclusive, or ephemeral mode."
+- "Here is the component and operation that implements the capability contract."
+
+Extension data is persisted under `extensions/` and merged into `pack.yaml` under canonical extension keys such as:
+
+| Extension key | Purpose |
+|---------------|---------|
+| `greentic.ext.capabilities.v1` | Capability-first extensions such as messaging, events, OAuth, MCP, state, telemetry, secrets, admin, control, observer, runtime capability, contract, ops, and capability-offer packs. |
+| `greentic.deployer.v1` | Deployer extensions used by deployment tooling. |
+
+<Aside type="tip">
+The extension mechanism does not mean every extension is loaded the same way. Runtime capability packs, deployer packs, static-route packs, and integration surfaces can have different consumers, but they share the same idea: a signed pack declares a stable extension surface and the tooling can validate and replay it.
+</Aside>
+
+## Capabilities
+
+Capabilities are the contract layer that lets packs compose without hardcoding every implementation. The shared `greentic-cap` model defines four core concepts:
+
+| Concept | Meaning |
+|---------|---------|
+| **Offer** | This pack can provide a capability, optionally through a component operation. |
+| **Require** | This pack or bundle needs a capability to exist. Requirements can be mandatory or optional. |
+| **Consume** | This pack uses a capability, with a mode such as `shared`, `exclusive`, or `ephemeral`. |
+| **Profile** | A named group of requirements and consumes, useful when a capability only applies in a specific runtime/setup profile. |
+
+Canonical capability ids use the `cap://` scheme in the shared capability model, for example:
+
+```json title="capability declaration"
+{
+  "offers": [
+    {
+      "id": "offer.memory",
+      "capability": "cap://memory.short-term",
+      "provider": {
+        "component_ref": "component:memory-provider",
+        "operation": "provide",
+        "operation_map": [
+          {
+            "contract_operation": "read",
+            "component_operation": "provide",
+            "input_schema": { "type": "string" },
+            "output_schema": { "type": "string" }
+          }
+        ]
+      },
+      "profiles": ["memory-default"],
+      "description": "short-term memory provider"
+    }
+  ],
+  "requires": [
+    {
+      "id": "require.runtime",
+      "capability": "cap://runtime.metrics",
+      "optional": false,
+      "description": "runtime metrics are required for setup"
+    }
+  ],
+  "consumes": [
+    {
+      "id": "consume.runtime",
+      "capability": "cap://runtime.metrics",
+      "mode": "shared"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "memory-default",
+      "description": "default memory profile"
+    }
+  ]
+}
+```
+
+During bundle creation and setup, Greentic can resolve requirements and consumes to matching offers. The resolver emits deterministic binding records so setup tooling, resolved manifests, audit logs, and runtime state can all agree on which implementation was selected.
+
+## Extending a Pack With New Capabilities
+
+To extend a pack, add a capability extension entry instead of inventing a new ad hoc manifest field.
+
+The usual workflow is:
+
+1. Choose the extension type in `gtc wizard`.
+2. Pick a template from the extension catalog.
+3. Answer the template and edit questions.
+4. Let the wizard write `extensions/<type>.json`.
+5. Let the wizard merge the canonical extension payload into `pack.yaml`.
+6. Run `gtc dev pack doctor <PACK_DIR>` and build/sign the pack.
+
+For capability-first extension packs, the wizard writes through:
+
+```yaml title="pack.yaml"
+pack_id: memory-extension
+version: 0.1.0
+kind: application
+
+extensions:
+  greentic.ext.capabilities.v1:
+    kind: greentic.ext.capabilities.v1
+    version: 1.0.0
+    inline:
+      schema_version: 1
+      offers:
+        - offer_id: state.memory.kv.01
+          cap_id: greentic.cap.state.kv.v1
+          version: v1
+          provider:
+            component_ref: memory-extension
+            op: state.dispatch
+          priority: 100
+          requires_setup: false
+```
+
+For deployer extension packs, the wizard writes through:
+
+```yaml title="pack.yaml"
+extensions:
+  greentic.deployer.v1:
+    kind: greentic.deployer.v1
+    version: 1.0.0
+    inline:
+      schema_version: 1
+      planner:
+        flow_id: flows/plan.ygtc
+      capabilities:
+        - capability: plan
+          flow_id: flows/plan.ygtc
+        - capability: apply
+          flow_id: flows/apply.ygtc
+```
+
+This pattern is important because it makes new capabilities discoverable, replayable, and validated by the same tooling that builds and signs the pack.
+
+## Pack Types in `gtc wizard`
+
+`gtc wizard --schema` exposes a launcher with two main delegated actions:
+
+| Wizard action | What it delegates to | What it creates or edits |
+|---------------|----------------------|---------------------------|
+| `pack` | `greentic-pack wizard` | Application packs and extension packs. It can delegate flow edits to `greentic-flow wizard` and component edits to `greentic-component wizard`. |
+| `bundle` | `greentic-bundle wizard` | Bundles that assemble `app_packs`, extension-capability entries, tenants, access rules, setup answers, catalogs, and requested capabilities. |
+
+Inside the pack wizard, the main pack flows are:
+
+| Pack wizard flow | Purpose |
+|------------------|---------|
+| Create application pack | Scaffold a new runtime app pack, then edit flows/components and finalize with doctor/build/sign. |
+| Update application pack | Edit an existing app pack, then validate, rebuild, and optionally sign. |
+| Create extension pack | Choose an extension type and template from the catalog, scaffold extension metadata/files, then validate/build/sign. |
+| Update extension pack | Edit existing extension entries, flows, and components, then validate/build/sign. |
+| Add extension to existing pack | Add a capability/deployer/ops/etc. extension entry to a pack that already exists. |
+
+The default extension catalog currently includes these extension types:
+
+| Extension type | What it scaffolds |
+|----------------|-------------------|
+| `messaging` | Messaging channel and connector capability scaffolds. |
+| `events` | Event producer/consumer capability scaffolds. |
+| `oauth` | OAuth broker and auth-flow capability scaffolds. |
+| `mcp` | MCP integration capability scaffolds. |
+| `state` | State store and persistence capability scaffolds. |
+| `telemetry` | Observability and tracing capability scaffolds. |
+| `secrets` | Secret and vault integration scaffolds. |
+| `admin` | Admin API extension and runtime admin helper scaffolds. |
+| `control` | Control-plane extension scaffolds. |
+| `observer` | Observer and audit-hook scaffolds. |
+| `deployer` | Generic deployer extension scaffolds using `greentic.deployer.v1`. |
+| `runtime-capability` | Component-backed runtime capability scaffolds. |
+| `contract` | Schema, rules, and policy-oriented scaffolds. |
+| `ops` | Ops metadata, schemas, and execution-hook scaffolds. |
+| `capability-offer` | Capability offers intended for other extensions to bind to. |
+| `custom-scaffold` | A blank custom extension scaffold. |
+
+The bundle wizard uses these pack references when assembling a deployable bundle:
+
+| Bundle field | Meaning |
+|--------------|---------|
+| `app_packs` | Runtime application pack references or local paths. |
+| `app_pack_entries` | Resolved app-pack entries with mapping scope, tenant, team, pack id, display name, and version. |
+| `extension_providers` | Extension-capability pack references or local paths used during setup/resolution. |
+| `extension_provider_entries` | Resolved extension entries with id, group, catalog, display name, and version. |
+| `capabilities` | Requested bundle-level capabilities, such as bundle assets, OAuth, i18n, or embed behavior. |
+
+## Building and Validating Packs
+
+Use the wizard for most creation work:
+
+```bash
+gtc wizard
+```
+
+For direct pack work:
+
+```bash
+gtc dev pack lint --in ./my-pack
+gtc dev pack resolve --in ./my-pack
+gtc dev pack build --in ./my-pack
+gtc dev pack doctor ./my-pack
+```
+
+For flow and component edits inside a pack:
+
+```bash
+gtc wizard --schema
+gtc wizard --answers component-create-answers.json
+```
+
+<Aside type="caution">
+Do not treat pack metadata as decorative. Capability declarations, extension entries, resolved bindings, signatures, and SBOM data are what make a pack portable and auditable across tenants and deployments.
+</Aside>
+
+## Security Model
+
+Greentic packs enforce a layered security model:
+
+| Layer | Purpose |
+|-------|---------|
+| Content hashing | Detects any change to flows, components, assets, or metadata. |
+| Signatures | Proves the pack came from a trusted publisher. |
+| Capability declarations | Makes required/offered runtime powers explicit. |
+| WASM sandboxing | Runs components in a constrained WASI Preview 2 environment. |
+| Setup/bundle resolution | Binds requirements to selected offers deterministically. |
+
+Unsigned packs are useful during local development, but production deployments should use trusted publishers and reject unsigned artifacts.
+
+## Best Practices
+
+1. Start with `gtc wizard` so the pack follows the current schema and extension catalog.
+2. Use application packs for digital-worker behavior and extension packs for reusable platform capability surfaces.
+3. Add new capability surfaces through `extensions.greentic.ext.capabilities.v1` or `extensions.greentic.deployer.v1`.
+4. Keep capability ids stable and version new contracts intentionally.
+5. Commit wizard answer files where possible so pack creation is replayable.
+6. Validate with `gtc dev pack doctor` before every build.
+7. Sign release artifacts and publish SBOM metadata with them.
+
+## Next Steps
+
+- [Flows](/concepts/flows/) - Define runtime orchestration
+- [Components](/concepts/components/) - Build WASM operations used by packs
+- [gtc wizard](/cli/wizard/) - Create packs and bundles through guided workflows
+- [Building Packs](/cli/building-packs/) - CLI commands for pack management
+- [Pack Format Reference](/reference/pack-format/) - Low-level `.gtpack` specification
