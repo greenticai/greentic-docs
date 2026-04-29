@@ -109,6 +109,10 @@ For a WebChat or Adaptive Card worker, translations usually live in pack or bund
 
 When you create bundles with `gtc wizard`, capability flags such as `greentic.cap.webchat.i18n.v1` tell the tooling to scaffold locale-aware WebChat assets. For cards, use the i18n workflow to extract strings, translate them, and package the locale files with the app pack.
 
+<Aside type="note">
+If the card extraction or translation tools are not installed yet, install them first with `cargo binstall greentic-cards2pack greentic-i18n-translator`. The translator also needs the Codex CLI installed and authenticated; install it with `npm install -g @openai/codex` or `brew install --cask codex`, then run `codex` once to sign in.
+</Aside>
+
 ```bash
 greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
 greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
