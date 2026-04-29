@@ -57,20 +57,6 @@ Most demos can run with just **WebChat GUI** plus `state-memory`, which need no 
 
 Each release of `greentic-demo` publishes a `.gtpack`, a `*-create-answers.json`, and a `*-setup-answers.json` to the [latest release](https://github.com/greenticai/greentic-demo/releases/latest). Substitute the demo ID into the three commands shown above.
 
-### greentic-ai
-
-A lead-capture and contact-routing digital worker for Greentic AI, wired for multiple messaging channels so the same flow can run across customer-facing entry points.
-
-- **Channels:** Slack, Teams, WebChat GUI, Webex, Telegram, WhatsApp, Email
-- **External services:** Messaging provider credentials for the channels you enable
-- **Demo ID:** `greentic-ai`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/greentic-ai-create-answers.json
-gtc setup ./greentic-ai-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/greentic-ai-setup-answers.json
-gtc start ./greentic-ai-demo-bundle
-```
-
 ### hr-onboarding
 
 Interactive employee onboarding wizard with task tracking, document collection, and access provisioning. Persists session state across multiple steps.
