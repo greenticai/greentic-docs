@@ -67,11 +67,16 @@ When you are ready to move beyond the published catalog, the same three commands
 
 <Steps>
 
-1. **Create a bundle** with the wizard. You can run it interactively or with a local answers document:
+1. **Create a bundle** with the wizard. You can run it interactively, or generate a local answers document first and apply it after review:
 
    ```bash
+   # Interactive
    gtc wizard
-   # or
+
+   # Non-interactive: generate answers without creating files
+   gtc wizard --dry-run --emit-answers ./my-create-answers.json
+
+   # Review or edit ./my-create-answers.json, then apply it
    gtc wizard --answers ./my-create-answers.json
    ```
 
