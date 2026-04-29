@@ -57,20 +57,6 @@ Most demos can run with just **WebChat GUI** plus `state-memory`, which need no 
 
 Each release of `greentic-demo` publishes a `.gtpack`, a `*-create-answers.json`, and a `*-setup-answers.json` to the [latest release](https://github.com/greenticai/greentic-demo/releases/latest). Substitute the demo ID into the three commands shown above.
 
-### quickstart-event
-
-Exercises every event provider in one bundle: webhooks, cron timers, transactional email via SendGrid, and SMS via Twilio.
-
-- **Channels:** WebChat GUI
-- **External services:** SendGrid (optional), Twilio (optional), incoming webhook
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### greentic-ai
 
 A lead-capture and contact-routing digital worker for Greentic AI, wired for multiple messaging channels so the same flow can run across customer-facing entry points.

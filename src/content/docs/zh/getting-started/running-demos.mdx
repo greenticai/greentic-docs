@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-在一个 bundle 中演示所有 event providers：webhooks、cron timers、通过 SendGrid 发送 transactional email，以及通过 Twilio 发送 SMS。
-
-- **Channels:** WebChat GUI
-- **External services:** SendGrid（可选）、Twilio（可选）、incoming webhook
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 交互式员工入职 wizard，包含任务跟踪、文档收集和权限开通。支持在多步流程之间持久化 session state。

@@ -71,20 +71,6 @@ gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/gr
 gtc start ./deep-research-demo-bundle
 ```
 
-### quickstart-event
-
-Erprobt jeden Event-Provider in einem Bundle: Webhooks, Cron-Timer, transaktionale E-Mails über SendGrid und SMS über Twilio.
-
-- **Kanäle:** WebChat GUI
-- **Externe Dienste:** SendGrid (optional), Twilio (optional), eingehender Webhook
-- **Demo-ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
-```
-
 ### hr-onboarding
 
 Interaktiver Mitarbeiter-Onboarding-Wizard mit Aufgabenverfolgung, Dokumentensammlung und Bereitstellung von Zugriffsrechten. Behält den Session-Status über mehrere Schritte hinweg bei.
