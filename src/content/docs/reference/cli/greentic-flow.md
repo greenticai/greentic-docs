@@ -24,7 +24,7 @@ Commands:
   new               Create a new flow skeleton at the given path
   update            Update flow metadata in-place without overwriting nodes
   add-step          Insert a step after an anchor node
-  update-step       Update an existing node (re-run config/default with overrides)
+  update-step       Update an existing node (rerun config/default with overrides)
   delete-step       Delete a node and optionally splice routing
   doctor            Validate flows
   info              Describe a .ygtc flow file
@@ -95,7 +95,7 @@ Options:
       --format <FORMAT>
           Output format (human or json) [default: human] [possible values: human, json]
       --id <FLOW_ID>
-          New flow ID (only when safe; see rules)
+          New flow id (only when safe; see rules)
       --locale <LOCALE>
           Diagnostic locale (BCP47)
       --type <FLOW_TYPE>
@@ -164,9 +164,9 @@ Options:
       --answers-file <ANSWERS_FILE>
           Answers file (JSON) for config mode
       --answers-dir <ANSWERS_DIR>
-          Directory for wizard answers artefacts
+          Directory for wizard answers artifacts
       --overwrite-answers
-          Overwrite existing answers artefacts
+          Overwrite existing answers artifacts
       --reask
           Force re-asking wizard questions even if answers exist
       --locale <LOCALE>
@@ -180,9 +180,9 @@ Options:
       --validate-only
           Validate only without writing output
       --manifest <MANIFESTS>
-          Optional component manifest paths for catalogue validation or config flow discovery
+          Optional component manifest paths for catalog validation or config flow discovery
       --node-id <NODE_ID>
-          Optional node ID override
+          Optional node id override
       --component <COMPONENT_REF>
           Remote component reference (oci://, repo://, store://, etc.) for sidecar binding
       --local-wasm <LOCAL_WASM>
@@ -214,7 +214,7 @@ Options:
 ### `greentic-flow update-step`
 
 ```text
-Update an existing node (re-run config/default with overrides)
+Update an existing node (rerun config/default with overrides)
 
 Usage: greentic-flow update-step [OPTIONS] --flow <FLOW_PATH> [component_id]
 
@@ -253,9 +253,9 @@ Options:
       --answers-file <ANSWERS_FILE>
           Answers file (JSON/YAML) to merge with existing payload
       --answers-dir <ANSWERS_DIR>
-          Directory for wizard answers artefacts
+          Directory for wizard answers artifacts
       --overwrite-answers
-          Overwrite existing answers artefacts
+          Overwrite existing answers artifacts
       --reask
           Force re-asking wizard questions even if answers exist
       --locale <LOCALE>
@@ -320,9 +320,9 @@ Options:
       --answers-file <ANSWERS_FILE>
           Answers file (JSON/YAML)
       --answers-dir <ANSWERS_DIR>
-          Directory for wizard answers artefacts
+          Directory for wizard answers artifacts
       --overwrite-answers
-          Overwrite existing answers artefacts
+          Overwrite existing answers artifacts
       --reask
           Force re-asking wizard questions even if answers exist
       --locale <LOCALE>
@@ -352,7 +352,7 @@ Options:
       --strategy <STRATEGY>
           Strategy: splice (default) or remove-only [default: splice] [possible values: splice, remove-only]
       --if-multiple-predecessors <MULTI_PRED>
-          Behaviour when multiple predecessors are present [default: error] [possible values: error, splice-all]
+          Behavior when multiple predecessors are present [default: error] [possible values: error, splice-all]
       --assume-yes
           Skip confirmation prompt
       --write
@@ -375,7 +375,7 @@ Options:
       --permissive           Enable permissive schema handling (default: strict)
       --schema <SCHEMA>      Path to the flow schema JSON file
       --format <FORMAT>      Output format (human or json) [default: human] [possible values: human, json]
-      --registry <REGISTRY>  Optional adapter catalogue used for adapter_resolvable linting
+      --registry <REGISTRY>  Optional adapter catalog used for adapter_resolvable linting
       --json                 Emit a machine-readable JSON payload describing the lint result for a single flow
       --locale <LOCALE>      Diagnostic locale (BCP47)
       --backup               Backup flow files before overwriting (suffix .bak)
@@ -457,9 +457,9 @@ Arguments:
 Options:
       --mode <MODE>
           Wizard mode / answer contract to emit.
-
+          
           Use this to fetch the exact answer schema for the component's default, setup, update, or remove flow before composing wizard plans.
-
+          
           [default: default]
           [possible values: default, setup, update, remove]
 
@@ -468,7 +468,7 @@ Options:
 
       --format <FORMAT>
           Output format (human or json)
-
+          
           [default: human]
           [possible values: human, json]
 
@@ -483,7 +483,7 @@ Options:
 
       --out <OUT>
           Optional output path for the emitted schema.
-
+          
           If omitted, the schema is written to stdout so other tools can capture it directly.
 
   -h, --help
@@ -525,7 +525,7 @@ Arguments:
 Options:
       --answers <ANSWERS_PATH>
           Load or save a declarative wizard action plan.
-
+          
           Agentic coding tools such as Codex and Claude can fetch the strict plan schema with `--schema`, fill out the plan JSON at this path, and rerun the wizard non-interactively with `--answers`.
 
       --permissive
@@ -533,13 +533,13 @@ Options:
 
       --format <FORMAT>
           Output format (human or json)
-
+          
           [default: human]
           [possible values: human, json]
 
       --schema
           Write a strict wizard action-plan schema to stdout.
-
+          
           Agentic coding tools such as Codex and Claude should call this first to fetch the current plan schema, compose a valid plan JSON, and then rerun the wizard with `--answers` to apply it non-interactively.
 
       --dry-run

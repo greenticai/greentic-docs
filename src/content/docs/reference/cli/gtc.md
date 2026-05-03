@@ -10,7 +10,7 @@ sidebar:
 {/* Curated narrative for this CLI lives under src/content/docs/cli/. */}
 
 **Binary version:** `gtc 1.0.14
-Greentic toolchain release: 1.0.15 (stable) [sha256:3f5acb3d71d2b71d7a5facb2ab28f7daa325bfc38bd566ba3f104b52aae4e592]`
+Greentic toolchain release: not installed`
 
 This page mirrors the CLI's `--help` output so it stays accurate against the installed binary. If you're looking for narrative and examples, see the curated pages linked in the sidebar.
 
@@ -191,7 +191,7 @@ Start a bundle from local or remote reference.
 Usage: gtc start [OPTIONS] [BUNDLE_REF] [args]...
 
 Arguments:
-  [args]...
+  [args]...  
 
 Arguments:
   [BUNDLE_REF]  Bundle path/ref: local path, file://, oci://, repo://, store://
@@ -218,7 +218,7 @@ Stop a bundle runtime or destroy a deployed environment.
 Usage: gtc stop [OPTIONS] <BUNDLE_REF> [args]...
 
 Arguments:
-  [args]...
+  [args]...  
 
 Arguments:
   <BUNDLE_REF>  Bundle path/ref: local path, file://, oci://, repo://, store://
@@ -228,117 +228,6 @@ Options:
   -V, --version         Print version
       --locale <BCP47>  UI locale for gtc help/output (BCP-47 tag).
       --debug-router    Print resolved binary and args to stderr before exec.
-```
-
-### `gtc dev`
-
-```text
-Greentic developer tooling CLI
-
-Usage: greentic-dev [OPTIONS] <COMMAND>
-
-Commands:
-  flow       Flow passthrough (greentic-flow)
-  pack       Pack passthrough (greentic-pack; pack run uses greentic-runner-cli)
-  component  Component passthrough (greentic-component)
-  bundle     Bundle pass-through (greentic-bundle)
-  runner     Runner pass-through (greentic-runner)
-  config     Manage greentic-dev configuration
-  coverage   Run coverage checks against coverage-policy.json
-  mcp        MCP tooling
-  gui        GUI passthrough (greentic-gui)
-  secrets    Secrets convenience wrappers
-  tools      Install Greentic development/bootstrap tool binaries
-  install    Install delegated assets
-  release    Generate, publish, and promote Greentic toolchain releases
-  cbor       Decode a CBOR file to text
-  wizard     Deterministic orchestration for dev workbench workflows
-
-Options:
-  -h, --help
-          Print help
-
-  -V, --version
-          Print version
-
-      --locale <LOCALE>
-          Locale (BCP47) used for translated CLI help where supported
-```
-
-### `gtc op`
-
-```text
-Greentic operator tooling
-
-Usage: greentic-operator [OPTIONS] <COMMAND>
-
-Commands:
-  demo
-  help    Print this message or the help of the given subcommand(s)
-
-Options:
-      --locale <LOCALE>  CLI locale (for translated output).
-  -h, --help             Print help
-  -V, --version          Print version
-```
-
-### `gtc wizard`
-
-```text
-Deterministic orchestration for dev workbench workflows
-
-Usage: wizard [OPTIONS] [COMMAND]
-
-Commands:
-  validate  Validate a launcher AnswerDocument non-interactively
-  apply     Apply a launcher AnswerDocument non-interactively
-
-Options:
-      --answers <ANSWERS>
-          Answers file (AnswerDocument envelope)
-
-      --frontend <FRONTEND>
-          Frontend mode (text/json/adaptive-card)
-
-          [default: json]
-
-      --locale <LOCALE>
-          Locale (BCP47), passed to providers and recorded in plan metadata
-
-      --emit-answers <EMIT_ANSWERS>
-          Emit a portable AnswerDocument envelope JSON file
-
-      --schema
-          Print the current launcher AnswerDocument schema and exit.
-
-          Agentic coding tools such as Codex and Claude should call this first to fetch the exact greentic-dev launcher contract, including the embedded greentic-pack and greentic-bundle answer schemas used for delegation.
-
-      --schema-version <SCHEMA_VERSION>
-          Pin schema version for emitted/validated AnswerDocument
-
-      --migrate
-          Migrate AnswerDocument to the selected schema version when needed
-
-      --out <OUT>
-          Override output directory (default: `.greentic/wizard/<run-id>/`)
-
-      --dry-run
-          Preview only (default mode is apply when --dry-run is not set)
-
-      --yes
-          Skip interactive confirmation prompt
-
-      --non-interactive
-          Allow execution in non-interactive contexts
-
-      --unsafe-commands
-          Allow commands outside the default run-command allowlist
-
-      --allow-destructive
-          Allow destructive operations (delete/overwrite/move) when requested by a plan step
-
-  -h, --help
-          Print help
 ```
 
 ### `gtc setup`
