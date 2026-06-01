@@ -7,9 +7,9 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Resumen
 
-El provider Microsoft Teams integra tu trabajador digital con canales y chats de Teams. Soporta:
+El proveedor de Microsoft Teams integra tu trabajador digital con canales y chats de Teams. Admite:
 
-- Mensajes en canales
+- Mensajes de canal
 - Chats personales
 - Chats grupales
 - Adaptive Cards
@@ -19,113 +19,75 @@ El provider Microsoft Teams integra tu trabajador digital con canales y chats de
 ## Requisitos previos
 
 - Tenant de Microsoft 365
-- Acceso de administrador a Azure AD
+- Id de cliente de una aplicación pública de Microsoft Entra que admita OAuth con código de dispositivo
+- Permiso para conceder o consentir los scopes de Graph usados por la configuración
+- Permiso para crear canales en el Team seleccionado cuando quieras que la configuración cree un canal deseado que falte
 
 ## Configuración
 
+La configuración de Teams admite dos formas de configuración:
+
+| Modo | Úsalo cuando | Campos principales |
+|------|---------------|--------------------|
+| Modo de canal de Graph | Quieres envíos y suscripciones de canal basados en Graph. Este es el modo de configuración predeterminado. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| Modo Bot Framework | Tienes un Azure Bot y un manifiesto de app de Teams para mensajes entrantes de Bot Framework. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+
 <Steps>
 
-1. **Crea un registro de bot en Azure**
+1. **Configura la pista de configuración**
 
-   Ve a [Azure Portal](https://portal.azure.com):
-   - Busca "Bot Services"
-   - Haz clic en "Create"
-   - Completa los detalles:
-     - Bot handle: el nombre de tu bot
-     - Subscription: tu suscripción
-     - Resource group: crea o selecciona uno
-     - Pricing: F0 (gratis) o S1
-   - Haz clic en "Create"
-
-2. **Configura el endpoint del bot**
-
-   En tu Bot Service:
-   - Ve a **Configuration**
-   - Define **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
-
-3. **Obtén las credenciales de la app**
-
-   En **Configuration**:
-   - Copia **Microsoft App ID**
-   - Haz clic en "Manage" junto a Microsoft App ID
-   - Crea un nuevo **Client Secret**
-   - Copia el valor del secreto (solo se muestra una vez)
-
-4. **Habilita el canal de Teams**
-
-   En tu Bot Service:
-   - Ve a **Channels**
-   - Haz clic en **Microsoft Teams**
-   - Acepta los términos y habilítalo
-
-5. **Crea el paquete de la app de Teams**
-
-   Crea un manifest para tu app de Teams:
-
-   ```json title="manifest.json"
-   {
-     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-     "manifestVersion": "1.16",
-     "version": "1.0.0",
-     "id": "{{BOT_ID}}",
-     "packageName": "com.yourcompany.supportbot",
-     "developer": {
-       "name": "Your Company",
-       "websiteUrl": "https://yourcompany.com",
-       "privacyUrl": "https://yourcompany.com/privacy",
-       "termsOfUseUrl": "https://yourcompany.com/terms"
-     },
-     "name": {
-       "short": "Support Bot",
-       "full": "Support Bot for Customer Service"
-     },
-     "description": {
-       "short": "Customer support assistant",
-       "full": "AI-powered customer support assistant"
-     },
-     "icons": {
-       "outline": "outline.png",
-       "color": "color.png"
-     },
-     "accentColor": "#0078D4",
-     "bots": [
-       {
-         "botId": "{{BOT_ID}}",
-         "scopes": ["personal", "team", "groupchat"],
-         "supportsFiles": true,
-         "isNotificationOnly": false
-       }
-     ],
-     "permissions": ["identity", "messageTeamMembers"],
-     "validDomains": ["your-domain.com"]
-   }
-   ```
-
-6. **Configura el provider**
+   Puedes ejecutar la configuración solo con el id de cliente público predeterminado, o proporcionar tu propio `client_id`. Agrega `desired_channel_name` cuando quieras que la configuración busque o cree un canal estándar específico:
 
    ```json title="answers.json"
    {
-     "messaging-teams": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "app_id": "your-microsoft-app-id",
-       "app_password": "your-client-secret",
-       "tenant_id": "your-azure-tenant-id"
+     "setup_answers": {
+       "messaging-teams": {
+         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+         "desired_channel_name": "hr onboarding"
+       }
      }
    }
    ```
 
-7. **Ejecuta la configuración**
+2. **Inicia la configuración de Teams**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-8. **Instala la app en Teams**
+3. **Completa OAuth con código de dispositivo**
 
-   - Comprime `manifest.json` junto con los íconos en un zip
-   - Ve al Teams Admin Center o súbelo directamente
-   - Instálala en tu equipo o para tus usuarios
+   La configuración inicia un flujo de código de dispositivo de Microsoft. Copia el código, abre la URL de verificación, inicia sesión con la cuenta de Microsoft 365 que puede acceder al Team objetivo y aprueba los scopes de Graph solicitados.
+
+   Vuelve al terminal y continúa cuando la configuración te pida verificar la configuración de Microsoft Teams. Luego Greentic consulta Microsoft Graph, almacena los tokens delegados como secretos y ejecuta el descubrimiento posterior al inicio de sesión.
+
+4. **Selecciona o verifica el Team y el canal**
+
+   La configuración llama a Microsoft Graph para listar los equipos y canales a los que pertenece el usuario que inició sesión. Elige el Team y el canal cuando se te solicite, o deja que `desired_channel_name` guíe el flujo de crear si falta.
+
+   La configuración guarda tanto los identificadores como las etiquetas:
+   - `team_id` y `team_name`
+   - `channel_id` y `channel_name`
+
+   Los IDs son lo que usan los envíos de runtime y la configuración de suscripciones. Los nombres visibles son para operadores y UIs de configuración.
+
+5. **Comprueba el canal en Teams**
+
+   Abre Microsoft Teams y ve al Team y canal seleccionados. Si la configuración creó `desired_channel_name`, confirma que el canal existe y que la cuenta con sesión iniciada tiene acceso a él.
+
+   Si el Team seleccionado aún no tiene ese canal, la configuración puede crear un canal estándar y luego guarda el `channel_id` y el `channel_name` resultantes. El ID sigue siendo la referencia autoritativa para envíos de runtime y suscripciones.
+
+6. **Inicia o reinicia el runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   El pack de Teams declara los metadatos de suscripción deseados, incluida la plantilla de recurso de Graph, los campos de configuración del componente, la plantilla de URL de notificación y la plantilla de URL de notificación de ciclo de vida. Los hosts deben usar estos metadatos en lugar de codificar rutas de recursos de Teams de forma fija.
+
+7. **Prueba el canal objetivo**
+
+   Envía un mensaje en el canal de Teams seleccionado o activa un flujo que envíe a Teams. Si los mensajes no aparecen, vuelve a ejecutar la configuración y comprueba que los `team_id` y `channel_id` guardados todavía coincidan con el canal que abriste en Teams.
 
 </Steps>
 
@@ -133,11 +95,26 @@ El provider Microsoft Teams integra tu trabajador digital con canales y chats de
 
 | Opción | Requerido | Descripción |
 |--------|----------|-------------|
-| `enabled` | Sí | Habilita/deshabilita el provider |
-| `public_base_url` | Sí | URL pública para el webhook |
-| `app_id` | Sí | Microsoft App ID |
-| `app_password` | Sí | Client Secret |
-| `tenant_id` | No | Azure AD Tenant ID (para apps de tenant único) |
+| `client_id` | Sí para configuración de Graph | Id de cliente de aplicación pública de Microsoft usado para OAuth con código de dispositivo |
+| `tenant_id` | Generado | Id de tenant descubierto desde Microsoft Graph |
+| `team_id` | Generado o seleccionado | Id de equipo de Teams usado para envíos de canal y suscripciones |
+| `team_name` | Generado o seleccionado | Nombre visible del Team seleccionado |
+| `channel_id` | Generado o seleccionado | Id de canal usado para envíos y suscripciones |
+| `channel_name` | Generado o seleccionado | Nombre visible del canal seleccionado |
+| `desired_channel_name` | No | Pista predeterminada/de búsqueda, y nombre para creación de canal cuando la creación está admitida |
+| `chat_id` | No | Id de chat para suscripciones de chat cuando corresponda |
+| `ms_bot_app_id` | Modo Bot Framework | Id de app de Microsoft Bot Framework |
+| `ms_bot_app_password` | Modo Bot Framework | Contraseña de app de Bot Framework |
+| `bot_display_name` | Modo Bot Framework | Nombre visible usado en flujos de trabajo del manifiesto de app de Teams |
+| `messaging_endpoint` | Modo Bot Framework | Endpoint público de mensajería de Bot Framework |
+
+<Aside type="note">
+La salida de Teams y la configuración de suscripciones usan IDs, no nombres visibles. Las etiquetas se guardan para operadores y UIs de configuración, pero `channel_id`, `team_id` o `chat_id` siguen siendo los identificadores de runtime.
+</Aside>
+
+<Aside type="caution">
+Crear un canal de Teams que falta requiere el permiso delegado `Channel.Create` de Graph y un usuario con sesión iniciada que tenga permiso para crear canales en el Team seleccionado.
+</Aside>
 
 ## Funcionalidades
 
@@ -152,7 +129,7 @@ El provider Microsoft Teams integra tu trabajador digital con canales y chats de
 
 ### Formato Markdown
 
-Teams soporta un subconjunto de Markdown:
+Teams admite un subconjunto de Markdown:
 
 ```yaml
 - id: formatted
@@ -167,7 +144,7 @@ Teams soporta un subconjunto de Markdown:
 
 ### Adaptive Cards
 
-Teams tiene excelente soporte para Adaptive Cards:
+Teams tiene soporte nativo para Adaptive Cards mediante adjuntos de Bot Framework. Usa la versión admitida por tu cliente de Teams objetivo y el modelo de acciones; las funcionalidades de Adaptive Cards 1.4, como Universal Actions, son específicas de escenarios de bot admitidos.
 
 ```yaml
 - id: send_card
@@ -243,7 +220,7 @@ Teams tiene excelente soporte para Adaptive Cards:
         name: "report.pdf"
 ```
 
-## Manejo de acciones de cards
+## Manejo de acciones de tarjetas
 
 ```yaml title="flows/on_card_action.ygtc"
 name: handle_card_action
@@ -273,7 +250,7 @@ triggers:
 
 ## Configuración de canales
 
-### Canal de equipo
+### Canal de Team
 
 ```yaml title="greentic.demo.yaml"
 tenants:
@@ -294,7 +271,7 @@ Para chats personales 1:1 no se necesita configuración de canal. El bot respond
 
 ## Mensajería proactiva
 
-Envía mensajes sin que el usuario inicie la conversación:
+Envía mensajes sin iniciación del usuario:
 
 ```yaml
 - id: proactive
@@ -307,49 +284,49 @@ Envía mensajes sin que el usuario inicie la conversación:
 ```
 
 <Aside type="note">
-Guarda la referencia de conversación cuando los usuarios interactúan por primera vez con tu bot para habilitar mensajería proactiva más adelante.
+Guarda la referencia de conversación cuando los usuarios interactúen por primera vez con tu bot para habilitar la mensajería proactiva más adelante.
 </Aside>
 
 ## Solución de problemas
 
 ### El bot no responde
 
-1. **Revisa la configuración del endpoint** en Azure Bot Service
+1. **Comprueba la configuración del endpoint** en Azure Bot Service
 2. **Verifica que el certificado SSL** sea válido
 3. **Comprueba que las credenciales de la app** sean correctas
-4. **Revisa los logs de actividad** en Azure
+4. **Revisa los registros de actividad** en Azure
 
 ### Error "Unauthorized"
 
 - Verifica App ID y Password
-- Comprueba el tenant ID para apps de tenant único
+- Comprueba el ID de tenant para apps de tenant único
 - Asegúrate de que el bot esté habilitado en el canal de Teams
 
-### La card no se renderiza
+### La tarjeta no se renderiza
 
-- Valida el JSON de la card con [Adaptive Cards Designer](https://adaptivecards.io/designer/)
-- Comprueba que Teams soporte la versión de la card
+- Valida el JSON de la tarjeta con [Adaptive Cards Designer](https://adaptivecards.io/designer/)
+- Comprueba que Teams admita la versión y el tipo de acción de la tarjeta
 - Verifica que todos los campos requeridos estén presentes
 
 ### Mensajes demorados
 
 - Teams puede agrupar mensajes; esto es normal
-- Revisa el rendimiento de tu servidor
-- Verifica que no haya rate limiting
+- Comprueba el rendimiento de tu servidor
+- Verifica que no haya limitación de velocidad
 
 ## Seguridad
 
 <Aside type="caution">
-Valida siempre el token JWT en las solicitudes entrantes para verificar que provienen de Microsoft.
+Valida siempre los tokens de autenticación entrantes de Bot Framework para verificar que las solicitudes provienen de Microsoft.
 </Aside>
 
 Greentic valida automáticamente:
-- La firma JWT
-- Los claims de issuer y audience
-- La expiración del token
+- Firma JWT
+- Claims de emisor y audiencia
+- Caducidad del token
 
 ## Próximos pasos
 
-- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Diseña cards visualmente
-- [Provider de Slack](/es/providers/messaging/slack/) - Agrega integración con Slack
-- [Provider de WebChat](/es/providers/messaging/webchat/) - Insértalo en sitios web
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Diseña tarjetas visualmente
+- [Slack Provider](/providers/messaging/slack/) - Agrega la integración de Slack
+- [WebChat Provider](/providers/messaging/webchat/) - Incrusta en sitios web

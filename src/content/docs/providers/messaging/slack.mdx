@@ -45,23 +45,33 @@ The Slack provider integrates your digital worker with Slack workspaces. It supp
    }
    ```
 
-3. **Run Setup**
+3. **Run setup**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-4. **Install with Add to Slack**
+4. **Click Add to Slack**
 
-   Setup exposes an **Add to Slack** action. It registers the Slack app, opens the Slack OAuth install flow, and persists the app id and OAuth answers for the tenant.
+   Setup registers or updates the Slack app and exposes an **Add to Slack** action. Open the generated Slack authorization URL, choose the workspace, review the requested scopes, and approve the install.
 
-5. **Start or restart the runtime**
+   When the OAuth redirect returns to setup, Greentic persists the Slack app id, client id, client secret, and runtime OAuth answers for the tenant. If the callback was not handled automatically, run `gtc setup --answers answers.json ./my-bundle` again after approving the install.
+
+5. **Add the app in Slack**
+
+   Open Slack and check that the app is installed in the workspace. For channel conversations, add the app to the channel where the worker should respond. You can do this from the channel's integration settings or by mentioning/inviting the app in the channel.
+
+6. **Start or restart the runtime**
 
    ```bash
    gtc start ./my-bundle
    ```
 
    Startup uses the stored `slack_app_id` and configuration token pair to update the Slack app manifest with the current webhook URL.
+
+7. **Test the channel**
+
+   Send a direct message to the app or mention the app in the Slack channel you added it to. Channel events only arrive for channels where the app is a member and the installed scopes allow the event.
 
 </Steps>
 

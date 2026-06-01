@@ -19,113 +19,75 @@ Provider Microsoft Teams mengintegrasikan digital worker Anda dengan channel dan
 ## Prasyarat
 
 - Tenant Microsoft 365
-- Akses admin ke Azure AD
+- Public Microsoft Entra application client id yang mendukung OAuth device-code
+- Izin untuk memberikan atau menyetujui scope Graph yang digunakan setup
+- Izin untuk membuat channel di Team yang dipilih jika setup perlu membuat desired channel yang belum ada
 
 ## Penyiapan
 
+Setup Teams memiliki dua bentuk konfigurasi yang didukung:
+
+| Mode | Gunakan saat | Field utama |
+|------|--------------|-------------|
+| Mode channel Graph | Anda ingin pengiriman channel dan subscription berbasis Graph. Ini adalah mode setup default. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| Mode Bot Framework | Anda memiliki Azure Bot dan manifest app Teams untuk pesan masuk Bot Framework. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+
 <Steps>
 
-1. **Buat Azure Bot Registration**
+1. **Konfigurasikan petunjuk setup**
 
-   Buka [Azure Portal](https://portal.azure.com):
-   - Cari "Bot Services"
-   - Klik "Create"
-   - Isi detail:
-     - Bot handle: your-bot-name
-     - Subscription: subscription Anda
-     - Resource group: buat atau pilih
-     - Pricing: F0 (gratis) atau S1
-   - Klik "Create"
-
-2. **Konfigurasikan Endpoint Bot**
-
-   Di Bot Service Anda:
-   - Buka **Configuration**
-   - Atur **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
-
-3. **Dapatkan Kredensial App**
-
-   Di **Configuration**:
-   - Salin **Microsoft App ID**
-   - Klik "Manage" di samping Microsoft App ID
-   - Buat **Client Secret** baru
-   - Salin nilai secret tersebut (hanya ditampilkan sekali!)
-
-4. **Aktifkan Teams Channel**
-
-   Di Bot Service Anda:
-   - Buka **Channels**
-   - Klik **Microsoft Teams**
-   - Terima syarat dan aktifkan
-
-5. **Buat Teams App Package**
-
-   Buat manifest untuk app Teams Anda:
-
-   ```json title="manifest.json"
-   {
-     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-     "manifestVersion": "1.16",
-     "version": "1.0.0",
-     "id": "{{BOT_ID}}",
-     "packageName": "com.yourcompany.supportbot",
-     "developer": {
-       "name": "Your Company",
-       "websiteUrl": "https://yourcompany.com",
-       "privacyUrl": "https://yourcompany.com/privacy",
-       "termsOfUseUrl": "https://yourcompany.com/terms"
-     },
-     "name": {
-       "short": "Support Bot",
-       "full": "Support Bot for Customer Service"
-     },
-     "description": {
-       "short": "Customer support assistant",
-       "full": "AI-powered customer support assistant"
-     },
-     "icons": {
-       "outline": "outline.png",
-       "color": "color.png"
-     },
-     "accentColor": "#0078D4",
-     "bots": [
-       {
-         "botId": "{{BOT_ID}}",
-         "scopes": ["personal", "team", "groupchat"],
-         "supportsFiles": true,
-         "isNotificationOnly": false
-       }
-     ],
-     "permissions": ["identity", "messageTeamMembers"],
-     "validDomains": ["your-domain.com"]
-   }
-   ```
-
-6. **Konfigurasikan Provider**
+   Anda dapat menjalankan setup hanya dengan client id publik default, atau menyediakan `client_id` sendiri. Tambahkan `desired_channel_name` jika Anda ingin setup menemukan atau membuat channel standar tertentu:
 
    ```json title="answers.json"
    {
-     "messaging-teams": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "app_id": "your-microsoft-app-id",
-       "app_password": "your-client-secret",
-       "tenant_id": "your-azure-tenant-id"
+     "setup_answers": {
+       "messaging-teams": {
+         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+         "desired_channel_name": "hr onboarding"
+       }
      }
    }
    ```
 
-7. **Jalankan Setup**
+2. **Mulai setup Teams**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-8. **Install App di Teams**
+3. **Selesaikan OAuth device-code**
 
-   - Zip `manifest.json` beserta ikon
-   - Buka Teams Admin Center atau unggah langsung
-   - Install ke tim atau pengguna Anda
+   Setup memulai flow Microsoft device-code. Salin kode, buka URL verifikasi, masuk dengan akun Microsoft 365 yang dapat mengakses Team target, lalu setujui scope Graph yang diminta.
+
+   Kembali ke terminal dan lanjutkan saat setup meminta Anda memverifikasi setup Microsoft Teams. Greentic kemudian melakukan polling Microsoft Graph, menyimpan delegated tokens sebagai secret, dan menjalankan discovery setelah login.
+
+4. **Pilih atau verifikasi Team dan channel**
+
+   Setup memanggil Microsoft Graph untuk menampilkan joined teams dan channels milik user yang masuk. Pilih Team dan channel saat diminta, atau biarkan `desired_channel_name` mengarahkan flow create-if-missing.
+
+   Setup menyimpan identifier dan label:
+   - `team_id` dan `team_name`
+   - `channel_id` dan `channel_name`
+
+   ID digunakan oleh pengiriman runtime dan setup subscription. Display name digunakan untuk operator dan UI setup.
+
+5. **Periksa channel di Teams**
+
+   Buka Microsoft Teams dan masuk ke Team serta channel yang dipilih. Jika setup membuat `desired_channel_name`, pastikan channel ada dan akun yang masuk memiliki akses.
+
+   Jika Team yang dipilih belum memiliki channel itu, setup dapat membuat channel standar lalu menyimpan `channel_id` dan `channel_name` yang dihasilkan. ID tetap menjadi acuan untuk pengiriman runtime dan subscription.
+
+6. **Mulai atau restart runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   Pack Teams mendeklarasikan metadata subscription yang diinginkan, termasuk template resource Graph, field config komponen, template URL notifikasi, dan template URL notifikasi lifecycle. Host harus menggunakan metadata ini alih-alih hard-coding path resource Teams.
+
+7. **Uji channel target**
+
+   Kirim pesan di channel Teams yang dipilih atau picu flow yang mengirim ke Teams. Jika pesan tidak muncul, jalankan setup lagi dan periksa bahwa `team_id` dan `channel_id` yang tersimpan masih cocok dengan channel yang Anda buka di Teams.
 
 </Steps>
 
@@ -133,11 +95,26 @@ Provider Microsoft Teams mengintegrasikan digital worker Anda dengan channel dan
 
 | Opsi | Wajib | Deskripsi |
 |--------|----------|-------------|
-| `enabled` | Ya | Aktifkan/nonaktifkan provider |
-| `public_base_url` | Ya | URL publik untuk webhook |
-| `app_id` | Ya | Microsoft App ID |
-| `app_password` | Ya | Client Secret |
-| `tenant_id` | Tidak | Azure AD Tenant ID (untuk app single-tenant) |
+| `client_id` | Ya untuk setup Graph | Public Microsoft application client id yang digunakan untuk OAuth device-code |
+| `tenant_id` | Dibuat | Tenant id yang ditemukan dari Microsoft Graph |
+| `team_id` | Dibuat atau dipilih | Teams team id yang digunakan untuk pengiriman channel dan subscription |
+| `team_name` | Dibuat atau dipilih | Display name untuk Team yang dipilih |
+| `channel_id` | Dibuat atau dipilih | Channel id yang digunakan untuk pengiriman dan subscription |
+| `channel_name` | Dibuat atau dipilih | Display name untuk channel yang dipilih |
+| `desired_channel_name` | Tidak | Petunjuk default/pencarian, dan nama pembuatan channel saat pembuatan didukung |
+| `chat_id` | Tidak | Chat id untuk subscription chat jika berlaku |
+| `ms_bot_app_id` | Mode Bot Framework | Microsoft Bot Framework app id |
+| `ms_bot_app_password` | Mode Bot Framework | Bot Framework app password |
+| `bot_display_name` | Mode Bot Framework | Display name yang digunakan dalam workflow manifest app Teams |
+| `messaging_endpoint` | Mode Bot Framework | Endpoint messaging Bot Framework publik |
+
+<Aside type="note">
+Egress Teams dan setup subscription menggunakan ID, bukan display name. Label disimpan untuk operator dan UI setup, tetapi `channel_id`, `team_id`, atau `chat_id` tetap menjadi identifier runtime.
+</Aside>
+
+<Aside type="caution">
+Membuat channel Teams yang belum ada memerlukan delegated Graph permission `Channel.Create` dan user yang masuk yang diizinkan membuat channel di Team yang dipilih.
+</Aside>
 
 ## Fitur
 

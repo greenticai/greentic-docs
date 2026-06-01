@@ -34,25 +34,9 @@ Teams setup has two supported configuration shapes:
 
 <Steps>
 
-1. **Start Teams setup**
+1. **Configure the setup hint**
 
-   ```bash
-   gtc setup ./my-bundle
-   ```
-
-2. **Authorize Microsoft Graph**
-
-   Setup starts a device-code flow and asks you to authorize the Microsoft application in your browser. The default Greentic public client id is included in the pack, or you can provide your own `client_id`.
-
-3. **Select a Team and Channel**
-
-   Setup calls Microsoft Graph to list joined teams and channels. It persists both the identifiers and labels:
-   - `team_id` and `team_name`
-   - `channel_id` and `channel_name`
-
-4. **Optionally create a desired channel**
-
-   Provide `desired_channel_name` to use the bundle name or another label as a setup hint:
+   You can run setup with only the default public client id, or provide your own `client_id`. Add `desired_channel_name` when you want setup to find or create a specific standard channel:
 
    ```json title="answers.json"
    {
@@ -65,15 +49,45 @@ Teams setup has two supported configuration shapes:
    }
    ```
 
+2. **Start Teams setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **Complete device-code OAuth**
+
+   Setup starts a Microsoft device-code flow. Copy the code, open the verification URL, sign in with the Microsoft 365 account that can access the target Team, and approve the requested Graph scopes.
+
+   Return to the terminal and continue when setup asks you to verify Microsoft Teams setup. Greentic then polls Microsoft Graph, stores the delegated tokens as secrets, and runs post-login discovery.
+
+4. **Select or verify the Team and channel**
+
+   Setup calls Microsoft Graph to list joined teams and channels for the signed-in user. Choose the Team and channel when prompted, or let `desired_channel_name` guide the create-if-missing flow.
+
+   Setup persists both the identifiers and labels:
+   - `team_id` and `team_name`
+   - `channel_id` and `channel_name`
+
+   The IDs are what runtime sends and subscription setup use. The display names are for operators and setup UIs.
+
+5. **Check the channel in Teams**
+
+   Open Microsoft Teams and go to the selected Team and channel. If setup created `desired_channel_name`, confirm the channel exists and that the signed-in account has access to it.
+
    If the selected Team does not already have that channel, setup can create a standard channel and then stores the resulting `channel_id` and `channel_name`. The ID remains authoritative for runtime sends and subscriptions.
 
-5. **Start or restart the runtime**
+6. **Start or restart the runtime**
 
    ```bash
    gtc start ./my-bundle
    ```
 
    The Teams pack declares desired subscription metadata, including the Graph resource template, component config fields, notification URL template, and lifecycle notification URL template. Hosts should use this metadata instead of hard-coding Teams resource paths.
+
+7. **Test the target channel**
+
+   Send a message in the selected Teams channel or trigger a flow that sends to Teams. If messages do not appear, re-run setup and check that the persisted `team_id` and `channel_id` still match the channel you opened in Teams.
 
 </Steps>
 
