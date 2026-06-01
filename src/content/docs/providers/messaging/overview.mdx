@@ -13,7 +13,7 @@ Greentic supports multiple messaging platforms through **messaging extension pac
 - **Egress** - Sending messages to the platform
 - **Operations** - Platform-specific features such as buttons, cards, threads, file handling, and webhook setup
 
-The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, and Email messaging packs.
+The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, SMTP Email, and Microsoft Graph Email messaging packs.
 
 ## Available Providers
 
@@ -127,27 +127,63 @@ oci://ghcr.io/greenticai/packs/messaging/messaging-webchat:latest
 oci://ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:latest
 oci://ghcr.io/greenticai/packs/messaging/messaging-webex:latest
 oci://ghcr.io/greenticai/packs/messaging/messaging-email:latest
+oci://ghcr.io/greenticai/packs/messaging/messaging-microsoft-email:latest
 ```
 
 ### Setup Answers
 
-Run `gtc setup ./my-bundle` interactively, or provide an answers file that matches the wizard schema:
+Run `gtc setup ./my-bundle` interactively, or provide an answers file generated with `gtc setup --dry-run --emit-answers answers.json ./my-bundle`.
 
 ```json title="answers.json"
 {
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app",
-    "telegram_bot_token": "123456789:ABCdefGHI..."
+  "greentic_setup_version": "1.0.0",
+  "tenant": "demo",
+  "team": null,
+  "env": "dev",
+  "platform_setup": {
+    "static_routes": {
+      "public_web_enabled": true,
+      "public_base_url": "https://example.trycloudflare.com",
+      "public_surface_policy": "enabled",
+      "default_route_prefix_policy": "pack_declared",
+      "tenant_path_policy": "pack_declared"
+    },
+    "deployment_targets": [],
+    "tunnel": {
+      "mode": "cloudflared"
+    }
   },
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://example.ngrok-free.app",
-    "slack_bot_token": "xoxb-xxx-xxx",
-    "slack_app_id": "A07XXX"
+  "setup_answers": {
+    "messaging-telegram": {
+      "public_base_url": "https://example.trycloudflare.com",
+      "api_base_url": "https://api.telegram.org",
+      "telegram_bot_token": "123456789:ABCdefGHI..."
+    },
+    "messaging-slack": {
+      "slack_configuration_access_token": "xoxe.xoxp-...",
+      "slack_configuration_refresh_token": "xoxe-1-..."
+    },
+    "messaging-webex": {
+      "webex_bot_token": "your-webex-bot-access-token"
+    }
   }
 }
 ```
+
+Provider setup is pack-owned. Hosts should use the installed pack's setup schema and metadata instead of inferring provider-specific fields. New answers files keep provider fields under `setup_answers`; the top-level `platform_setup` block carries static routes, deployment targets, and tunnel preferences. Several providers generate internal secrets during setup, including the Webex webhook secret and WebChat GUI JWT signing key.
+
+### Current Setup Model
+
+| Provider | Setup model |
+|----------|-------------|
+| Slack | App registration and OAuth install flow. Setup stores `slack_app_id` plus Slack configuration access/refresh tokens for manifest updates. |
+| Microsoft Teams | Graph-first device-code setup. It discovers teams/channels, stores IDs and labels, and can create a missing desired channel with `Channel.Create`. Bot Framework ingest remains supported as a separate config shape. |
+| Telegram | Bot token, Telegram API base URL, optional default chat ID, and public webhook URL. |
+| WhatsApp | Meta Cloud API phone number, business account, Graph API base URL/version, access token, verify token, and public webhook URL. |
+| WebChat GUI | Hosted browser UI. Defaults to `websocket`; setup generates the JWT signing key and supports optional OAuth/branding fields. |
+| WebChat | Direct Line-compatible provider. Requires public base URL, mode, and JWT signing key when used without the GUI pack. |
+| Webex | Bot access token only. Setup generates the webhook secret and reconciles direct-message, mention, and card-action webhooks. |
+| Email | `messaging-email` is SMTP. `messaging-microsoft-email` is Microsoft Graph mail with delegated OAuth credentials. |
 
 ## Common Features
 

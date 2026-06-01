@@ -39,10 +39,11 @@ Run setup interactively to be prompted for each extension:
 gtc setup ./my-bundle
 ```
 
-The CLI will prompt for:
-- Extension credentials (API keys, tokens)
-- Public URL for webhooks
-- Optional configuration options
+The CLI prompts for:
+- Platform setup, such as static route policy, public base URL, deployment target, and local tunnel mode
+- Extension credentials, such as API keys, tokens, and OAuth client IDs
+- Provider-specific setup actions, such as OAuth install buttons and device-code login
+- Optional configuration options when `--advanced` is enabled
 
 ## Non-Interactive Setup
 
@@ -82,26 +83,53 @@ gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 
 ```json title="answers.json"
 {
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://xxx.ngrok-free.app",
-    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  "greentic_setup_version": "1.0.0",
+  "bundle_source": "./my-bundle",
+  "tenant": "demo",
+  "team": null,
+  "env": "dev",
+  "platform_setup": {
+    "static_routes": {
+      "public_web_enabled": true,
+      "public_base_url": "https://xxx.trycloudflare.com",
+      "public_surface_policy": "enabled",
+      "default_route_prefix_policy": "pack_declared",
+      "tenant_path_policy": "pack_declared"
+    },
+    "deployment_targets": [],
+    "tunnel": {
+      "mode": "cloudflared"
+    }
   },
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://xxx.ngrok-free.app",
-    "api_base_url": "https://slack.com/api",
-    "bot_token": "xoxb-xxx-xxx-xxx",
-    "slack_app_id": "A07XXXXXX",
-    "slack_configuration_token": "xoxe.xoxp-xxx"
-  },
-  "messaging-teams": {
-    "enabled": false
+  "setup_answers": {
+    "messaging-telegram": {
+      "public_base_url": "https://xxx.trycloudflare.com",
+      "api_base_url": "https://api.telegram.org",
+      "telegram_bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+    },
+    "messaging-slack": {
+      "slack_configuration_access_token": "xoxe.xoxp-xxx",
+      "slack_configuration_refresh_token": "xoxe-1-xxx"
+    },
+    "messaging-teams": {
+      "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+      "desired_channel_name": "hr onboarding"
+    },
+    "messaging-webex": {
+      "webex_bot_token": "your-webex-bot-access-token"
+    },
+    "messaging-webchat-gui": {
+      "public_base_url": "https://xxx.trycloudflare.com",
+      "mode": "websocket",
+      "route": "webchat"
+    }
   }
 }
 ```
 
-Setup answers are JSON. Use `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to generate the current schema-backed file instead of hand-writing one from memory.
+Generated answers files are structured documents. Provider answers live under `setup_answers`, keyed by extension id. `platform_setup` stores bundle-level setup choices such as public static routes, deployment targets, and tunnel mode. Older flat files keyed directly by provider id still load, but new docs and generated templates use the structured format.
+
+Generated secrets are not prompted when the provider can create them itself. For example, Webex generates its webhook signing secret and WebChat GUI generates its JWT signing key during setup.
 
 ### Apply Answers
 
@@ -115,67 +143,131 @@ gtc setup --answers answers.json ./my-bundle
 
 ```json
 {
-  "messaging-telegram": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  "setup_answers": {
+    "messaging-telegram": {
+      "public_base_url": "https://your-domain.com",
+      "api_base_url": "https://api.telegram.org",
+      "telegram_bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+    }
   }
 }
 ```
 
-**How to get credentials:**
-1. Message [@BotFather](https://t.me/botfather) on Telegram
-2. Send `/newbot` and follow prompts
-3. Copy the bot token
+`api_base_url` is required by the current pack schema. Use `https://api.telegram.org` unless you run a compatible Telegram Bot API endpoint.
 
 ### Slack
 
 ```json
 {
-  "messaging-slack": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "bot_token": "xoxb-xxx-xxx-xxx",
-    "slack_app_id": "A07XXXXXX",
-    "slack_configuration_token": "xoxe.xoxp-xxx"
+  "setup_answers": {
+    "messaging-slack": {
+      "slack_configuration_access_token": "xoxe.xoxp-xxx",
+      "slack_configuration_refresh_token": "xoxe-1-xxx"
+    }
   }
 }
 ```
 
-**How to get credentials:**
-1. Go to [api.slack.com/apps](https://api.slack.com/apps)
-2. Create a new app or select existing
-3. Get Bot Token from OAuth & Permissions
-4. Get App ID from Basic Information
-5. Get Configuration Token from App Manifest
+Slack setup uses the provider's setup action to register or update the Slack app, stores `slack_app_id`, and persists the configuration access and refresh tokens for future manifest updates.
 
 ### Microsoft Teams
 
 ```json
 {
-  "messaging-teams": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "app_id": "your-app-id",
-    "app_password": "your-app-password",
-    "tenant_id": "your-tenant-id"
+  "setup_answers": {
+    "messaging-teams": {
+      "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+      "desired_channel_name": "hr onboarding"
+    }
   }
 }
 ```
+
+Teams setup is Graph-first by default. It uses device-code OAuth, discovers joined teams and channels, stores both IDs and display names, and can create the desired channel when it is missing and the signed-in user has `Channel.Create` permission.
 
 ### WhatsApp (via Meta)
 
 ```json
 {
-  "messaging-whatsapp": {
-    "enabled": true,
-    "public_base_url": "https://your-domain.com",
-    "phone_number_id": "123456789",
-    "access_token": "EAAxxxxx",
-    "verify_token": "your-verify-token"
+  "setup_answers": {
+    "messaging-whatsapp": {
+      "phone_number_id": "123456789",
+      "business_account_id": "987654321",
+      "api_base_url": "https://graph.facebook.com",
+      "api_version": "v17.0",
+      "whatsapp_token": "EAAxxxxx",
+      "whatsapp_verify_token": "your-verify-token",
+      "public_base_url": "https://your-domain.com"
+    }
   }
 }
 ```
+
+### Webex
+
+```json
+{
+  "setup_answers": {
+    "messaging-webex": {
+      "webex_bot_token": "your-webex-bot-access-token"
+    }
+  }
+}
+```
+
+Webex setup only asks for the bot access token. The provider generates the webhook signing secret, discovers the bot identity, and registers webhooks for direct 1:1 messages, room mentions, and Adaptive Card actions.
+
+### WebChat
+
+Use `messaging-webchat-gui` for the hosted browser UI and embeddable widget:
+
+```json
+{
+  "setup_answers": {
+    "messaging-webchat-gui": {
+      "public_base_url": "https://your-domain.com",
+      "mode": "websocket",
+      "route": "webchat"
+    }
+  }
+}
+```
+
+WebChat GUI defaults to WebSocket mode. Setup generates the JWT signing key automatically and persists it as a secret.
+
+Use `messaging-webchat` only when you need the Direct Line-compatible provider without the hosted GUI:
+
+```json
+{
+  "setup_answers": {
+    "messaging-webchat": {
+      "public_base_url": "https://your-domain.com",
+      "mode": "directline",
+      "route": "webchat",
+      "jwt_signing_key": "replace-with-a-random-secret"
+    }
+  }
+}
+```
+
+### Email
+
+```json
+{
+  "setup_answers": {
+    "messaging-email": {
+      "host": "smtp.example.com",
+      "port": 587,
+      "username": "mailer@example.com",
+      "password": "your-smtp-password",
+      "from_address": "bot@example.com",
+      "tls_mode": "starttls"
+    }
+  }
+}
+```
+
+`messaging-email` is SMTP. `messaging-microsoft-email` uses Microsoft Graph mail and expects Graph tenant, client, client secret, refresh token, and from-address answers.
 
 ## Public URL Configuration
 
@@ -280,7 +372,7 @@ Check that your bot token is correct and not expired.
 ### Missing Required Field
 
 ```
-Error: Missing required field 'bot_token' for messaging-telegram
+Error: missing required setup answer for telegram_bot_token
 ```
 
 Ensure all required fields are in your answers file.
@@ -296,10 +388,10 @@ Ensure your public URL is accessible from the internet. Check ngrok/cloudflared 
 ### Credential Not Found
 
 ```
-Error: Secret 'slack_bot_token' not found
+Error: Secret 'SLACK_CONFIGURATION_ACCESS_TOKEN' not found
 ```
 
-Run `gtc setup` to configure the extension, or check your answers file.
+Run `gtc setup` to configure the extension, or check your answers file and secrets store.
 
 ## Best Practices
 

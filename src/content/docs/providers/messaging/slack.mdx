@@ -26,80 +26,42 @@ The Slack provider integrates your digital worker with Slack workspaces. It supp
 
 <Steps>
 
-1. **Create a Slack App**
+1. **Create a Slack configuration token pair**
 
-   Go to [api.slack.com/apps](https://api.slack.com/apps) and click "Create New App":
-   - Choose "From scratch"
-   - Enter an app name (e.g., "My Support Bot")
-   - Select your workspace
+   Go to [api.slack.com/apps](https://api.slack.com/apps) and create an app configuration token pair. Copy both values:
+   - Configuration access token (`xoxe.xoxp-...`)
+   - Configuration refresh token (`xoxe-1-...`)
 
-2. **Configure Bot Token Scopes**
-
-   Go to **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**:
-
-   Required scopes:
-   - `chat:write` - Send messages
-   - `app_mentions:read` - Receive app mention events
-   - `im:history` - Read DM history
-   - `im:write` - Open DMs
-   - `users:read` - Read user info
-
-   Optional scopes:
-   - `channels:history` - Read channel messages
-   - `channels:read` - List channels
-   - `files:read` - Read files
-   - `files:write` - Upload files
-
-3. **Enable Event Subscriptions**
-
-   Go to **Event Subscriptions**:
-   - Enable Events
-   - Set Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}`
-
-   Subscribe to bot events:
-   - `message.im` - DM messages
-   - `message.channels` - Channel messages
-   - `app_mention` - @mentions
-
-4. **Enable Interactivity**
-
-   Go to **Interactivity & Shortcuts**:
-   - Enable Interactivity
-   - Set Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
-
-5. **Install App to Workspace**
-
-   Go to **Install App** → **Install to Workspace**
-
-   Copy the **Bot User OAuth Token** (starts with `xoxb-`)
-
-6. **Get App Credentials**
-
-   From **Basic Information**:
-   - App ID
-   - Signing Secret for request verification
-   - Configuration Token if you want Greentic to update the app manifest automatically
-
-7. **Configure Provider**
+2. **Configure Provider**
 
    ```json title="answers.json"
    {
-     "messaging-slack": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "api_base_url": "https://slack.com/api",
-       "slack_bot_token": "xoxb-xxx-xxx-xxx",
-       "slack_app_id": "A07XXXXXX",
-       "slack_configuration_token": "xoxe.xoxp-xxx"
+     "setup_answers": {
+       "messaging-slack": {
+         "slack_configuration_access_token": "xoxe.xoxp-xxx",
+         "slack_configuration_refresh_token": "xoxe-1-xxx"
+       }
      }
    }
    ```
 
-8. **Run Setup**
+3. **Run Setup**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
+
+4. **Install with Add to Slack**
+
+   Setup exposes an **Add to Slack** action. It registers the Slack app, opens the Slack OAuth install flow, and persists the app id and OAuth answers for the tenant.
+
+5. **Start or restart the runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   Startup uses the stored `slack_app_id` and configuration token pair to update the Slack app manifest with the current webhook URL.
 
 </Steps>
 
@@ -107,15 +69,18 @@ The Slack provider integrates your digital worker with Slack workspaces. It supp
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable the provider |
-| `public_base_url` | Yes | Public URL for webhooks |
-| `slack_bot_token` | Yes | Bot User OAuth Token (`xoxb-...`) |
-| `slack_app_id` | Yes | App ID from Basic Information |
-| `slack_configuration_token` | No | For automatic manifest updates |
-| `api_base_url` | No | Slack API URL (default: `https://slack.com/api`) |
+| `slack_configuration_access_token` | Yes | Short-lived Slack configuration token used for app manifest updates |
+| `slack_configuration_refresh_token` | Yes | Refresh token used to rotate the configuration access token |
+| `slack_app_id` | Generated | Slack app id created or returned by setup |
+| `slack_client_id` | Generated | Slack OAuth client id returned by app registration |
+| `client_secret` | Generated secret | Slack OAuth client secret returned by app registration |
 
 <Aside type="note">
-The setup layer also accepts the older `bot_token` alias and stores it as `slack_bot_token`, but new answers files should use the wizard-generated key.
+New setup flows do not require hand-entering `slack_bot_token`. The setup action and OAuth install flow persist the runtime credentials. If you are upgrading an older bundle, regenerate answers with `gtc setup --dry-run --emit-answers answers.json ./my-bundle` and re-run setup.
+</Aside>
+
+<Aside type="caution">
+Slack configuration access tokens expire. Keep the matching refresh token in the setup secrets store so the provider can rotate the pair during manifest updates.
 </Aside>
 
 ## Features
@@ -385,7 +350,7 @@ tenants:
 
 3. **Test Webhook:**
    ```bash
-   curl https://your-domain.com/webhook/slack/demo/default
+   curl https://your-domain.com/v1/messaging/ingress/messaging-slack/demo/default
    ```
 
 ### "not_authed" Error

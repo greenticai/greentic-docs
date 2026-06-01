@@ -48,10 +48,12 @@ The Telegram provider allows your digital worker to communicate via Telegram bot
 
    ```json title="answers.json"
    {
-     "messaging-telegram": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "telegram_bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+     "setup_answers": {
+       "messaging-telegram": {
+         "public_base_url": "https://your-domain.ngrok-free.app",
+         "api_base_url": "https://api.telegram.org",
+         "telegram_bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+       }
      }
    }
    ```
@@ -78,10 +80,10 @@ The Telegram provider allows your digital worker to communicate via Telegram bot
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable the provider |
 | `public_base_url` | Yes | Public URL for webhook |
+| `api_base_url` | Yes | Telegram API URL, normally `https://api.telegram.org` |
 | `telegram_bot_token` | Yes | Bot token from @BotFather |
-| `api_base_url` | No | Telegram API URL (default: `https://api.telegram.org`) |
+| `default_chat_id` | No | Default chat id for proactive sends |
 
 <Aside type="note">
 The setup layer also accepts the older `bot_token` alias and stores it as `telegram_bot_token`, but new answers files should use the wizard-generated key.
@@ -254,7 +256,7 @@ The setup flow automatically configures the webhook:
 ```
 POST https://api.telegram.org/bot<TOKEN>/setWebhook
 {
-  "url": "https://your-domain.com/webhook/telegram/{tenant}/{team}",
+  "url": "https://your-domain.com/v1/messaging/ingress/messaging-telegram/{tenant}/{team}",
   "allowed_updates": ["message", "callback_query"],
   "secret_token": "optional-shared-secret"
 }
@@ -268,7 +270,7 @@ If needed, configure manually:
 curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://your-domain.com/webhook/telegram/demo/default",
+    "url": "https://your-domain.com/v1/messaging/ingress/messaging-telegram/demo/default",
     "allowed_updates": ["message", "callback_query"],
     "secret_token": "optional-shared-secret"
   }'

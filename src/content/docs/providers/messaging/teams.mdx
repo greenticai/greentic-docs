@@ -19,115 +19,61 @@ The Microsoft Teams provider integrates your digital worker with Teams channels 
 ## Prerequisites
 
 - Microsoft 365 tenant
-- Permission to create or configure a Microsoft Entra ID app registration and Azure Bot resource
-- Permission to upload or publish a Teams app package in your tenant
+- A public Microsoft Entra application client id that supports device-code OAuth
+- Permission to grant or consent to the Graph scopes used by setup
+- Permission to create channels in the selected Team when you want setup to create a missing desired channel
 
 ## Setup
 
+Teams setup has two supported configuration shapes:
+
+| Mode | Use this when | Main fields |
+|------|---------------|-------------|
+| Graph channel mode | You want Graph-based channel sends and subscriptions. This is the default setup mode. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| Bot Framework mode | You have an Azure Bot and Teams app manifest for inbound Bot Framework messages. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+
 <Steps>
 
-1. **Create Azure Bot Registration**
+1. **Start Teams setup**
 
-   Go to [Azure Portal](https://portal.azure.com):
-   - Search for "Bot Services"
-   - Click "Create"
-   - Fill in details:
-     - Bot handle: your-bot-name
-     - Subscription: your subscription
-     - Resource group: create or select
-     - Pricing: F0 (free) or S1
-   - Click "Create"
-
-2. **Configure Bot Endpoint**
-
-   In your Bot Service:
-   - Go to **Configuration**
-   - Set **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
-
-3. **Get App Credentials**
-
-   In **Configuration**:
-   - Copy **Microsoft App ID**
-   - Click "Manage" next to Microsoft App ID
-   - Create a new **Client Secret**
-   - Copy the secret value (shown only once!)
-
-4. **Enable Teams Channel**
-
-   In your Bot Service:
-   - Go to **Channels**
-   - Click **Microsoft Teams**
-   - Accept terms and enable
-
-5. **Create Teams App Package**
-
-   Create a manifest for your Teams app:
-
-   ```json title="manifest.json"
-   {
-     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-     "manifestVersion": "1.16",
-     "version": "1.0.0",
-     "id": "{{BOT_ID}}",
-     "packageName": "com.yourcompany.supportbot",
-     "developer": {
-       "name": "Your Company",
-       "websiteUrl": "https://yourcompany.com",
-       "privacyUrl": "https://yourcompany.com/privacy",
-       "termsOfUseUrl": "https://yourcompany.com/terms"
-     },
-     "name": {
-       "short": "Support Bot",
-       "full": "Support Bot for Customer Service"
-     },
-     "description": {
-       "short": "Customer support assistant",
-       "full": "AI-powered customer support assistant"
-     },
-     "icons": {
-       "outline": "outline.png",
-       "color": "color.png"
-     },
-     "accentColor": "#0078D4",
-     "bots": [
-       {
-         "botId": "{{BOT_ID}}",
-         "scopes": ["personal", "team", "groupchat"],
-         "supportsFiles": true,
-         "isNotificationOnly": false
-       }
-     ],
-     "permissions": ["identity", "messageTeamMembers"],
-     "validDomains": ["your-domain.com"]
-   }
+   ```bash
+   gtc setup ./my-bundle
    ```
 
-6. **Configure Provider**
+2. **Authorize Microsoft Graph**
+
+   Setup starts a device-code flow and asks you to authorize the Microsoft application in your browser. The default Greentic public client id is included in the pack, or you can provide your own `client_id`.
+
+3. **Select a Team and Channel**
+
+   Setup calls Microsoft Graph to list joined teams and channels. It persists both the identifiers and labels:
+   - `team_id` and `team_name`
+   - `channel_id` and `channel_name`
+
+4. **Optionally create a desired channel**
+
+   Provide `desired_channel_name` to use the bundle name or another label as a setup hint:
 
    ```json title="answers.json"
    {
+     "setup_answers": {
        "messaging-teams": {
-         "enabled": true,
-         "public_base_url": "https://your-domain.ngrok-free.app",
-         "ms_bot_app_id": "your-microsoft-app-id",
-         "ms_bot_app_password": "your-client-secret",
-         "team_id": "optional-team-id",
-         "channel_id": "optional-channel-id"
+         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+         "desired_channel_name": "hr onboarding"
        }
      }
+   }
    ```
 
-7. **Run Setup**
+   If the selected Team does not already have that channel, setup can create a standard channel and then stores the resulting `channel_id` and `channel_name`. The ID remains authoritative for runtime sends and subscriptions.
+
+5. **Start or restart the runtime**
 
    ```bash
-   gtc setup --answers answers.json ./my-bundle
+   gtc start ./my-bundle
    ```
 
-8. **Install App in Teams**
-
-   - Zip manifest.json with icons
-   - Go to Teams Admin Center or upload directly
-   - Install to your team or users
+   The Teams pack declares desired subscription metadata, including the Graph resource template, component config fields, notification URL template, and lifecycle notification URL template. Hosts should use this metadata instead of hard-coding Teams resource paths.
 
 </Steps>
 
@@ -135,12 +81,26 @@ The Microsoft Teams provider integrates your digital worker with Teams channels 
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable provider |
-| `public_base_url` | Yes | Public URL for webhook |
-| `ms_bot_app_id` | Yes | Microsoft App ID |
-| `ms_bot_app_password` | Yes | Client secret for the bot app |
-| `team_id` | No | Default Teams team ID for proactive or channel sends |
-| `channel_id` | No | Default Teams channel ID for proactive or channel sends |
+| `client_id` | Yes for Graph setup | Public Microsoft application client id used for device-code OAuth |
+| `tenant_id` | Generated | Tenant id discovered from Microsoft Graph |
+| `team_id` | Generated or selected | Teams team id used for channel sends and subscriptions |
+| `team_name` | Generated or selected | Display name for the selected Team |
+| `channel_id` | Generated or selected | Channel id used for sends and subscriptions |
+| `channel_name` | Generated or selected | Display name for the selected channel |
+| `desired_channel_name` | No | Default/search hint, and channel creation name when creation is supported |
+| `chat_id` | No | Chat id for chat subscriptions where applicable |
+| `ms_bot_app_id` | Bot Framework mode | Microsoft Bot Framework app id |
+| `ms_bot_app_password` | Bot Framework mode | Bot Framework app password |
+| `bot_display_name` | Bot Framework mode | Display name used in Teams app manifest workflows |
+| `messaging_endpoint` | Bot Framework mode | Public Bot Framework messaging endpoint |
+
+<Aside type="note">
+Teams egress and subscription setup use IDs, not display names. Labels are persisted for operators and setup UIs, but `channel_id`, `team_id`, or `chat_id` remain the runtime identifiers.
+</Aside>
+
+<Aside type="caution">
+Creating a missing Teams channel requires the delegated `Channel.Create` Graph permission and a signed-in user who is allowed to create channels in the selected Team.
+</Aside>
 
 ## Features
 
