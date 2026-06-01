@@ -33,13 +33,13 @@ Fast2Flow → Dispatch{ target, utterance }
 component-slot-extractor (utterance + flow.slot_schema)
     │
     ▼
-component-adaptive-card (prefill = extractor.slots)
+component-adaptive-card (prefill = extractor.values)
     │
     ▼
 form opens with fields already filled
 ```
 
-A flow author declares the slots once at the flow level via the new `slot_schema` field. The slot-extractor node consumes that schema plus the dispatched utterance. The adaptive-card render node binds its `prefill` field to the extractor's per-slot output.
+A flow author declares the slots once at the flow level via the new `slot_schema` field. The slot-extractor node consumes that schema plus the dispatched utterance. The adaptive-card render node binds its `prefill` field to `extractor.values` — the flat name→value map ready for direct consumption.
 
 ## Slot types
 
@@ -78,12 +78,17 @@ A `default_value` on any slot fills the slot when no match was found (`source: "
       "confidence": 1.0,
       "source": "regex" }
   ],
+  "values": {
+    "counterparty": "Acme Corp"
+  },
   "filled":  ["counterparty"],
   "missing": ["due_date"],
   "all_required_filled": false
 }
 ```
 
+- **`slots`** — full `ExtractedSlot` records with confidence and source metadata. Use for inspection, debugging, and audit trails.
+- **`values`** — flat `name → primitive value` map; mirrors `slots[].value` for filled slots only. Shape matches the adaptive-card `prefill` contract directly — bind this field, not `slots`.
 - **`filled`** preserves the order of the input `slot_definitions`.
 - **`missing`** contains only required slots that neither matched nor had a `default_value`.
 - **`all_required_filled`** = `missing.is_empty()`.
@@ -115,6 +120,27 @@ The flow-level field is the single source of truth — Fast2Flow scoping, design
 Today the same definitions are also inlined into the slot-extractor node payload so the pack runs end-to-end on the current runtime. Phase D removes the duplication by reading the flow-level field directly and passing it into the extractor call.
 </Aside>
 
+## Binding into adaptive-card prefill
+
+The extractor's `values` map is already keyed by slot name with primitive values — exactly the shape the adaptive-card `prefill` field expects. In your flow's adaptive-card node, bind each input id to the corresponding `values` entry:
+
+```yaml
+nodes:
+  render_card:
+    component: component-adaptive-card
+    inputs:
+      template: nda_intake_card
+      prefill:
+        counterparty: "{{extract_slots.values.counterparty}}"
+        due_date: "{{extract_slots.values.due_date}}"
+```
+
+Do **not** bind to `extract_slots.slots` — that is an array of `ExtractedSlot` records, not a flat map. The adaptive-card component will reject a non-object prefill value at render time.
+
+<Aside type="tip">
+**`slots` vs `values` — when to use which.** Use `values` for prefill and any downstream node that needs plain slot primitives. Use `slots` when you need the full `ExtractedSlot` record (confidence score, source tag) — for example in audit logging, conditional branching on confidence thresholds, or debugging extraction quality.
+</Aside>
+
 ## Prefill precedence
 
 The adaptive-card component honours this precedence at render time:
@@ -123,7 +149,7 @@ The adaptive-card component honours this precedence at render time:
 prefill > payload > session > state > template_params
 ```
 
-So `prefill = extractor output` always wins over any default values the card template carries. Documented in detail on the [Adaptive Cards page](/components/adaptive-cards/#prefill).
+So `prefill = extractor.values` always wins over any default values the card template carries. Documented in detail on the [Adaptive Cards page](/components/adaptive-cards/#prefill).
 
 ## What's deferred
 
