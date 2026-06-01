@@ -1,0 +1,163 @@
+---
+title: slot-extractor
+description: Regex-based slot extraction that turns a user utterance into pre-filled form values for the canonical Phase M2 prefill chain.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+**component-slot-extractor** parses structured values out of a user's natural-language utterance using regex-based rules per slot type. Its output flows directly into the [`prefill`](/components/adaptive-cards/#prefill) field of an Adaptive Card so a flow author can route a chat message and have the answering form open with fields already populated.
+
+Core concept: the lawyer types
+
+> NDA between Acme Corp and us by 2026-07-15
+
+→ the extractor returns `{counterparty: "Acme Corp", due_date: "2026-07-15"}` → the NDA intake card opens with both fields prefilled.
+
+**Key principles:**
+- **Deterministic** — regex per slot type; no LLM in v1, no probabilistic ranking
+- **Fail-safe** — invalid user regex returns no match instead of panicking; unmatched required slots land in `missing`
+- **Capability-free** — pure compute; no `secrets`, `network`, or LLM capabilities
+- **One-shot** — single-utterance extraction; multi-turn slot filling is out of scope
+
+## The canonical M2 chain
+
+```
+inbound utterance
+    │
+    ▼
+Fast2Flow → Dispatch{ target, utterance }
+    │
+    ▼
+component-slot-extractor (utterance + flow.slot_schema)
+    │
+    ▼
+component-adaptive-card (prefill = extractor.values)
+    │
+    ▼
+form opens with fields already filled
+```
+
+A flow author declares the slots once at the flow level via the new `slot_schema` field. The slot-extractor node consumes that schema plus the dispatched utterance. The adaptive-card render node binds its `prefill` field to `extractor.values` — the flat name→value map ready for direct consumption.
+
+## Slot types
+
+| Type | What it matches |
+|------|-----------------|
+| `string` | Requires a user-supplied `pattern`; emits the first capture group else the full match. |
+| `enum` | Case-insensitive whole-word match against `enum_values`. First hit wins. |
+| `number` | Default regex `-?\d+(?:\.\d+)?` unless `pattern` overrides. Emitted as a JSON number. |
+| `date` | Pattern capture else default scan `\d{1,4}[-/]\d{1,2}[-/]\d{1,4}`; tries ISO 8601 → `m/d/Y` → `d/m/Y`; normalised to ISO 8601 on output. |
+| `boolean` | Whole-word match against an i18n affirmative / negative token table (EN / ES / FR / DE / RU / PT / IT / NL). |
+
+A `default_value` on any slot fills the slot when no match was found (`source: "default"`, `confidence: 0.5`).
+
+## SlotDefinition wire shape
+
+```json
+{
+  "name": "counterparty",
+  "slot_type": "string",
+  "pattern": "between\\s+([A-Z][\\w&. ]*?)\\s+and",
+  "required": true,
+  "enum_values": null,
+  "default_value": null
+}
+```
+
+`enum_values` is only meaningful for `slot_type: enum`. `pattern` is required for `string`, optional for `number` / `date`, ignored for `enum` / `boolean`.
+
+## Output shape
+
+```json
+{
+  "slots": [
+    { "name": "counterparty",
+      "value": "Acme Corp",
+      "confidence": 1.0,
+      "source": "regex" }
+  ],
+  "values": {
+    "counterparty": "Acme Corp"
+  },
+  "filled":  ["counterparty"],
+  "missing": ["due_date"],
+  "all_required_filled": false
+}
+```
+
+- **`slots`** — full `ExtractedSlot` records with confidence and source metadata. Use for inspection, debugging, and audit trails.
+- **`values`** — flat `name → primitive value` map; mirrors `slots[].value` for filled slots only. Shape matches the adaptive-card `prefill` contract directly — bind this field, not `slots`.
+- **`filled`** preserves the order of the input `slot_definitions`.
+- **`missing`** contains only required slots that neither matched nor had a `default_value`.
+- **`all_required_filled`** = `missing.is_empty()`.
+
+## Declaring slots on a flow
+
+Put the definitions at the top of the `.ygtc` flow under the M2.4a `slot_schema` field:
+
+```yaml
+id: nda_intake
+type: messaging
+schema_version: 2
+
+slot_schema:
+  - name: counterparty
+    slot_type: string
+    pattern: 'between\s+([A-Z][\w&. ]*?)\s+and'
+    required: true
+  - name: due_date
+    slot_type: date
+    required: true
+
+nodes: { ... }
+```
+
+The flow-level field is the single source of truth — Fast2Flow scoping, design-time tooling, and Phase-D runtime wiring all read from it.
+
+<Aside type="note">
+Today the same definitions are also inlined into the slot-extractor node payload so the pack runs end-to-end on the current runtime. Phase D removes the duplication by reading the flow-level field directly and passing it into the extractor call.
+</Aside>
+
+## Binding into adaptive-card prefill
+
+The extractor's `values` map is already keyed by slot name with primitive values — exactly the shape the adaptive-card `prefill` field expects. In your flow's adaptive-card node, bind each input id to the corresponding `values` entry:
+
+```yaml
+nodes:
+  render_card:
+    component: component-adaptive-card
+    inputs:
+      template: nda_intake_card
+      prefill:
+        counterparty: "{{extract_slots.values.counterparty}}"
+        due_date: "{{extract_slots.values.due_date}}"
+```
+
+Do **not** bind to `extract_slots.slots` — that is an array of `ExtractedSlot` records, not a flat map. The adaptive-card component will reject a non-object prefill value at render time.
+
+<Aside type="tip">
+**`slots` vs `values` — when to use which.** Use `values` for prefill and any downstream node that needs plain slot primitives. Use `slots` when you need the full `ExtractedSlot` record (confidence score, source tag) — for example in audit logging, conditional branching on confidence thresholds, or debugging extraction quality.
+</Aside>
+
+## Prefill precedence
+
+The adaptive-card component honours this precedence at render time:
+
+```
+prefill > payload > session > state > template_params
+```
+
+So `prefill = extractor.values` always wins over any default values the card template carries. Documented in detail on the [Adaptive Cards page](/components/adaptive-cards/#prefill).
+
+## What's deferred
+
+- **LLM fallback** — v1 is regex-only; locked design.
+- **Natural-language dates** — "today", "next Tuesday", "in 3 days" not supported; would need `chrono-english`.
+- **Multi-turn slot filling** — single utterance, one-shot. A second utterance hits the extractor independently.
+- **Cross-utterance memory** — out of scope for the extractor; lives in the flow's session state if a flow needs it.
+
+## Worked example
+
+See [`pack/legal-nda-demo`](https://github.com/greenticai/greentic-examples/tree/main/pack/legal-nda-demo) in `greentic-examples` for the full NDA intake flow that exercises this chain end-to-end.
