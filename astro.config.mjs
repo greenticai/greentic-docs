@@ -162,6 +162,7 @@ export default defineConfig({
 						{ label: 'Adaptive Cards', slug: 'components/adaptive-cards' },
 						{ label: 'QA', slug: 'components/qa' },
 						{ label: 'fast2flow', slug: 'components/fast2flow' },
+						{ label: 'slot-extractor', slug: 'components/slot-extractor' },
 						{ label: 'cards2pack', slug: 'components/cards2pack' },
 						{ label: 'flow2flow', slug: 'components/flow2flow' },
 						{ label: 'LLM OpenAI', slug: 'components/llm-openai' },
