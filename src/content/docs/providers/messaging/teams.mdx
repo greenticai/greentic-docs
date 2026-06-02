@@ -116,6 +116,20 @@ Teams egress and subscription setup use IDs, not display names. Labels are persi
 Creating a missing Teams channel requires the delegated `Channel.Create` Graph permission and a signed-in user who is allowed to create channels in the selected Team.
 </Aside>
 
+## Network Access
+
+Teams Graph mode uses Microsoft Graph subscriptions for incoming channel or chat messages. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from Microsoft Graph to Greentic | Change notifications and lifecycle notifications for Teams message subscriptions |
+| Incoming, Bot Framework mode | HTTPS `443` from Microsoft Bot Framework to Greentic | Bot Framework activity callbacks to the configured messaging endpoint |
+| Outgoing | HTTPS `443` from Greentic to `login.microsoftonline.com` | Device-code OAuth and token refresh |
+| Outgoing | HTTPS `443` from Greentic to `graph.microsoft.com` | Team/channel discovery, optional channel creation, message sends, and subscription reconciliation |
+| Outgoing, Bot Framework mode | HTTPS `443` from Greentic to Bot Framework service URLs | Replies and proactive sends through the Bot Framework service URL from incoming activities |
+
+The Graph subscription `notificationUrl` and `lifecycleNotificationUrl` must both be publicly reachable over HTTPS. The provider pack declares the URL templates; hosts should not hard-code Teams paths.
+
 ## Features
 
 ### Text Messages
