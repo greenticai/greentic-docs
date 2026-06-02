@@ -19,125 +19,102 @@ Microsoft Teams provider 将你的数字员工集成到 Teams 频道和聊天中
 ## 前置条件
 
 - Microsoft 365 tenant
-- Azure AD 管理员权限
+- 支持 device-code OAuth 的 public Microsoft Entra application client id
+- 可授予或同意 setup 所需 Graph scopes 的权限
+- 当你希望 setup 创建缺失的 desired channel 时，需要在所选 Team 中创建 channel 的权限
 
 ## 设置
 
+Teams setup 支持两种配置形式：
+
+| 模式 | 使用场景 | 主要字段 |
+|------|----------|----------|
+| Graph channel 模式 | 你需要基于 Graph 的频道发送和订阅。这是默认 setup 模式。 | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| Bot Framework 模式 | 你已有用于入站 Bot Framework 消息的 Azure Bot 和 Teams app manifest。 | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+
 <Steps>
 
-1. **创建 Azure Bot Registration**
+1. **配置 setup 提示**
 
-   前往 [Azure Portal](https://portal.azure.com)：
-   - 搜索 “Bot Services”
-   - 点击 “Create”
-   - 填写信息：
-     - Bot handle: your-bot-name
-     - Subscription: your subscription
-     - Resource group: 创建或选择
-     - Pricing: F0（免费）或 S1
-   - 点击 “Create”
-
-2. **配置 Bot Endpoint**
-
-   在你的 Bot Service 中：
-   - 前往 **Configuration**
-   - 设置 **Messaging endpoint**：`https://your-domain.com/webhook/teams/{tenant}/{team}`
-
-3. **获取 App 凭证**
-
-   在 **Configuration** 中：
-   - 复制 **Microsoft App ID**
-   - 点击 Microsoft App ID 旁边的 “Manage”
-   - 创建新的 **Client Secret**
-   - 复制 secret 值（只会显示一次）
-
-4. **启用 Teams Channel**
-
-   在你的 Bot Service 中：
-   - 前往 **Channels**
-   - 点击 **Microsoft Teams**
-   - 接受条款并启用
-
-5. **创建 Teams App Package**
-
-   为你的 Teams app 创建 manifest：
-
-   ```json title="manifest.json"
-   {
-     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-     "manifestVersion": "1.16",
-     "version": "1.0.0",
-     "id": "{{BOT_ID}}",
-     "packageName": "com.yourcompany.supportbot",
-     "developer": {
-       "name": "Your Company",
-       "websiteUrl": "https://yourcompany.com",
-       "privacyUrl": "https://yourcompany.com/privacy",
-       "termsOfUseUrl": "https://yourcompany.com/terms"
-     },
-     "name": {
-       "short": "Support Bot",
-       "full": "Support Bot for Customer Service"
-     },
-     "description": {
-       "short": "Customer support assistant",
-       "full": "AI-powered customer support assistant"
-     },
-     "icons": {
-       "outline": "outline.png",
-       "color": "color.png"
-     },
-     "accentColor": "#0078D4",
-     "bots": [
-       {
-         "botId": "{{BOT_ID}}",
-         "scopes": ["personal", "team", "groupchat"],
-         "supportsFiles": true,
-         "isNotificationOnly": false
-       }
-     ],
-     "permissions": ["identity", "messageTeamMembers"],
-     "validDomains": ["your-domain.com"]
-   }
-   ```
-
-6. **配置 Provider**
+   你可以只使用默认 public client id 运行 setup，也可以提供自己的 `client_id`。当你希望 setup 查找或创建特定 standard channel 时，请添加 `desired_channel_name`：
 
    ```json title="answers.json"
    {
-     "messaging-teams": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "app_id": "your-microsoft-app-id",
-       "app_password": "your-client-secret",
-       "tenant_id": "your-azure-tenant-id"
+     "setup_answers": {
+       "messaging-teams": {
+         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+         "desired_channel_name": "hr onboarding"
+       }
      }
    }
    ```
 
-7. **运行设置**
+2. **启动 Teams setup**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-8. **在 Teams 中安装 App**
+3. **完成 device-code OAuth**
 
-   - 将 manifest.json 与图标一起打包为 zip
-   - 前往 Teams Admin Center 或直接上传
-   - 安装到你的团队或用户
+   setup 会启动 Microsoft device-code flow。复制代码，打开 verification URL，使用可访问目标 Team 的 Microsoft 365 account 登录，并批准请求的 Graph scopes。
+
+   返回 terminal，并在 setup 要求验证 Microsoft Teams setup 时继续。随后 Greentic 会轮询 Microsoft Graph，将 delegated tokens 存为 secrets，并运行登录后的 discovery。
+
+4. **选择或验证 Team 和 channel**
+
+   setup 调用 Microsoft Graph 列出已登录 user 加入的 teams 和 channels。按提示选择 Team 和 channel，或让 `desired_channel_name` 引导 create-if-missing flow。
+
+   setup 会保存 identifiers 和 labels：
+   - `team_id` 和 `team_name`
+   - `channel_id` 和 `channel_name`
+
+   IDs 供 runtime sends 和 subscription setup 使用。display names 供 operators 和 setup UIs 使用。
+
+5. **在 Teams 中检查 channel**
+
+   打开 Microsoft Teams，进入所选 Team 和 channel。如果 setup 创建了 `desired_channel_name`，请确认 channel 存在且已登录 account 有权访问。
+
+   如果所选 Team 尚无该 channel，setup 可以创建 standard channel，然后保存生成的 `channel_id` 和 `channel_name`。ID 仍是 runtime sends 和 subscriptions 的权威值。
+
+6. **启动或重启 runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   Teams pack 会声明所需 subscription metadata，包括 Graph resource template、component config fields、notification URL template 和 lifecycle notification URL template。hosts 应使用这些 metadata，而不是硬编码 Teams resource paths。
+
+7. **测试目标 channel**
+
+   在所选 Teams channel 中发送消息，或触发发送到 Teams 的 flow。如果消息未出现，请重新运行 setup，并检查保存的 `team_id` 和 `channel_id` 仍与在 Teams 中打开的 channel 匹配。
 
 </Steps>
 
 ## 配置选项
 
-| 选项 | 必填 | 说明 |
-|------|------|------|
-| `enabled` | 是 | 启用/禁用 provider |
-| `public_base_url` | 是 | webhook 的公网 URL |
-| `app_id` | 是 | Microsoft App ID |
-| `app_password` | 是 | Client Secret |
-| `tenant_id` | 否 | Azure AD Tenant ID（用于单租户 app） |
+| 选项 | 必需 | 描述 |
+|--------|----------|-------------|
+| `client_id` | Graph setup 需要 | 用于 device-code OAuth 的 public Microsoft application client id |
+| `tenant_id` | 已生成 | 从 Microsoft Graph 发现的 tenant id |
+| `team_id` | 已生成或已选择 | 用于 channel sends 和 subscriptions 的 Teams team id |
+| `team_name` | 已生成或已选择 | 所选 Team 的 display name |
+| `channel_id` | 已生成或已选择 | 用于 sends 和 subscriptions 的 channel id |
+| `channel_name` | 已生成或已选择 | 所选 channel 的 display name |
+| `desired_channel_name` | 否 | 默认/搜索提示；支持创建时也作为 channel creation name |
+| `chat_id` | 否 | 适用时用于 chat subscriptions 的 chat id |
+| `ms_bot_app_id` | Bot Framework 模式 | Microsoft Bot Framework app id |
+| `ms_bot_app_password` | Bot Framework 模式 | Bot Framework app password |
+| `bot_display_name` | Bot Framework 模式 | Teams app manifest workflows 中使用的 display name |
+| `messaging_endpoint` | Bot Framework 模式 | public Bot Framework messaging endpoint |
+
+<Aside type="note">
+Teams egress 和 subscription setup 使用 ID，而不是 display names。labels 会为 operators 和 setup UIs 保存，但 `channel_id`、`team_id` 或 `chat_id` 仍是 runtime identifiers。
+</Aside>
+
+<Aside type="caution">
+创建缺失的 Teams channel 需要 delegated Graph permission `Channel.Create`，以及允许在所选 Team 中创建 channel 的已登录 user。
+</Aside>
 
 ## 功能
 
@@ -167,7 +144,7 @@ Teams 支持部分 Markdown：
 
 ### Adaptive Cards
 
-Teams 对 Adaptive Card 的支持非常完善：
+Teams 通过 Bot Framework attachments 原生支持 Adaptive Card。请使用目标 Teams 客户端和操作模型支持的版本；Universal Actions 等 Adaptive Cards 1.4 功能仅适用于受支持的机器人场景。
 
 ```yaml
 - id: send_card
@@ -340,7 +317,7 @@ tenants:
 ## 安全
 
 <Aside type="caution">
-始终校验入站请求中的 JWT token，以确认它们来自 Microsoft。
+始终校验入站请求中的 Bot Framework 身份验证 token，以确认请求来自 Microsoft。
 </Aside>
 
 Greentic 会自动校验：
@@ -351,5 +328,5 @@ Greentic 会自动校验：
 ## 下一步
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - 可视化设计卡片
-- [Slack Provider](/zh/providers/messaging/slack/) - 添加 Slack 集成
-- [WebChat Provider](/zh/providers/messaging/webchat/) - 嵌入到网站中
+- [Slack Provider](/providers/messaging/slack/) - 添加 Slack 集成
+- [WebChat Provider](/providers/messaging/webchat/) - 嵌入到网站中
