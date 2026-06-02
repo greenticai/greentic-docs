@@ -89,6 +89,17 @@ The provider learns direct-message room and person context from inbound Webex ev
 Webex API acceptance does not guarantee every Adaptive Card shape renders in every Webex client. The provider normalizes common compatibility issues, including Adaptive Card version capping, boolean string coercion, and stripping unsupported Webex-hosted content image URLs.
 </Aside>
 
+## Network Access
+
+Webex uses Greentic's public HTTPS endpoint for incoming bot webhooks and the Webex REST API for outgoing sends. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from Webex to Greentic | `messages.created` webhooks for direct messages and room mentions, plus `attachmentActions.created` webhooks for Adaptive Card actions |
+| Outgoing | HTTPS `443` from Greentic to `webexapis.com` | Bot identity lookup, webhook reconciliation, message sends, and attachment action reads |
+
+No Webex-specific TCP port needs to be opened on the Greentic host. The current webhook target must remain publicly reachable over HTTPS; startup removes stale Greentic-owned Webex webhooks that point to older URLs.
+
 ## Features
 
 ### Text Messages

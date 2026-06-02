@@ -185,6 +185,20 @@ Provider setup is pack-owned. Hosts should use the installed pack's setup schema
 | Webex | Bot access token only. Setup generates the webhook secret and reconciles direct-message, mention, and card-action webhooks. |
 | Email | `messaging-email` is SMTP. `messaging-microsoft-email` is Microsoft Graph mail with delegated OAuth credentials. |
 
+## Network Access
+
+Messaging packs do not require provider-specific local listening ports. They use the Greentic runtime's public HTTP(S) listener for browser traffic and platform webhooks. In production, expose that listener through HTTPS on port `443`; in local development, `gtc setup` can use a tunnel such as Cloudflare Tunnel to forward a public HTTPS URL to the local runtime port.
+
+| Provider | Incoming to Greentic | Outgoing from Greentic |
+|----------|----------------------|------------------------|
+| Slack | HTTPS `443` from Slack Events API, interactive components, slash commands, and OAuth redirects to the public ingress URL | HTTPS `443` to `slack.com` and `api.slack.com` for OAuth, Web API calls, app registration, and manifest updates |
+| Microsoft Teams | HTTPS `443` from Microsoft Graph change notifications and lifecycle notifications. Bot Framework mode also receives HTTPS `443` Bot Framework callbacks | HTTPS `443` to `login.microsoftonline.com`, `graph.microsoft.com`, and Bot Framework service URLs when Bot Framework mode is used |
+| Telegram | HTTPS `443` from Telegram webhook delivery to the public ingress URL | HTTPS `443` to `api.telegram.org` or the configured Telegram API base URL |
+| WhatsApp | HTTPS `443` from Meta webhook verification and message callbacks | HTTPS `443` to `graph.facebook.com` or the configured Meta Graph API base URL |
+| Webex | HTTPS `443` from Webex `messages.created` and `attachmentActions.created` webhooks | HTTPS `443` to `webexapis.com` |
+| WebChat / WebChat GUI | Browser HTTPS `443` and WSS `443` to the public WebChat route. Local development may use an unencrypted localhost port behind a tunnel | Usually no third-party messaging egress. OAuth/OIDC login uses HTTPS `443` to the configured identity provider |
+| Email | SMTP has no Greentic inbound port. Microsoft Graph mail subscriptions, when enabled by the installed pack, use HTTPS `443` callbacks | SMTP over TCP `587` with STARTTLS or TCP `465` with implicit TLS. Microsoft Graph mail uses HTTPS `443` to Microsoft identity and Graph endpoints |
+
 ## Common Features
 
 ### Text Messages

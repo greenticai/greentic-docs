@@ -93,6 +93,17 @@ New setup flows do not require hand-entering `slack_bot_token`. The setup action
 Slack configuration access tokens expire. Keep the matching refresh token in the setup secrets store so the provider can rotate the pair during manifest updates.
 </Aside>
 
+## Network Access
+
+Slack uses the Greentic runtime's public HTTPS endpoint for all incoming callbacks. Expose the runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from Slack to Greentic | Events API callbacks, interactive component payloads, slash command payloads, and OAuth redirects |
+| Outgoing | HTTPS `443` from Greentic to `slack.com` and `api.slack.com` | OAuth exchange, Web API sends, app registration, manifest updates, and configuration token rotation |
+
+No Slack-specific TCP port needs to be opened on the Greentic host. The important inbound requirement is that Slack can reach the configured public base URL and the `/v1/messaging/ingress/messaging-slack/{tenant}/{team}` path over HTTPS.
+
 ## Features
 
 ### Text Messages

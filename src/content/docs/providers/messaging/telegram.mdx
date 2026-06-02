@@ -89,6 +89,17 @@ The Telegram provider allows your digital worker to communicate via Telegram bot
 The setup layer also accepts the older `bot_token` alias and stores it as `telegram_bot_token`, but new answers files should use the wizard-generated key.
 </Aside>
 
+## Network Access
+
+Telegram uses webhooks for incoming updates and the Telegram Bot API for outgoing sends. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from Telegram to Greentic | Bot webhook updates for messages and callback queries |
+| Outgoing | HTTPS `443` from Greentic to `api.telegram.org` or the configured `api_base_url` | `setWebhook`, message sends, callback answers, and Bot API reads |
+
+No Telegram-specific TCP port needs to be opened on the Greentic host. The public webhook URL must be reachable by Telegram over HTTPS.
+
 ## Features
 
 ### Text Messages

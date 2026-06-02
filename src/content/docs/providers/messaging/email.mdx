@@ -102,6 +102,21 @@ Inbound email is normally handled through an event provider or a provider webhoo
 Use `gtc setup ./my-bundle` or `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to confirm the exact fields for the installed email pack. Do not mix SMTP answers into `messaging-microsoft-email` or Graph answers into `messaging-email`.
 </Aside>
 
+## Network Access
+
+Email network requirements depend on the installed email pack and the mail transport you choose.
+
+| Pack | Direction | Protocol and port | Purpose |
+|------|-----------|-------------------|---------|
+| `messaging-email` | Outgoing | SMTP over TCP `587` with STARTTLS, or TCP `465` with implicit TLS | Outbound email sends through your SMTP provider |
+| `messaging-email` | Outgoing, legacy environments | SMTP over TCP `25` | Only when your SMTP provider and hosting environment still allow port `25` |
+| `messaging-email` | Incoming | None by default | Inbound email normally comes from a separate event provider or webhook-based mail service |
+| `messaging-microsoft-email` | Outgoing | HTTPS `443` to `login.microsoftonline.com` | Microsoft OAuth token exchange and refresh |
+| `messaging-microsoft-email` | Outgoing | HTTPS `443` to `graph.microsoft.com` | Microsoft Graph mail sends and mailbox operations |
+| `messaging-microsoft-email` | Incoming, when Graph subscriptions are enabled by the installed pack | HTTPS `443` from Microsoft Graph to Greentic | Mail change notifications to the public callback URL |
+
+When you use webhook-based inbound email from another provider, expose the Greentic runtime through HTTPS on port `443` and configure that provider to call the declared ingress URL.
+
 ## Features
 
 ### Send Plain Text

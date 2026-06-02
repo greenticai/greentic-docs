@@ -90,6 +90,17 @@ The WhatsApp provider integrates with the WhatsApp Business Platform Cloud API (
 The setup layer also accepts the older `access_token` alias and stores it as `whatsapp_token`, but new answers files should use the generated key. Use `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to confirm the exact fields for the pack version in your bundle.
 </Aside>
 
+## Network Access
+
+WhatsApp Cloud API uses Meta webhooks for incoming messages and Meta Graph API calls for outgoing sends. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from Meta to Greentic | Webhook verification and WhatsApp message callbacks |
+| Outgoing | HTTPS `443` from Greentic to `graph.facebook.com` or the configured `api_base_url` | Cloud API sends, media operations, and webhook setup/verification calls when supported |
+
+No WhatsApp-specific TCP port needs to be opened on the Greentic host. Meta must be able to reach the configured callback URL over HTTPS and validate the verify token.
+
 ## Features
 
 ### Text Messages

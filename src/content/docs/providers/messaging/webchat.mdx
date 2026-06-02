@@ -143,6 +143,20 @@ User's Browser
 Use `gtc setup ./my-bundle` or `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to confirm the exact fields for your installed WebChat pack. The demo answers files use `messaging-webchat-gui` for the hosted UI and embed snippets.
 </Aside>
 
+## Network Access
+
+WebChat and WebChat GUI are browser-facing providers. They do not require a third-party messaging platform to call Greentic, but the hosted UI, embed script, Direct Line-compatible HTTP endpoints, and WebSocket endpoint must be reachable by user browsers.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from browsers to Greentic | Hosted fullpage UI, embed script, static assets, Direct Line-compatible REST calls, and file upload/download routes |
+| Incoming | WSS `443` from browsers to Greentic | Real-time WebChat connection when `mode` is `websocket`, which is the WebChat GUI default |
+| Incoming, local development | HTTP and WS on the local runtime port, usually behind a tunnel | Local testing before the public HTTPS tunnel terminates TLS |
+| Outgoing | Usually none for messaging delivery | WebChat messages route through the local Greentic runtime rather than a third-party messaging API |
+| Outgoing, OAuth/OIDC enabled | HTTPS `443` to the configured identity provider | Login redirects, token exchange, and OIDC metadata or key discovery depending on the configured provider |
+
+For production browser access, terminate TLS at the public endpoint and expose HTTPS/WSS on port `443`. If you choose `local_queue`, browsers use HTTPS polling instead of WSS, but they still need the same public HTTPS route.
+
 ## Widget Configuration
 
 ### Basic Setup
