@@ -1,121 +1,96 @@
 ---
 title: Slack
-description: Connect your digital worker to Slack workspaces
+description: Connectez votre travailleur numérique aux espaces de travail Slack
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Overview
+## Vue d'ensemble
 
-The Slack provider integrates your digital worker with Slack workspaces. It supports:
+Le fournisseur Slack intègre votre travailleur numérique aux espaces de travail Slack. Il prend en charge :
 
-- Direct messages (DMs)
-- Channel messages
-- App mentions
-- Interactive components (buttons, menus)
-- Block Kit rich messaging
-- Slash commands
-- Thread replies
+- Les messages directs (DM)
+- Les messages de canal
+- Les mentions de l'application
+- Les composants interactifs (boutons, menus)
+- Les messages riches Block Kit
+- Les commandes slash
+- Les réponses dans les fils
 
-## Prerequisites
+## Prérequis
 
-- A Slack workspace
-- Admin access to create a Slack app
+- Un espace de travail Slack
+- Un accès administrateur pour créer une application Slack
 
-## Setup
+## Configuration
 
 <Steps>
 
-1. **Create a Slack App**
+1. **Créer une paire de jetons de configuration Slack**
 
-   Go to [api.slack.com/apps](https://api.slack.com/apps) and click "Create New App":
-   - Choose "From scratch"
-   - Enter an app name (e.g., "My Support Bot")
-   - Select your workspace
+   Allez sur [api.slack.com/apps](https://api.slack.com/apps) et créez une paire de jetons de configuration d'application. Copiez les deux valeurs :
+   - Configuration access token (`xoxe.xoxp-...`)
+   - Configuration refresh token (`xoxe-1-...`)
 
-2. **Configure Bot Token Scopes**
-
-   Go to **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**:
-
-   Required scopes:
-   - `chat:write` - Send messages
-   - `app_mentions:read` - Receive app mention events
-   - `im:history` - Read DM history
-   - `im:write` - Open DMs
-   - `users:read` - Read user info
-
-   Optional scopes:
-   - `channels:history` - Read channel messages
-   - `channels:read` - List channels
-   - `files:read` - Read files
-   - `files:write` - Upload files
-
-3. **Enable Event Subscriptions**
-
-   Go to **Event Subscriptions**:
-   - Enable Events
-   - Set Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}`
-
-   Subscribe to bot events:
-   - `message.im` - DM messages
-   - `message.channels` - Channel messages
-   - `app_mention` - @mentions
-
-4. **Enable Interactivity**
-
-   Go to **Interactivity & Shortcuts**:
-   - Enable Interactivity
-   - Set Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
-
-5. **Install App to Workspace**
-
-   Go to **Install App** → **Install to Workspace**
-
-   Copy the **Bot User OAuth Token** (starts with `xoxb-`)
-
-6. **Get App Credentials**
-
-   From **Basic Information**:
-   - App ID
-   - Signing Secret for request verification
-   - Configuration Token if you want Greentic to update the app manifest automatically
-
-7. **Configure Provider**
+2. **Configurer le fournisseur**
 
    ```json title="answers.json"
    {
-     "messaging-slack": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "api_base_url": "https://slack.com/api",
-       "slack_bot_token": "xoxb-xxx-xxx-xxx",
-       "slack_app_id": "A07XXXXXX",
-       "slack_configuration_token": "xoxe.xoxp-xxx"
+     "setup_answers": {
+       "messaging-slack": {
+         "slack_configuration_access_token": "xoxe.xoxp-xxx",
+         "slack_configuration_refresh_token": "xoxe-1-xxx"
+       }
      }
    }
    ```
 
-8. **Run Setup**
+3. **Exécuter la configuration**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
+4. **Cliquer sur Add to Slack**
+
+   La configuration enregistre ou met à jour l'application Slack et expose une action **Add to Slack**. Ouvrez l'URL d'autorisation Slack générée, choisissez l'espace de travail, vérifiez les scopes demandés et approuvez l'installation.
+
+   Quand la redirection OAuth revient vers la configuration, Greentic enregistre l'app id Slack, le client id, le client secret et les réponses OAuth d'exécution pour le tenant. Si le callback n'a pas été traité automatiquement, exécutez de nouveau `gtc setup --answers answers.json ./my-bundle` après avoir approuvé l'installation.
+
+5. **Ajouter l'application dans Slack**
+
+   Ouvrez Slack et vérifiez que l'application est installée dans l'espace de travail. Pour les conversations de canal, ajoutez l'application au canal où le worker doit répondre. Vous pouvez le faire depuis les paramètres d'intégration du canal ou en mentionnant/invitant l'application dans le canal.
+
+6. **Démarrer ou redémarrer le runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   Au démarrage, la `slack_app_id` enregistrée et la paire de jetons de configuration sont utilisées pour mettre à jour le manifeste de l'application Slack avec l'URL de webhook actuelle.
+
+7. **Tester le canal**
+
+   Envoyez un message direct à l'application ou mentionnez l'application dans le canal Slack auquel vous l'avez ajoutée. Les événements de canal arrivent uniquement pour les canaux où l'application est membre et où les scopes installés autorisent l'événement.
+
 </Steps>
 
-## Configuration Options
+## Options de configuration
 
-| Option | Required | Description |
+| Option | Requis | Description |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable the provider |
-| `public_base_url` | Yes | Public URL for webhooks |
-| `slack_bot_token` | Yes | Bot User OAuth Token (`xoxb-...`) |
-| `slack_app_id` | Yes | App ID from Basic Information |
-| `slack_configuration_token` | No | For automatic manifest updates |
-| `api_base_url` | No | Slack API URL (default: `https://slack.com/api`) |
+| `slack_configuration_access_token` | Oui | Jeton de configuration Slack de courte durée utilisé pour les mises à jour du manifeste de l'application |
+| `slack_configuration_refresh_token` | Oui | Refresh token utilisé pour renouveler le configuration access token |
+| `slack_app_id` | Généré | Slack app id créée ou renvoyée par la configuration |
+| `slack_client_id` | Généré | Slack OAuth client id renvoyé par l'enregistrement de l'application |
+| `client_secret` | Secret généré | Slack OAuth client secret renvoyé par l'enregistrement de l'application |
 
 <Aside type="note">
-The setup layer also accepts the older `bot_token` alias and stores it as `slack_bot_token`, but new answers files should use the wizard-generated key.
+Les nouveaux flux de configuration ne demandent pas de saisir manuellement `slack_bot_token`. L'action de configuration et le flux d'installation OAuth enregistrent les identifiants d'exécution. Si vous mettez à niveau un bundle plus ancien, régénérez les réponses avec `gtc setup --dry-run --emit-answers answers.json ./my-bundle`, puis relancez la configuration.
+</Aside>
+
+<Aside type="caution">
+Les Slack configuration access tokens expirent. Conservez le refresh token correspondant dans le magasin de secrets de configuration afin que le fournisseur puisse renouveler la paire pendant les mises à jour du manifeste.
 </Aside>
 
 ## Features
@@ -240,7 +215,7 @@ Reply in a thread:
 
 ### File Uploads
 
-Slack's file APIs change over time. Use this only when the installed `messaging-slack` pack exposes file support for your version; otherwise send a link or use Slack's current external upload flow.
+Les API de fichiers Slack évoluent dans le temps. Utilisez ceci uniquement si le pack `messaging-slack` installé expose la prise en charge des fichiers pour votre version ; sinon, envoyez un lien ou utilisez le flux d'upload externe actuel de Slack.
 
 ```yaml
 - id: upload_file
@@ -385,7 +360,7 @@ tenants:
 
 3. **Test Webhook:**
    ```bash
-   curl https://your-domain.com/webhook/slack/demo/default
+   curl https://your-domain.com/v1/messaging/ingress/messaging-slack/demo/default
    ```
 
 ### "not_authed" Error
@@ -425,5 +400,5 @@ Greentic automatically validates:
 ## Next Steps
 
 - [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - Design rich messages
-- [Teams Provider](/providers/messaging/teams/) - Add Teams integration
-- [Flows Guide](/concepts/flows/) - Build complex workflows
+- [Fournisseur Teams](/providers/messaging/teams/) - Ajouter l'intégration Teams
+- [Guide des flows](/concepts/flows/) - Construire des workflows complexes

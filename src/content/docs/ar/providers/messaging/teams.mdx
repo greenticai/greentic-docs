@@ -1,146 +1,120 @@
 ---
 title: Microsoft Teams
-description: Connect your digital worker to Microsoft Teams
+description: اربط العامل الرقمي لديك بـ Microsoft Teams
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Overview
+## نظرة عامة
 
-The Microsoft Teams provider integrates your digital worker with Teams channels and chats. It supports:
+يدمج موفر Microsoft Teams العامل الرقمي لديك مع قنوات Teams ومحادثاته. وهو يدعم:
 
-- Channel messages
-- Personal chats
-- Group chats
+- رسائل القنوات
+- المحادثات الشخصية
+- المحادثات الجماعية
 - Adaptive Cards
-- Interactive components
-- File attachments
+- المكونات التفاعلية
+- مرفقات الملفات
 
-## Prerequisites
+## المتطلبات المسبقة
 
-- Microsoft 365 tenant
-- Permission to create or configure a Microsoft Entra ID app registration and Azure Bot resource
-- Permission to upload or publish a Teams app package in your tenant
+- مستأجر Microsoft 365
+- Microsoft Entra application client id عام يدعم OAuth عبر كود الجهاز
+- صلاحية منح نطاقات Graph التي يستخدمها الإعداد أو الموافقة عليها
+- صلاحية إنشاء قنوات في الفريق المحدد عندما تريد من الإعداد إنشاء قناة مطلوبة غير موجودة
 
-## Setup
+## الإعداد
+
+يدعم إعداد Teams شكلين للتكوين:
+
+| الوضع | استخدمه عندما | الحقول الرئيسية |
+|------|----------------|-----------------|
+| وضع قناة Graph | تريد إرسال رسائل القنوات والاشتراكات عبر Graph. هذا هو وضع الإعداد الافتراضي. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| وضع Bot Framework | لديك Azure Bot وبيان تطبيق Teams للرسائل الواردة عبر Bot Framework. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
 
 <Steps>
 
-1. **Create Azure Bot Registration**
+1. **تكوين تلميح الإعداد**
 
-   Go to [Azure Portal](https://portal.azure.com):
-   - Search for "Bot Services"
-   - Click "Create"
-   - Fill in details:
-     - Bot handle: your-bot-name
-     - Subscription: your subscription
-     - Resource group: create or select
-     - Pricing: F0 (free) or S1
-   - Click "Create"
-
-2. **Configure Bot Endpoint**
-
-   In your Bot Service:
-   - Go to **Configuration**
-   - Set **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
-
-3. **Get App Credentials**
-
-   In **Configuration**:
-   - Copy **Microsoft App ID**
-   - Click "Manage" next to Microsoft App ID
-   - Create a new **Client Secret**
-   - Copy the secret value (shown only once!)
-
-4. **Enable Teams Channel**
-
-   In your Bot Service:
-   - Go to **Channels**
-   - Click **Microsoft Teams**
-   - Accept terms and enable
-
-5. **Create Teams App Package**
-
-   Create a manifest for your Teams app:
-
-   ```json title="manifest.json"
-   {
-     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-     "manifestVersion": "1.16",
-     "version": "1.0.0",
-     "id": "{{BOT_ID}}",
-     "packageName": "com.yourcompany.supportbot",
-     "developer": {
-       "name": "Your Company",
-       "websiteUrl": "https://yourcompany.com",
-       "privacyUrl": "https://yourcompany.com/privacy",
-       "termsOfUseUrl": "https://yourcompany.com/terms"
-     },
-     "name": {
-       "short": "Support Bot",
-       "full": "Support Bot for Customer Service"
-     },
-     "description": {
-       "short": "Customer support assistant",
-       "full": "AI-powered customer support assistant"
-     },
-     "icons": {
-       "outline": "outline.png",
-       "color": "color.png"
-     },
-     "accentColor": "#0078D4",
-     "bots": [
-       {
-         "botId": "{{BOT_ID}}",
-         "scopes": ["personal", "team", "groupchat"],
-         "supportsFiles": true,
-         "isNotificationOnly": false
-       }
-     ],
-     "permissions": ["identity", "messageTeamMembers"],
-     "validDomains": ["your-domain.com"]
-   }
-   ```
-
-6. **Configure Provider**
+   يمكنك تشغيل الإعداد باستخدام client id العام الافتراضي فقط، أو توفير `client_id` خاص بك. أضف `desired_channel_name` عندما تريد من الإعداد العثور على قناة قياسية محددة أو إنشائها:
 
    ```json title="answers.json"
    {
+     "setup_answers": {
        "messaging-teams": {
-         "enabled": true,
-         "public_base_url": "https://your-domain.ngrok-free.app",
-         "ms_bot_app_id": "your-microsoft-app-id",
-         "ms_bot_app_password": "your-client-secret",
-         "team_id": "optional-team-id",
-         "channel_id": "optional-channel-id"
+         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+         "desired_channel_name": "hr onboarding"
        }
      }
+   }
    ```
 
-7. **Run Setup**
+2. **بدء إعداد Teams**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-8. **Install App in Teams**
+3. **إكمال OAuth عبر كود الجهاز**
 
-   - Zip manifest.json with icons
-   - Go to Teams Admin Center or upload directly
-   - Install to your team or users
+   يبدأ الإعداد تدفق كود جهاز Microsoft. انسخ الكود، وافتح عنوان URL للتحقق، وسجل الدخول بحساب Microsoft 365 الذي يمكنه الوصول إلى الفريق الهدف، ثم وافق على نطاقات Graph المطلوبة.
+
+   ارجع إلى الطرفية وتابع عندما يطلب الإعداد التحقق من Microsoft Teams. بعد ذلك يستعلم Greentic من Microsoft Graph، ويحفظ الرموز المفوضة كأسرار، ويشغل الاكتشاف بعد تسجيل الدخول.
+
+4. **اختيار الفريق والقناة أو التحقق منهما**
+
+   يستدعي الإعداد Microsoft Graph لسرد الفرق والقنوات التي انضم إليها المستخدم المسجل دخوله. اختر الفريق والقناة عند الطلب، أو اترك `desired_channel_name` يوجه تدفق الإنشاء عند عدم وجود القناة.
+
+   يحفظ الإعداد المعرفات والتسميات:
+   - `team_id` و `team_name`
+   - `channel_id` و `channel_name`
+
+   تستخدم عمليات الإرسال في وقت التشغيل وإعداد الاشتراكات هذه المعرفات. أما أسماء العرض فهي للمشغلين وواجهات الإعداد.
+
+5. **التحقق من القناة في Teams**
+
+   افتح Microsoft Teams وانتقل إلى الفريق والقناة المحددين. إذا أنشأ الإعداد `desired_channel_name`، فتأكد من وجود القناة وأن الحساب المسجل دخوله يمكنه الوصول إليها.
+
+   إذا لم يكن لدى الفريق المحدد هذه القناة بالفعل، فيمكن للإعداد إنشاء قناة قياسية ثم حفظ `channel_id` و `channel_name` الناتجين. يظل المعرف هو المرجع لعمليات الإرسال في وقت التشغيل والاشتراكات.
+
+6. **بدء وقت التشغيل أو إعادة تشغيله**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   يعلن حزمة Teams عن بيانات تعريف الاشتراك المطلوبة، بما في ذلك قالب مورد Graph وحقول تكوين المكون وقالب عنوان URL للإشعارات وقالب عنوان URL لإشعارات دورة الحياة. يجب أن تستخدم المضيفات هذه البيانات بدلا من ترميز مسارات موارد Teams بشكل ثابت.
+
+7. **اختبار القناة الهدف**
+
+   أرسل رسالة في قناة Teams المحددة أو شغل تدفقا يرسل إلى Teams. إذا لم تظهر الرسائل، فأعد تشغيل الإعداد وتحقق من أن `team_id` و `channel_id` المحفوظين لا يزالان يطابقان القناة المفتوحة في Teams.
 
 </Steps>
 
-## Configuration Options
+## خيارات التكوين
 
-| Option | Required | Description |
+| الخيار | مطلوب | الوصف |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable provider |
-| `public_base_url` | Yes | Public URL for webhook |
-| `ms_bot_app_id` | Yes | Microsoft App ID |
-| `ms_bot_app_password` | Yes | Client secret for the bot app |
-| `team_id` | No | Default Teams team ID for proactive or channel sends |
-| `channel_id` | No | Default Teams channel ID for proactive or channel sends |
+| `client_id` | نعم لإعداد Graph | Microsoft application client id عام يستخدم لـ OAuth عبر كود الجهاز |
+| `tenant_id` | منشأ | Tenant id يتم اكتشافه من Microsoft Graph |
+| `team_id` | منشأ أو محدد | Teams team id يستخدم لإرسال رسائل القنوات والاشتراكات |
+| `team_name` | منشأ أو محدد | اسم عرض الفريق المحدد |
+| `channel_id` | منشأ أو محدد | Channel id يستخدم للإرسال والاشتراكات |
+| `channel_name` | منشأ أو محدد | اسم عرض القناة المحددة |
+| `desired_channel_name` | لا | تلميح افتراضي/بحث، واسم إنشاء القناة عندما يكون الإنشاء مدعوما |
+| `chat_id` | لا | Chat id لاشتراكات الدردشة عند الاقتضاء |
+| `ms_bot_app_id` | وضع Bot Framework | Microsoft Bot Framework app id |
+| `ms_bot_app_password` | وضع Bot Framework | كلمة مرور تطبيق Bot Framework |
+| `bot_display_name` | وضع Bot Framework | اسم العرض المستخدم في تدفقات بيان تطبيق Teams |
+| `messaging_endpoint` | وضع Bot Framework | Endpoint عام لمراسلة Bot Framework |
+
+<Aside type="note">
+تستخدم عمليات إرسال Teams وإعداد الاشتراكات المعرفات، لا أسماء العرض. تحفظ التسميات للمشغلين وواجهات الإعداد، لكن `channel_id` أو `team_id` أو `chat_id` تظل معرفات وقت التشغيل.
+</Aside>
+
+<Aside type="caution">
+يتطلب إنشاء قناة Teams مفقودة صلاحية Graph المفوضة `Channel.Create` ومستخدما مسجل الدخول يسمح له بإنشاء قنوات في الفريق المحدد.
+</Aside>
 
 ## Features
 
@@ -170,7 +144,7 @@ Teams supports a subset of Markdown:
 
 ### Adaptive Cards
 
-Teams has native Adaptive Card support through Bot Framework attachments. Use the version supported by your target Teams client and action model; Adaptive Cards 1.4 features such as Universal Actions are specific to supported bot scenarios.
+يدعم Teams بطاقات Adaptive Card بشكل أصلي عبر مرفقات Bot Framework. استخدم الإصدار الذي يدعمه عميل Teams الهدف ونموذج الإجراءات لديك؛ فميزات Adaptive Cards 1.4 مثل Universal Actions خاصة بسيناريوهات البوت المدعومة.
 
 ```yaml
 - id: send_card
@@ -343,7 +317,7 @@ Store the conversation reference when users first interact with your bot to enab
 ## Security
 
 <Aside type="caution">
-Always validate incoming Bot Framework authentication tokens to verify requests are from Microsoft.
+تحقق دائما من رموز مصادقة Bot Framework الواردة للتأكد من أن الطلبات صادرة من Microsoft.
 </Aside>
 
 Greentic automatically validates:
@@ -354,5 +328,5 @@ Greentic automatically validates:
 ## Next Steps
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Design cards visually
-- [Slack Provider](/providers/messaging/slack/) - Add Slack integration
-- [WebChat Provider](/providers/messaging/webchat/) - Embed in websites
+- [موفر Slack](/providers/messaging/slack/) - إضافة تكامل Slack
+- [موفر WebChat](/providers/messaging/webchat/) - تضمينه في مواقع الويب

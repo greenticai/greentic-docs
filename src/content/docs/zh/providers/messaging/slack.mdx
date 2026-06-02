@@ -215,6 +215,8 @@ Slack 使用 mrkdwn 格式：
 
 ### 文件上传
 
+Slack 的文件 API 会随时间变化。仅当已安装的 `messaging-slack` pack 为您的版本公开文件支持时才使用此功能；否则请发送链接，或使用 Slack 当前的外部上传流程。
+
 ```yaml
 - id: upload_file
   type: reply
@@ -358,7 +360,7 @@ tenants:
 
 3. **测试 Webhook：**
    ```bash
-   curl https://your-domain.com/webhook/slack/demo/default
+   curl https://your-domain.com/v1/messaging/ingress/messaging-slack/demo/default
    ```
 
 ### `not_authed` 错误
@@ -398,4 +400,4 @@ Greentic 会自动校验：
 ## 下一步
 
 - [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - 设计富消息
-- [Teams Provider](/zh/providers/messaging/teams/) - 添加 Teams 集成
+- [Teams Provider](/providers/messaging/teams/) - 添加 Teams 集成

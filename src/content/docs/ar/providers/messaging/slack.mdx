@@ -1,121 +1,96 @@
 ---
 title: Slack
-description: Connect your digital worker to Slack workspaces
+description: اربط العامل الرقمي لديك بمساحات عمل Slack
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Overview
+## نظرة عامة
 
-The Slack provider integrates your digital worker with Slack workspaces. It supports:
+يدمج موفر Slack العامل الرقمي لديك مع مساحات عمل Slack. وهو يدعم:
 
-- Direct messages (DMs)
-- Channel messages
-- App mentions
-- Interactive components (buttons, menus)
-- Block Kit rich messaging
-- Slash commands
-- Thread replies
+- الرسائل المباشرة (DMs)
+- رسائل القنوات
+- الإشارات إلى التطبيق
+- المكونات التفاعلية (الأزرار والقوائم)
+- رسائل Block Kit الغنية
+- أوامر slash
+- الردود ضمن الخيوط
 
-## Prerequisites
+## المتطلبات المسبقة
 
-- A Slack workspace
-- Admin access to create a Slack app
+- مساحة عمل Slack
+- صلاحية مسؤول لإنشاء تطبيق Slack
 
-## Setup
+## الإعداد
 
 <Steps>
 
-1. **Create a Slack App**
+1. **إنشاء زوج رموز تكوين Slack**
 
-   Go to [api.slack.com/apps](https://api.slack.com/apps) and click "Create New App":
-   - Choose "From scratch"
-   - Enter an app name (e.g., "My Support Bot")
-   - Select your workspace
+   انتقل إلى [api.slack.com/apps](https://api.slack.com/apps) وأنشئ زوج رموز تكوين للتطبيق. انسخ القيمتين:
+   - Configuration access token (`xoxe.xoxp-...`)
+   - Configuration refresh token (`xoxe-1-...`)
 
-2. **Configure Bot Token Scopes**
-
-   Go to **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**:
-
-   Required scopes:
-   - `chat:write` - Send messages
-   - `app_mentions:read` - Receive app mention events
-   - `im:history` - Read DM history
-   - `im:write` - Open DMs
-   - `users:read` - Read user info
-
-   Optional scopes:
-   - `channels:history` - Read channel messages
-   - `channels:read` - List channels
-   - `files:read` - Read files
-   - `files:write` - Upload files
-
-3. **Enable Event Subscriptions**
-
-   Go to **Event Subscriptions**:
-   - Enable Events
-   - Set Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}`
-
-   Subscribe to bot events:
-   - `message.im` - DM messages
-   - `message.channels` - Channel messages
-   - `app_mention` - @mentions
-
-4. **Enable Interactivity**
-
-   Go to **Interactivity & Shortcuts**:
-   - Enable Interactivity
-   - Set Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
-
-5. **Install App to Workspace**
-
-   Go to **Install App** → **Install to Workspace**
-
-   Copy the **Bot User OAuth Token** (starts with `xoxb-`)
-
-6. **Get App Credentials**
-
-   From **Basic Information**:
-   - App ID
-   - Signing Secret for request verification
-   - Configuration Token if you want Greentic to update the app manifest automatically
-
-7. **Configure Provider**
+2. **تكوين الموفر**
 
    ```json title="answers.json"
    {
-     "messaging-slack": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "api_base_url": "https://slack.com/api",
-       "slack_bot_token": "xoxb-xxx-xxx-xxx",
-       "slack_app_id": "A07XXXXXX",
-       "slack_configuration_token": "xoxe.xoxp-xxx"
+     "setup_answers": {
+       "messaging-slack": {
+         "slack_configuration_access_token": "xoxe.xoxp-xxx",
+         "slack_configuration_refresh_token": "xoxe-1-xxx"
+       }
      }
    }
    ```
 
-8. **Run Setup**
+3. **تشغيل الإعداد**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
+4. **النقر على Add to Slack**
+
+   يقوم الإعداد بتسجيل تطبيق Slack أو تحديثه ويعرض إجراء **Add to Slack**. افتح عنوان URL لتفويض Slack الذي تم إنشاؤه، واختر مساحة العمل، وراجع النطاقات المطلوبة، ثم وافق على التثبيت.
+
+   عندما يعود تحويل OAuth إلى الإعداد، يحفظ Greentic معرف تطبيق Slack، ومعرف العميل، وسر العميل، وإجابات OAuth الخاصة بوقت التشغيل للمستأجر. إذا لم تتم معالجة callback تلقائيا، فشغل `gtc setup --answers answers.json ./my-bundle` مرة أخرى بعد الموافقة على التثبيت.
+
+5. **إضافة التطبيق في Slack**
+
+   افتح Slack وتحقق من تثبيت التطبيق في مساحة العمل. لمحادثات القنوات، أضف التطبيق إلى القناة التي يجب أن يرد فيها العامل. يمكنك فعل ذلك من إعدادات تكامل القناة أو عبر ذكر التطبيق أو دعوته في القناة.
+
+6. **بدء وقت التشغيل أو إعادة تشغيله**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   يستخدم بدء التشغيل `slack_app_id` المحفوظة وزوج رموز التكوين لتحديث بيان تطبيق Slack بعنوان webhook الحالي.
+
+7. **اختبار القناة**
+
+   أرسل رسالة مباشرة إلى التطبيق أو اذكر التطبيق في قناة Slack التي أضفته إليها. تصل أحداث القنوات فقط للقنوات التي يكون التطبيق عضوا فيها وتسمح بها النطاقات المثبتة.
+
 </Steps>
 
-## Configuration Options
+## خيارات التكوين
 
-| Option | Required | Description |
+| الخيار | مطلوب | الوصف |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable the provider |
-| `public_base_url` | Yes | Public URL for webhooks |
-| `slack_bot_token` | Yes | Bot User OAuth Token (`xoxb-...`) |
-| `slack_app_id` | Yes | App ID from Basic Information |
-| `slack_configuration_token` | No | For automatic manifest updates |
-| `api_base_url` | No | Slack API URL (default: `https://slack.com/api`) |
+| `slack_configuration_access_token` | نعم | رمز تكوين Slack قصير العمر المستخدم لتحديثات بيان التطبيق |
+| `slack_configuration_refresh_token` | نعم | Refresh token يستخدم لتدوير configuration access token |
+| `slack_app_id` | منشأ | Slack app id يتم إنشاؤه أو إرجاعه بواسطة الإعداد |
+| `slack_client_id` | منشأ | Slack OAuth client id يتم إرجاعه عند تسجيل التطبيق |
+| `client_secret` | سر منشأ | Slack OAuth client secret يتم إرجاعه عند تسجيل التطبيق |
 
 <Aside type="note">
-The setup layer also accepts the older `bot_token` alias and stores it as `slack_bot_token`, but new answers files should use the wizard-generated key.
+لا تتطلب تدفقات الإعداد الجديدة إدخال `slack_bot_token` يدويا. يحفظ إجراء الإعداد وتدفق تثبيت OAuth بيانات اعتماد وقت التشغيل. إذا كنت ترقي حزمة أقدم، فأعد إنشاء الإجابات باستخدام `gtc setup --dry-run --emit-answers answers.json ./my-bundle` ثم شغل الإعداد مرة أخرى.
+</Aside>
+
+<Aside type="caution">
+تنتهي صلاحية Slack configuration access tokens. احتفظ برمز refresh token المطابق في مخزن أسرار الإعداد حتى يتمكن الموفر من تدوير الزوج أثناء تحديثات البيان.
 </Aside>
 
 ## Features
@@ -240,7 +215,7 @@ Reply in a thread:
 
 ### File Uploads
 
-Slack's file APIs change over time. Use this only when the installed `messaging-slack` pack exposes file support for your version; otherwise send a link or use Slack's current external upload flow.
+تتغير واجهات API الخاصة بملفات Slack بمرور الوقت. استخدم هذا فقط عندما تعرض حزمة `messaging-slack` المثبتة دعم الملفات لإصدارك؛ وإلا فأرسل رابطا أو استخدم تدفق الرفع الخارجي الحالي في Slack.
 
 ```yaml
 - id: upload_file
@@ -385,7 +360,7 @@ tenants:
 
 3. **Test Webhook:**
    ```bash
-   curl https://your-domain.com/webhook/slack/demo/default
+   curl https://your-domain.com/v1/messaging/ingress/messaging-slack/demo/default
    ```
 
 ### "not_authed" Error
@@ -425,5 +400,5 @@ Greentic automatically validates:
 ## Next Steps
 
 - [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - Design rich messages
-- [Teams Provider](/providers/messaging/teams/) - Add Teams integration
-- [Flows Guide](/concepts/flows/) - Build complex workflows
+- [موفر Teams](/providers/messaging/teams/) - إضافة تكامل Teams
+- [دليل التدفقات](/concepts/flows/) - بناء workflows معقدة

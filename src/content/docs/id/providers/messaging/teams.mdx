@@ -144,7 +144,7 @@ Teams mendukung subset Markdown:
 
 ### Adaptive Cards
 
-Teams memiliki dukungan Adaptive Card yang sangat baik:
+Teams memiliki dukungan Adaptive Card native melalui attachment Bot Framework. Gunakan versi yang didukung oleh client Teams target dan model action Anda; fitur Adaptive Cards 1.4 seperti Universal Actions hanya berlaku untuk skenario bot yang didukung.
 
 ```yaml
 - id: send_card
@@ -317,7 +317,7 @@ Simpan conversation reference saat pengguna pertama kali berinteraksi dengan bot
 ## Keamanan
 
 <Aside type="caution">
-Selalu validasi token JWT pada request masuk untuk memastikan request tersebut berasal dari Microsoft.
+Selalu validasi token autentikasi Bot Framework pada request masuk untuk memastikan request tersebut berasal dari Microsoft.
 </Aside>
 
 Greentic secara otomatis memvalidasi:
@@ -328,5 +328,5 @@ Greentic secara otomatis memvalidasi:
 ## Langkah Selanjutnya
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Rancang card secara visual
-- [Slack Provider](/id/providers/messaging/slack/) - Tambahkan integrasi Slack
-- [WebChat Provider](/id/providers/messaging/webchat/) - Sematkan di website
+- [Provider Slack](/providers/messaging/slack/) - Tambahkan integrasi Slack
+- [Provider WebChat](/providers/messaging/webchat/) - Sematkan di website

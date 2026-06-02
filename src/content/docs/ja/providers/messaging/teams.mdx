@@ -144,7 +144,7 @@ Teams は Markdown の一部をサポートします:
 
 ### Adaptive Cards
 
-Teams は Adaptive Card を非常によくサポートしています:
+Teams は Bot Framework attachments を通じて Adaptive Card をネイティブにサポートしています。対象の Teams client と action model がサポートするバージョンを使用してください。Universal Actions などの Adaptive Cards 1.4 機能は、サポート対象の bot シナリオに固有です。
 
 ```yaml
 - id: send_card
@@ -317,7 +317,7 @@ user からの開始を待たずにメッセージを送信します:
 ## セキュリティ
 
 <Aside type="caution">
-incoming request が Microsoft からのものであることを確認するため、常に JWT token を検証してください。
+incoming request が Microsoft からのものであることを確認するため、常に Bot Framework authentication token を検証してください。
 </Aside>
 
 Greentic は次を自動検証します:
@@ -328,5 +328,5 @@ Greentic は次を自動検証します:
 ## 次のステップ
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - card を視覚的に設計する
-- [Slack Provider](/ja/providers/messaging/slack/) - Slack integration を追加する
-- [WebChat Provider](/ja/providers/messaging/webchat/) - website に埋め込む
+- [Slack Provider](/providers/messaging/slack/) - Slack integration を追加する
+- [WebChat Provider](/providers/messaging/webchat/) - website に埋め込む

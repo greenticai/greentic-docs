@@ -144,7 +144,7 @@ Teams 支持部分 Markdown：
 
 ### Adaptive Cards
 
-Teams 对 Adaptive Card 的支持非常完善：
+Teams 通过 Bot Framework attachments 原生支持 Adaptive Card。请使用目标 Teams 客户端和操作模型支持的版本；Universal Actions 等 Adaptive Cards 1.4 功能仅适用于受支持的机器人场景。
 
 ```yaml
 - id: send_card
@@ -317,7 +317,7 @@ tenants:
 ## 安全
 
 <Aside type="caution">
-始终校验入站请求中的 JWT token，以确认它们来自 Microsoft。
+始终校验入站请求中的 Bot Framework 身份验证 token，以确认请求来自 Microsoft。
 </Aside>
 
 Greentic 会自动校验：
@@ -328,5 +328,5 @@ Greentic 会自动校验：
 ## 下一步
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - 可视化设计卡片
-- [Slack Provider](/zh/providers/messaging/slack/) - 添加 Slack 集成
-- [WebChat Provider](/zh/providers/messaging/webchat/) - 嵌入到网站中
+- [Slack Provider](/providers/messaging/slack/) - 添加 Slack 集成
+- [WebChat Provider](/providers/messaging/webchat/) - 嵌入到网站中

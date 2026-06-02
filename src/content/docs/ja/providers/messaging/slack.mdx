@@ -215,6 +215,8 @@ thread に返信します:
 
 ### File Upload
 
+Slack の file API は時間とともに変わります。インストール済みの `messaging-slack` pack が対象バージョンの file support を公開している場合にのみ使用してください。それ以外の場合はリンクを送るか、Slack の現在の external upload flow を使用してください。
+
 ```yaml
 - id: upload_file
   type: reply
@@ -358,7 +360,7 @@ tenants:
 
 3. **Webhook をテストする:**
    ```bash
-   curl https://your-domain.com/webhook/slack/demo/default
+   curl https://your-domain.com/v1/messaging/ingress/messaging-slack/demo/default
    ```
 
 ### "not_authed" Error
@@ -398,5 +400,5 @@ Greentic は次を自動検証します:
 ## 次のステップ
 
 - [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - rich message を設計する
-- [Teams Provider](/ja/providers/messaging/teams/) - Teams integration を追加する
-- [Flows Guide](/ja/concepts/flows/) - 複雑な workflow を構築する
+- [Teams Provider](/providers/messaging/teams/) - Teams integration を追加する
+- [Flows Guide](/concepts/flows/) - 複雑な workflow を構築する
