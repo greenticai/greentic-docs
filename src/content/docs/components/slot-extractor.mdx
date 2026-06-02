@@ -114,10 +114,10 @@ slot_schema:
 nodes: { ... }
 ```
 
-The flow-level field is the single source of truth — Fast2Flow scoping, design-time tooling, and Phase-D runtime wiring all read from it.
+The flow-level field is the single source of truth — Fast2Flow scoping, design-time tooling, and the runner all read from it.
 
 <Aside type="note">
-Today the same definitions are also inlined into the slot-extractor node payload so the pack runs end-to-end on the current runtime. Phase D removes the duplication by reading the flow-level field directly and passing it into the extractor call.
+At execute time the runner detects `ai.greentic.component-slot-extractor` nodes and injects the flow-level `slot_schema` into the invocation as `slot_definitions`, so the node payload only has to forward the utterance. An explicit node-level `slot_definitions` key still wins (back-compat with flows authored before injection landed). Requires `greentic-runner` ≥ `1.1.26775859893`.
 </Aside>
 
 ## Binding into adaptive-card prefill
