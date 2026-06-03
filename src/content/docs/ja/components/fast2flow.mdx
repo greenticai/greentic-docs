@@ -113,6 +113,55 @@ These components are coordinated by three flows defined in the pack:
 # flows/route.ygtc  — Full routing pipeline with LLM fallback
 ```
 
+## Opting In From A Pack
+
+A pack tells the runtime "route my incoming text through fast2flow before flow dispatch" by declaring the `greentic.cap.fast2flow.v1` capability in its `pack.yaml`:
+
+```yaml title="pack.yaml"
+pack_id: greentic.example.demo
+version: 0.1.0
+kind: application
+publisher: Greentic
+capabilities:
+  - name: greentic.cap.fast2flow.v1
+    description: opts into fast2flow free-text routing
+components: []
+flows:
+  - id: default
+    file: flows/main.ygtc
+    tags: [default]
+    entrypoints: [default]
+```
+
+`greentic-pack build` carries the declaration into the compiled `manifest.cbor`; the runtime's `BundleCapabilityGate` matches the exact string and enables the fast2flow pipeline for that pack.
+
+The pack can also ship its routing index inline as `assets/intent-index.json` (same shape as the `index.json` produced by `greentic-fast2flow bundle index`). If the deployer doesn't populate an external `<indexes_path>/<scope>/index.json`, the runtime's pack-fallback materializer reads the asset, writes it under the indexes path, and reuses it for the rest of the process lifetime.
+
+```json title="assets/intent-index.json"
+{
+  "version": "v2",
+  "scope": "demo:default",
+  "generated_at_ms": 0,
+  "entries": [
+    {
+      "flow_id": "intent-checkin",
+      "pack_id": "greentic.example.demo",
+      "target": "greentic.example.demo/default/checkin_card",
+      "title": "Check in",
+      "tags": ["check", "checkin"],
+      "utterances": ["check in {{person}}", "{{person}} just arrived"],
+      "node_ids": ["checkin_card"]
+    }
+  ]
+}
+```
+
+See [pack-format / Capabilities](/reference/pack-format/#capabilities) for the broader capabilities story (per-component derived vs. author-declared).
+
+<Aside type="note">
+This section is in English in the localized docs and pending translation. Track translation work in a follow-up PR.
+</Aside>
+
 ## Bundle Workflow
 
 fast2flow indexes flows from your bundle's `.ygtc` files. The indexer scans your bundle directory, extracts metadata (title, description, tags), and builds a TF-IDF index with BM25 scoring.
