@@ -186,7 +186,16 @@ fast2flow dispatch currently emits `routeToCardId` only — it renders the match
 
 ## Bundle Workflow
 
-fast2flow indexes flows from your bundle's `.ygtc` files. The indexer scans your bundle directory, extracts metadata (title, description, tags), and builds a TF-IDF index with BM25 scoring.
+fast2flow can only route to what is in the **intent index** for a scope. The index is a catalog of intent entries — each with a `title`, `tags`, and (most importantly) example `utterances` — that the matcher scores against incoming text with BM25. **You must generate this index from your intent metadata before fast2flow can route correctly**; an empty or metadata-poor index is the most common reason routing falls through to `Continue`.
+
+There are two ways to produce the index:
+
+1. **Derive from flow metadata** — `greentic-fast2flow bundle index` scans your bundle's `.ygtc` files and extracts whatever `title` / `description` / `tags` they carry. This only works well if your flows are richly annotated.
+2. **Author an intent catalog** (the "prefill" route) — write the intent entries yourself (with `utterances`), build them with `greentic-fast2flow index build`, and ship the result as `assets/intent-index.json` in your pack. This is what the [pet-daycare demo](#end-to-end-example-pet-daycare) does, because its flows carry no routing metadata of their own.
+
+<Aside type="caution">
+`utterances` are the strongest routing signal and are **not** derivable from a typical flow file — a flow only has a `title`/`tags`. If you want phrase-level matching like `"who is here today"` → attendance, you almost always need the authored catalog route. Always `route simulate` a few real phrases before shipping.
+</Aside>
 
 ### Bundle Structure
 
@@ -229,7 +238,7 @@ nodes:
 ```
 
 <Aside type="tip">
-Title words receive a 2x TF-IDF boost, so choose descriptive titles for better routing accuracy.
+`tags` and `title` are the signals BM25 scores against (title words get a 2x boost). A flow file alone gives you no `utterances`, so for anything beyond keyword matches, author the intent catalog below.
 </Aside>
 
 ### Building the Index
@@ -246,8 +255,66 @@ greentic-fast2flow bundle index \
 ```
 
 This produces:
-- `index.json` — TF-IDF index with term frequencies and document frequencies
-- `intents.md` — Human-readable intent documentation
+- `index.json` — the scoped intent catalog (entries with `title`, `tags`, `utterances`, `target`) that the matcher scores with BM25 at request time
+- `intents.md` — human-readable summary of every intent the scan found
+
+<Aside type="tip">
+Open `intents.md` after building — it's the fastest way to catch a metadata-poor index. If your intents show empty tags and no utterances (as bare flow files do), the derived index won't route well and you should author the catalog instead.
+</Aside>
+
+### Generating the index from intent metadata
+
+When your flows don't carry rich metadata, author the intents directly and build the index with `index build`. The input is a JSON array of intent entries — `title`, `tags`, and `utterances` are what make routing work:
+
+```json title="intents.json"
+[
+  {
+    "flow_id": "intent-checkin",
+    "pack_id": "greentic.pet-daycare.demo",
+    "target": "greentic.pet-daycare.demo/default/checkin_card",
+    "title": "Check in a pet for daycare",
+    "tags": ["check", "checkin", "check-in", "arrive", "dropoff", "daycare"],
+    "utterances": [
+      "check in {{person}}",
+      "check in {{person}} at {{time}}",
+      "{{person}} just arrived",
+      "drop off {{person}}"
+    ],
+    "node_ids": ["checkin_card"]
+  }
+]
+```
+
+Build, inspect, and simulate before shipping:
+
+```bash
+# Build the scope's index.json from the authored intents
+greentic-fast2flow index build \
+  --scope demo:default \
+  --flows intents.json \
+  --output ./state/indexes
+
+# Sanity-check the entries landed
+greentic-fast2flow index inspect --scope demo:default --input ./state/indexes
+
+# Prove a real phrase dispatches to the right target
+greentic-fast2flow route simulate \
+  --scope demo:default \
+  --text "drop off Rex" \
+  --indexes-path ./state/indexes
+```
+
+Then ship the built index inside the pack so the runtime materializes it with no operator setup (see [Opting In From A Pack](#opting-in-from-a-pack)):
+
+```
+my-pack/
+└── assets/
+    └── intent-index.json   # the v2-wrapped catalog the pack-fallback materializer loads
+```
+
+<Aside type="note">
+`assets/intent-index.json` wraps the same entries with `version`, `scope`, and `generated_at_ms` (see the [Opting In](#opting-in-from-a-pack) sample). The matcher computes BM25/TF-IDF from these entries in memory — the file itself is the catalog, not a precomputed term-frequency table.
+</Aside>
 
 ### Validating a Bundle
 
