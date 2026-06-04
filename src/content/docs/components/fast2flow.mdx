@@ -135,7 +135,14 @@ flows:
 
 `greentic-pack build` carries the declaration into the compiled `manifest.cbor`; the runtime's `BundleCapabilityGate` matches the exact string and enables the fast2flow pipeline for that pack.
 
-The pack can also ship its routing index inline as `assets/intent-index.json` — a pre-seeded ("prefilled") index with the same shape as the `index.json` produced by `greentic-fast2flow bundle index`. On a local run **no environment variables are required**: `GREENTIC_FAST2FLOW_INDEXES_PATH` now defaults to `<temp_dir>/greentic-fast2flow-indexes`, and if the deployer hasn't populated an external `<indexes_path>/<scope>/index.json`, the runtime's pack-fallback materializer reads the asset, writes it under the indexes path, and reuses it for the rest of the process lifetime. External deployers (k8s, cloud bundle controllers) can still pin a durable path via the env var.
+The pack can also ship its routing index inline as `assets/intent-index.json` — a pre-seeded ("prefilled") index with the same shape as the `index.json` produced by `greentic-fast2flow bundle index`.
+
+On a local run, **no environment variables are required**:
+
+- `GREENTIC_FAST2FLOW_INDEXES_PATH` defaults to `<temp_dir>/greentic-fast2flow-indexes`.
+- If no external `<indexes_path>/<scope>/index.json` exists, the runtime's pack-fallback materializer reads the inline asset and writes it there.
+- That materialized index is reused for the rest of the process lifetime.
+- External deployers (k8s, cloud bundle controllers) can still pin a durable path by setting `GREENTIC_FAST2FLOW_INDEXES_PATH` explicitly.
 
 ```json title="assets/intent-index.json"
 {
