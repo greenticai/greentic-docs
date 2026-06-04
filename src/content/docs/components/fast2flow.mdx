@@ -81,23 +81,26 @@ Every routing decision produces one of four directives:
 {"type": "continue"}
 ```
 
-## Installation
+## Activation
 
-fast2flow is distributed as a `.gtpack` artifact via GHCR:
+fast2flow runs **inside the greentic-start runtime** as a `post_ingress` hook — you don't install it into your bundle. A pack turns it on by declaring `greentic.cap.fast2flow.v1` in `pack.yaml`; the runtime's `BundleCapabilityGate` runs the routing pipeline **only for packs that opt in** (see [Opting In From A Pack](#opting-in-from-a-pack)). Packs that don't declare the capability are never intercepted.
 
-```bash
-# Pull from GHCR
-oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:latest
+## CLI & Tooling
 
-# Or reference a specific version
-oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:v0.4.6
-```
+Two binaries back fast2flow, published as release artifacts from [`greentic-biz/greentic-fast2flow`](https://github.com/greentic-biz/greentic-fast2flow/releases):
 
-The pack registers a `post_ingress` hook that intercepts messages before they reach any flow.
+| Binary | Role |
+|--------|------|
+| `greentic-fast2flow` | Dev/CI CLI — build & inspect indexes, simulate routing, validate bundles and policies (see [CLI Reference](#cli-reference)). |
+| `greentic-fast2flow-routing-host` | The native routing host the runtime spawns at request time. Override the path with the `HOST_BIN` env var. |
+
+Download and unpack the release matching your platform from the releases page (artifacts are named `greentic-fast2flow-<version>-<target>.tar.gz`), or let `greentic-dev` provision it as part of the toolchain.
+
+Once it's on your `PATH`, the typical dev loop is: build an index from your bundle, simulate a few utterances, then ship — covered under [Bundle Workflow](#bundle-workflow) and [CLI Reference](#cli-reference) below.
 
 ## WASM Components
 
-fast2flow ships three WASM components (targeting `wasm32-wasip2`):
+fast2flow is built from three components (targeting `wasm32-wasip2`):
 
 | Component | Purpose | Operation |
 |-----------|---------|-----------|
@@ -105,13 +108,11 @@ fast2flow ships three WASM components (targeting `wasm32-wasip2`):
 | **Matcher** | Fast BM25-based intent matching against the index | `match` |
 | **Router** | Orchestrates the full routing pipeline | `route` |
 
-These components are coordinated by three flows defined in the pack:
+These operations are what the `greentic-fast2flow` CLI exposes (`index build`, `route simulate`, …) and what the runtime drives through the `greentic-fast2flow-routing-host` binary at request time.
 
-```yaml
-# flows/index.ygtc  — Runs at deploy time to build indexes
-# flows/match.ygtc  — Runtime BM25 intent matching
-# flows/route.ygtc  — Full routing pipeline with LLM fallback
-```
+<Aside type="note">
+The runtime currently invokes the native `greentic-fast2flow-routing-host` binary. Running the components directly as a WASM `.gtpack` is on the roadmap; the operations and scoring are identical either way.
+</Aside>
 
 ## Opting In From A Pack
 
