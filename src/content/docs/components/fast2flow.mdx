@@ -135,7 +135,7 @@ flows:
 
 `greentic-pack build` carries the declaration into the compiled `manifest.cbor`; the runtime's `BundleCapabilityGate` matches the exact string and enables the fast2flow pipeline for that pack.
 
-The pack can also ship its routing index inline as `assets/intent-index.json` (same shape as the `index.json` produced by `greentic-fast2flow bundle index`). If the deployer doesn't populate an external `<indexes_path>/<scope>/index.json`, the runtime's pack-fallback materializer reads the asset, writes it under the indexes path, and reuses it for the rest of the process lifetime.
+The pack can also ship its routing index inline as `assets/intent-index.json` — a pre-seeded ("prefilled") index with the same shape as the `index.json` produced by `greentic-fast2flow bundle index`. On a local run **no environment variables are required**: `GREENTIC_FAST2FLOW_INDEXES_PATH` now defaults to `<temp_dir>/greentic-fast2flow-indexes`, and if the deployer hasn't populated an external `<indexes_path>/<scope>/index.json`, the runtime's pack-fallback materializer reads the asset, writes it under the indexes path, and reuses it for the rest of the process lifetime. External deployers (k8s, cloud bundle controllers) can still pin a durable path via the env var.
 
 ```json title="assets/intent-index.json"
 {
@@ -157,6 +157,24 @@ The pack can also ship its routing index inline as `assets/intent-index.json` (s
 ```
 
 See [pack-format / Capabilities](/reference/pack-format/#capabilities) for the broader capabilities story (per-component derived vs. author-declared).
+
+### End-to-end example: pet-daycare
+
+The [pet-daycare demo](https://github.com/greenticai/greentic-demo/tree/main/apps/pet-daycare-app) is the canonical worked example. Its `pack.yaml` declares `greentic.cap.fast2flow.v1`, it ships a pre-seeded `assets/intent-index.json`, and it runs with nothing but:
+
+```bash
+greentic-start start --bundle ../pet-daycare-demo-bundle --tenant demo --team default
+```
+
+No env vars are needed — the capability opens the gate and the materializer supplies the index.
+
+<Aside type="caution">
+Earlier builds required `GREENTIC_FAST2FLOW_FORCE_ENABLE=1` plus an explicit `GREENTIC_FAST2FLOW_INDEXES_PATH` to open the routing gate. Both are now obsolete — declare `greentic.cap.fast2flow.v1` in `pack.yaml` instead. `FORCE_ENABLE` is no longer read.
+</Aside>
+
+<Aside type="note">
+fast2flow dispatch currently emits `routeToCardId` only — it renders the matched flow's static card but does not inject `operation` metadata to invoke the underlying flow wasm. Use the button-driven path when the flow must execute logic on entry.
+</Aside>
 
 ## Bundle Workflow
 
@@ -416,6 +434,10 @@ greentic-fast2flow policy validate --file policy.json
 
 ## Environment Variables
 
+The `FAST2FLOW_*` variables configure the native host binary and CLI. The `GREENTIC_FAST2FLOW_*` variables configure the runtime gate inside `greentic-start`.
+
+### Host & CLI (`greentic-fast2flow`)
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FAST2FLOW_LLM_PROVIDER` | `disabled` | LLM provider: `disabled`, `openai`, `ollama` |
@@ -424,6 +446,13 @@ greentic-fast2flow policy validate --file policy.json
 | `FAST2FLOW_MIN_CONFIDENCE` | `0.5` | Default minimum confidence threshold |
 | `FAST2FLOW_LLM_MIN_CONFIDENCE` | `0.5` | Default LLM minimum confidence |
 | `FAST2FLOW_CANDIDATE_LIMIT` | `20` | Default max candidates |
+
+### Runtime gate (`greentic-start`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GREENTIC_FAST2FLOW_INDEXES_PATH` | `<temp_dir>/greentic-fast2flow-indexes` | Where the pack-fallback materializer writes `<scope>/index.json`. Optional — override only to pin a durable path for k8s/cloud deploys. |
+| `GREENTIC_FAST2FLOW_FORCE_ENABLE` | — | **Deprecated / no-op.** Superseded by declaring the `greentic.cap.fast2flow.v1` capability in `pack.yaml`. No longer read. |
 
 ## Performance
 
@@ -445,9 +474,10 @@ Start with deterministic BM25 routing. Only enable LLM fallback if your flows ha
 1. **Write descriptive titles** — Title words get 2x TF-IDF boost for better scoring
 2. **Use specific tags** — Tags are the primary signal for BM25 matching
 3. **Set appropriate thresholds** — Start with `min_confidence: 0.5` and tune up
-4. **Use policies for overrides** — Change behavior per scope/channel/provider without redeploying
-5. **Monitor Continue rate** — High `Continue` output indicates gaps in your flow coverage
-6. **Keep LLM as fallback** — Deterministic routing is faster and more predictable
+4. **Tune down for short utterances** — The `0.5` default is tuned for longer marker-templated utterances. Short, marker-free utterances (e.g. `"who is here today"`) score lower under BM25; if a pre-seeded index under-dispatches, lower `FAST2FLOW_MIN_CONFIDENCE` to ~`0.05` rather than raising it
+5. **Use policies for overrides** — Change behavior per scope/channel/provider without redeploying
+6. **Monitor Continue rate** — High `Continue` output indicates gaps in your flow coverage
+7. **Keep LLM as fallback** — Deterministic routing is faster and more predictable
 
 ## Next Steps
 
