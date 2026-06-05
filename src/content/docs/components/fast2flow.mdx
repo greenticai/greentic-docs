@@ -373,14 +373,35 @@ Each `RoutingEntity` has:
 - **`role`** — optional preposition tag captured from the text (`"in"` / `"from"` / `"to"` for locations, `"for"` / `"with"` for people). Lets a flow tell *origin* from *destination*.
 - **`formats`** — optional alternate serializations. Dates carry an `iso` form (`2026-05-30`) because Adaptive Cards `Input.Date` and ISO-8601 consumers want hyphenated dates rather than the compact `normalized`.
 
+### Consuming prefill in a card
+
+`greentic-start` reads the `entities` off the Dispatch and writes each one into the message metadata under a stable naming convention, so card fields can opt in with a `${prefill_<key>}` placeholder. For every entity it emits:
+
+- `prefill_<kind>` — the `normalized` value (`prefill_location`, `prefill_date`, `prefill_person`).
+- `prefill_<kind>_<role>` — a role-tagged variant when the entity carries a `role` (`prefill_location_from`, `prefill_location_to`).
+- `prefill_<kind>_<format>` — each alternate serialization in `formats` (`prefill_date_iso`).
+
+A card author binds a field to one of those keys:
+
+```json title="checkin_card.json (excerpt)"
+{
+  "type": "Input.Text", "id": "pet", "value": "${prefill_person}"
+},
+{
+  "type": "Input.Date", "id": "arrival", "value": "${prefill_date_iso}"
+}
+```
+
+When the check-in routes, the card opens with the pet name and arrival date already filled in. Any `${prefill_*}` placeholder that no entity matched is substituted with an **empty string** (never left as literal placeholder text), so a card can safely reference keys that only sometimes arrive.
+
 ### Leveraging prefill in a pack
 
 1. **Author marker-rich utterances.** Prefill extracts exactly the entity kinds you template into `utterances`. An entry like `"check in {{person}} at {{time}}"` both improves routing *and* guarantees the `person`/`time` values land on the Dispatch.
-2. **Read the entities downstream.** `greentic-start` reads the `entities` array and surfaces them to card templates as `prefill_<kind>` substitution keys (e.g. `prefill_person`, `prefill_date`, `prefill_date_iso`), so a check-in card opens with the pet name and arrival time already filled in.
-3. **Use `formats.iso` for date inputs.** Bind Adaptive `Input.Date` fields to the `iso` form, not the compact `normalized`.
+2. **Bind card fields to `${prefill_*}`.** Opt each field in with the matching key (see above) — there's nothing else to wire up.
+3. **Use the `_iso` key for date inputs.** Bind Adaptive `Input.Date` fields to `${prefill_<kind>_iso}` (the hyphenated `YYYY-MM-DD` form), not the compact `normalized`.
 
 <Aside type="caution">
-Prefill entities travel on the **native routing-host** path. The WebAssembly (WIT) entrypoint has no vector type for entities yet, so it drops them — a flow dispatched through the wasm component receives the `Dispatch` target but an empty `entities` array. Use the [`greentic-fast2flow-routing-host`](#cli--tooling) binary when you need prefill end-to-end.
+Prefill entities travel on the **native routing-host** path that `greentic-start` drives. The WebAssembly (WIT) entrypoint has no vector type for entities yet, so it drops them — a flow dispatched through the wasm component receives the `Dispatch` target but an empty `entities` array. Use the [`greentic-fast2flow-routing-host`](#cli--tooling) binary when you need prefill end-to-end.
 </Aside>
 
 ## Policy Configuration
