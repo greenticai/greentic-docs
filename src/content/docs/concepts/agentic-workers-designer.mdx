@@ -1,0 +1,98 @@
+---
+title: Building Agentic Workers in the Designer
+description: Author an agentic worker visually in the Greentic Designer — the DW Composer Studio and chat auto-fill
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+The [Greentic Designer](/extensions/designer-extensions/) lets you build an
+[agentic worker](/concepts/agentic-workers/) **visually**, without hand-writing an
+`AgentConfig` or packaging tools yourself. It produces the same artifact the runtime runs:
+a `.gtpack` containing the worker's config.
+
+There are two surfaces, and they share one backend:
+
+- **DW Composer Studio** (`/dw-composer`) — a form: fill in the worker section by section.
+- **Chat ✨ Auto-fill** — describe a goal in plain language and let a *composer* propose the
+  whole worker, which you then refine in the Studio.
+
+## DW Composer Studio (the canonical path)
+
+Open the dashboard → **Digital Worker** tab → **New Project**. The Studio is a stacked form:
+
+| Section | What you set |
+|---|---|
+| **Basic** | Display name, description, tenant, locale, vertical |
+| **Instructions** | The goal, the system prompt, the opening message |
+| **LLM** | Provider + model (e.g. OpenAI `gpt-4o-mini`) |
+| **Tools** | The tool extensions the worker may call |
+| **Memory** | Short-term / long-term memory providers |
+| **Channels** | Messaging channels (webchat, Slack, …) |
+
+A sticky **Manifest Preview** shows the worker taking shape. When you're happy, click
+**Build** — the Studio runs a pure-function mapper (`DwFormState → AnswerDocument`) and
+packages a `.gtpack`. Download it, or **Publish** it to the Greentic Store / **Deploy** it
+to a runtime.
+
+<Aside type="note">
+The Studio form path is self-contained — it does not need a composer extension. The form
+maps directly to the worker's `AgentConfig`, the same shape described in
+[Agentic Workers](/concepts/agentic-workers/#1-the-agent-config).
+</Aside>
+
+## Chat ✨ Auto-fill (compose from a goal)
+
+In the Studio, type a goal (e.g. *"A read-only network operations assistant for our telco"*)
+and click **✨ Auto-fill from goal**. The Designer:
+
+<Steps>
+
+1. Asks the LLM for 0–3 clarifying questions (`/api/dw/composer/plan-questions`).
+2. Sends your goal + answers to a **composer** — a vertical-specific extension that proposes
+   the worker (`compose_digital_worker`).
+3. Projects the result into the Studio form and shows a per-field **diff** so you can review
+   before applying.
+
+</Steps>
+
+Composers are **design extensions** advertising the `greentic:dw-composer/composer`
+capability. The Designer discovers every installed composer at startup and selects one by
+vertical at compose time. The bundled set covers `default`, `telco`, `banking-id`, `cs-bot`,
+`healthcare`, `public-sector`, `retail`, and `template-builder`.
+
+### Prerequisites for Auto-fill
+
+<Steps>
+
+1. **Install composer extensions** (v1.3.0+ — older `apiVersion v1` builds will not load):
+
+   ```bash
+   gtdx install greentic.dw.composer.default
+   gtdx install greentic.dw.composer.telco
+   ```
+
+   They land in `~/.greentic/extensions/design/`. On its next start the Designer logs how
+   many it discovered, e.g. `Discovered 8 DW composer(s) from 8 advertised extension(s).`
+
+2. **Configure an LLM.** Standalone: `--openai-api-key` / `GREENTIC_LLM_API_KEY` (or pass
+   `--llm-provider`). With an admin backend, the `agentic_worker_composer` role provides it.
+
+</Steps>
+
+<Aside type="caution">
+If no composer is installed, Auto-fill returns a structured "no composer" result — use the
+Studio form directly. (Discovery is LLM-free; only the actual composition calls the LLM.)
+</Aside>
+
+## From worker to running flow
+
+A Designer-built worker is the same artifact as a hand-authored one, so once it's packaged
+it runs exactly as described in [Agentic Workers](/concepts/agentic-workers/#4-run-it): a
+`dw.agent` node in a flow hands user messages to the worker's Plan→Act→Observe loop.
+
+| Step | Where |
+|---|---|
+| Build `.gtpack` | Studio **Build** button |
+| Publish to Store | **Publish** (`POST /api/dw/publish`) |
+| Deploy to a runtime | **Deploy** (`POST /api/dw/deploy`, needs an admin endpoint) |
+| Test before shipping | the Studio test-chat playground |
