@@ -58,7 +58,7 @@ The signing-in user must already have an account in tenant-manager, including a 
 
 | Flag | Environment variable | Description |
 |------|---------------------|-------------|
-| `--sso-return-origins <ORIGINS>` | `GREENTIC_ADMIN_SSO_RETURN_ORIGINS` | Comma-separated list of Designer origins permitted as SSO `return_to` targets. Provide bare lowercase origins (scheme + host + optional port), e.g. `https://designer.example.com`. Multiple origins: `https://designer.example.com,https://staging.designer.example.com`. Under `--dev`, `http://localhost` on any port is allowed automatically and does not need to be listed here. |
+| `--sso-return-origins <ORIGINS>` | `GREENTIC_ADMIN_SSO_RETURN_ORIGINS` | Comma-separated list of Designer origins permitted as SSO `return_to` targets. Provide bare lowercase origins (scheme + host + optional port), e.g. `https://designer.example.com`. Multiple origins: `https://designer.example.com,https://staging.designer.example.com`. Under `--dev`, `http://localhost`, `http://127.0.0.1`, and `http://[::1]` on any port are allowed automatically and do not need to be listed here. |
 
 Example startup flags:
 
@@ -105,7 +105,7 @@ Two possible causes:
 
 1. **`oidc_issuer` is not set** for the tenant in designer-admin. Check the tenant record via the admin API and ensure `oidc_issuer` is populated.
 
-2. **designer-admin is not running over HTTPS** (or localhost in dev mode). The SSO flow requires a secure context. In production, designer-admin must be reachable at an `https://` origin. In local development, `--dev` mode allows `http://localhost` automatically.
+2. **The admin's SSO URL was rejected by the login page's safety check** — it must be `https://`, or plain `http://` only on localhost loopback during development. The browser console logs `SSO login URL rejected; check admin configuration` in this case.
 
 ### Redirect rejected with `invalid_return_to`
 
