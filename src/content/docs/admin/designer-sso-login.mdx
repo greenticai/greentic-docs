@@ -1,0 +1,130 @@
+---
+title: Designer SSO Login
+description: Configure OIDC single sign-on so tenant users can sign in to the Greentic Designer with their organisation identity via tenant-manager.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Greentic Designer supports single sign-on (SSO) via OpenID Connect (OIDC). When SSO is enabled for a tenant, users click **Sign in with SSO** on the Designer login page and authenticate through their organisation's identity provider — tenant-manager — without any admin session being involved. The Designer mints its own session from the result.
+
+## How the flow works
+
+<Steps>
+
+1. **User opens the Designer login page** and clicks **Sign in with SSO**.
+
+2. **Designer redirects to designer-admin** (the OIDC broker), carrying a `return_to` parameter set to the Designer's own origin.
+
+3. **designer-admin validates the `return_to` origin** against its configured `--sso-return-origins` allowlist and issues an authorisation redirect to **tenant-manager** (the identity provider) using PKCE + ES256.
+
+4. **User authenticates in tenant-manager** using their registered passkey or other credential.
+
+5. **tenant-manager redirects back to designer-admin** with an authorisation code. designer-admin exchanges it for an ID token, extracts the user's identity, and issues a short-lived handoff token.
+
+6. **designer-admin redirects back to the Designer** at `return_to?token=<handoff>`.
+
+7. **Designer exchanges the handoff token for a session**, signs the user in, and navigates to the workspace. No admin cookie is set or read at any point.
+
+</Steps>
+
+<Aside type="note">
+SSO does not require or create an admin session. designer-admin acts purely as an OIDC broker for this flow; the Designer is the only party that mints a user session.
+</Aside>
+
+## Prerequisites
+
+Before SSO login will work for a tenant, three things must be in place.
+
+### 1. OIDC issuer bound in designer-admin
+
+The tenant record in designer-admin must have an `oidc_issuer` set. This is populated when the tenant is created or updated via the admin API or the tenant reconcile pass. If it is not set, the **Sign in with SSO** button does not appear on the Designer login page for that tenant.
+
+### 2. Tenant-manager integration configured
+
+designer-admin maintains an internal mapping from its own tenant IDs to the corresponding tenant-manager tenant IDs. This mapping is populated:
+
+- automatically when a new tenant is pushed to designer-admin (create path), or
+- on the next scheduled reconcile pass.
+
+Until the mapping exists, SSO will fail with a generic error. For tenants created just moments ago, wait for the reconcile pass to complete before testing SSO.
+
+### 3. User exists in tenant-manager
+
+The signing-in user must already have an account in tenant-manager, including a completed passkey registration. Users are added via the tenant-manager invite flow — SSO login does not create new accounts on first sign-in.
+
+## Configuration
+
+### designer-admin
+
+| Flag | Environment variable | Description |
+|------|---------------------|-------------|
+| `--sso-return-origins <ORIGINS>` | `GREENTIC_ADMIN_SSO_RETURN_ORIGINS` | Comma-separated list of Designer origins permitted as SSO `return_to` targets. Provide bare lowercase origins (scheme + host + optional port), e.g. `https://designer.example.com`. Multiple origins: `https://designer.example.com,https://staging.designer.example.com`. Under `--dev`, `http://localhost` on any port is allowed automatically and does not need to be listed here. |
+
+Example startup flags:
+
+```bash
+designer-admin \
+  --sso-return-origins "https://designer.acme.com,https://designer-staging.acme.com"
+```
+
+Or via environment variable:
+
+```bash
+GREENTIC_ADMIN_SSO_RETURN_ORIGINS="https://designer.acme.com" designer-admin
+```
+
+### Designer (optional)
+
+| Flag | Environment variable | Description |
+|------|---------------------|-------------|
+| `--public-url <URL>` | `GREENTIC_PUBLIC_URL` | The Designer's public-facing origin (bare: scheme + host + optional port). Set this when the Designer runs behind a reverse proxy that does not forward `X-Forwarded-Proto`, so that the Designer can construct the correct `return_to` value for the SSO redirect. |
+
+Example:
+
+```bash
+greentic-designer --public-url "https://designer.acme.com"
+```
+
+### SSO-only tenants
+
+If a tenant should not allow password-based login at all, you can disable local login in designer-admin for that tenant. When local login is disabled, the Designer login page hides the password form entirely and shows only the SSO option.
+
+<Aside type="caution">
+Disabling local login is a one-way action for a tenant's users: they will only be able to sign in via SSO. Make sure tenant-manager is fully operational and all users have completed passkey registration before disabling local login.
+</Aside>
+
+## Troubleshooting
+
+### "SSO sign-in failed" immediately after creating a tenant
+
+The tenant-manager ID mapping has not yet been populated. Wait for the next reconcile pass and try again. The reconcile interval is configured in designer-admin; by default it runs on creation push. If you see this immediately after tenant creation, a brief wait (typically under a minute) resolves it.
+
+### The "Sign in with SSO" button is missing
+
+Two possible causes:
+
+1. **`oidc_issuer` is not set** for the tenant in designer-admin. Check the tenant record via the admin API and ensure `oidc_issuer` is populated.
+
+2. **designer-admin is not running over HTTPS** (or localhost in dev mode). The SSO flow requires a secure context. In production, designer-admin must be reachable at an `https://` origin. In local development, `--dev` mode allows `http://localhost` automatically.
+
+### Redirect rejected with `invalid_return_to`
+
+The Designer origin is not in the `--sso-return-origins` allowlist on designer-admin. Add it to the list and restart (or hot-reload) designer-admin:
+
+```bash
+# Check current allowlist
+designer-admin --help | grep sso-return-origins
+
+# Fix: add the missing origin
+GREENTIC_ADMIN_SSO_RETURN_ORIGINS="https://designer.example.com,https://new.designer.example.com" \
+  designer-admin
+```
+
+### SSO succeeds but the Designer shows an authentication error
+
+The handoff token exchange may have timed out (tokens are short-lived) or the Designer's clock is significantly skewed. Check that the system clocks on the Designer host and designer-admin host are synchronised (NTP). Also confirm that `--public-url` / `GREENTIC_PUBLIC_URL` is set correctly if the Designer is behind a proxy.
+
+## See also
+
+- [Admin Access](/admin/admin-access/) — gtc admin API reference
+- [Multi-Tenancy](/concepts/multi-tenancy/) — how tenants, environments, and isolation work in Greentic
