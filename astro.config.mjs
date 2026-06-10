@@ -134,6 +134,13 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Admin & Operations',
+					items: [
+						{ label: 'Admin Access', slug: 'admin/admin-access' },
+						{ label: 'Designer SSO Login', slug: 'admin/designer-sso-login' },
+					],
+				},
+				{
 					label: 'Messaging Extensions',
 					items: [
 						{ label: 'Overview', slug: 'providers/messaging/overview' },
