@@ -1,75 +1,86 @@
 ---
-title: Inicio Rápido
-description: Pon en marcha tu primer digital worker de Greentic en minutos
+title: Quick Start
+description: Get your first Greentic digital worker running in minutes
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Esta guía te lleva de cero a tener un digital worker de Greentic en funcionamiento en pocos minutos. La vía más rápida es lanzar una de las demos publicadas del catálogo [`greentic-demo`](https://github.com/greenticai/greentic-demo): cada demo usa el mismo flujo de tres pasos.
+This guide gets you from zero to a running Greentic digital worker in a few minutes. The fastest path is to launch one of the published demos from the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog — every demo uses the same three-step flow.
 
 <Aside type="tip">
-¿Quieres ver todas las demos disponibles y saber exactamente qué hace cada una? Ve a [Ejecutar Demos](/es/getting-started/running-demos/).
+Want to browse all available demos and see exactly what each one does? Jump to [Running Demos](/getting-started/running-demos/).
 </Aside>
 
-## Prerrequisitos
+## Prerequisites
 
-Antes de empezar, asegúrate de tener:
+Before you begin, ensure you have:
 
-- **`gtc` CLI** instalado; consulta [Instalación](/es/getting-started/installation/)
-- **Rust** 1.91 o posterior (solo si compilas desde el código fuente)
-- Una **URL pública** para proveedores basados en webhook (por ejemplo, `ngrok` o `cloudflared`); no es necesaria para el quickstart solo con WebChat
+- **`gtc` CLI** installed — see [Installation](/getting-started/installation/)
+- **Rust** 1.95 or later (required for `cargo binstall gtc` and source builds)
+- A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only path
+- An **LLM backend**: either use OpenAI with an API key from https://platform.openai.com/, or use Ollama locally by setting the setup answers to `http://localhost:<ollama_port>/v1`, choosing a model from `ollama list` or one you install with `ollama pull`, and entering any value in the API key field
 
-## Lanzar la demo quickstart
+## Launch the deep research demo
 
-La demo `quickstart` es el bundle end-to-end más pequeño: una tarjeta de bienvenida, una tarjeta de información y una interacción de eco sobre WebChat. No necesita cuentas externas.
+The `deep-research-demo` bundle is a better first look at what a Greentic digital worker can do. It gives you a WebChat research assistant with two execution modes:
+
+- **Single Shot** - Ask a question and let one research analyst produce a fast answer.
+- **Agentic** - Route the same question through a research planner and analyst, showing how workers can collaborate across multiple flow steps.
+
+![Deep Research Digital Worker showing a research question, Single Shot and Agentic actions, and a Research Analyst response](/images/deep-research-demo.png)
 
 <Steps>
 
-1. **Crea el bundle** a partir del documento create-answers publicado:
+1. **Create the bundle** from the published create-answers document:
 
    ```bash
-   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
+   gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-create-answers.json
    ```
 
-   El wizard descarga el pack de la demo, resuelve dependencias de capacidades (por ejemplo, añade `state-memory` automáticamente porque el proveedor WebChat necesita `greentic:state/state-store`) y escribe un directorio de bundle local.
+   The wizard downloads the research demo pack, resolves capability dependencies (e.g. it pulls in `state-memory` automatically because the WebChat provider needs `greentic:state/state-store`), and writes a local bundle directory.
 
-2. **Configura los proveedores** con el documento setup-answers publicado:
+2. **Configure providers** with the published setup-answers document:
 
    ```bash
-   gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+   gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
    ```
 
-   La configuración detecta automáticamente el tenant del bundle, guarda secretos por proveedor y valida que cada capacidad requerida esté satisfecha.
+   Setup auto-detects the bundle's tenant, persists secrets per provider, and validates that every required capability is satisfied. If the research analyst uses an external LLM provider, the setup answers identify which credential values must be supplied.
 
-3. **Inicia el runtime**:
+3. **Start the runtime**:
 
    ```bash
-   gtc start ./quickstart-demo-bundle
+   gtc start ./deep-research-demo-bundle
    ```
 
-   El runner imprime la URL pública de WebChat. Ábrela en un navegador y deberías ver la tarjeta de bienvenida.
+   The runner prints the public WebChat URL. Open it in a browser, enter a research question, then choose **Single Shot** for a direct analyst answer or **Agentic** to run the planner-and-analyst workflow.
 
 </Steps>
 
 <Aside type="note">
-El mismo flujo de tres pasos funciona para todas las demos del catálogo. Para probar otra, solo sustituye el ID de la demo, por ejemplo `helpdesk-itsm`, `hr-onboarding` o `weather-mcp-demo`. Consulta [Ejecutar Demos](/es/getting-started/running-demos/) para ver la lista completa.
+The same three-step flow works for every demo in the catalog. To try a different one, just substitute the demo ID — for example `helpdesk-itsm`, `hr-onboarding`, `telco-x-demo`, or `weather-mcp-demo`. See [Running Demos](/getting-started/running-demos/) for the complete list.
 </Aside>
 
-## Crear tu propio bundle
+## Building your own bundle
 
-Cuando estés listo para ir más allá del catálogo publicado, se aplican los mismos tres comandos; simplemente consumen tus propios archivos en lugar de URLs de release:
+When you are ready to move beyond the published catalog, the same three commands apply — they just consume your own files instead of release URLs:
 
 <Steps>
 
-1. **Crea un bundle** con el wizard. Puedes ejecutarlo de forma interactiva o con un documento local de respuestas:
+1. **Create a bundle** with the wizard. You can run it interactively, or generate a local answers document first and apply it after review:
 
    ```bash
+   # Interactive
    gtc wizard
-   # or
+
+   # Non-interactive: generate answers without creating files
+   gtc wizard --dry-run --emit-answers ./my-create-answers.json
+
+   # Review or edit ./my-create-answers.json, then apply it
    gtc wizard --answers ./my-create-answers.json
    ```
 
-2. **Configura proveedores**, de nuevo de forma interactiva o no interactiva:
+2. **Configure providers**, again either interactively or non-interactively:
 
    ```bash
    gtc setup ./my-bundle
@@ -77,7 +88,7 @@ Cuando estés listo para ir más allá del catálogo publicado, se aplican los m
    gtc setup ./my-bundle --answers ./my-setup-answers.json
    ```
 
-3. **Inicia el runtime**:
+3. **Start the runtime**:
 
    ```bash
    gtc start ./my-bundle
@@ -85,79 +96,116 @@ Cuando estés listo para ir más allá del catálogo publicado, se aplican los m
 
 </Steps>
 
-Consulta [gtc wizard](/es/cli/wizard/) y [gtc setup](/es/cli/setup/) para ver la referencia completa, incluidas las banderas de capacidades y los esquemas de documentos de respuestas.
+See [gtc wizard](/cli/wizard/) and [gtc setup](/cli/setup/) for the full reference, including capability flags and answers-document schemas.
 
-## Ejemplo: Flujo Hello World
+## Multi-language and i18n
 
-Crea un flujo sencillo que responda a mensajes:
+Greentic supports multi-language workers at two levels:
 
-```yaml title="flows/hello.ygtc"
-name: hello_world
-version: "1.0"
-description: A simple greeting flow
+- **Code level** - Your components can be written in any language that compiles to WebAssembly components.
+- **Experience level** - User-facing text can be translated and selected by locale at runtime.
 
-nodes:
-  - id: greet
-    type: reply
-    config:
-      message: "Hello! I'm your digital worker."
+For a WebChat or Adaptive Card worker, translations usually live in pack or bundle assets. Greentic can store locale files such as `assets/i18n/en.json` and `assets/i18n/de.json`, then resolve the correct text from the current session, team, tenant, or global default locale. If a translated string is missing, the worker should fall back to the source language rather than failing the flow.
 
-triggers:
-  - type: message
-    pattern: "hello"
-    target: greet
+When you create bundles with `gtc wizard`, capability flags such as `greentic.cap.webchat.i18n.v1` tell the tooling to scaffold locale-aware WebChat assets. For cards, use the i18n workflow to extract strings, translate them, and package the locale files with the app pack.
+
+<Aside type="note">
+If the card extraction or translation tools are not installed yet, install them first with `cargo binstall greentic-cards2pack greentic-i18n-translator`. The translator also needs the Codex CLI installed and authenticated; install it with `npm install -g @openai/codex` or `brew install --cask codex`, then run `codex` once to sign in.
+</Aside>
+
+```bash
+greentic-cards2pack extract-i18n --input ./cards --output i18n/en.json
+greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
 ```
 
-## Estructura del Bundle
+See [Multi-Language and i18n](/getting-started/multilanguage-i18n/) for the practical Getting Started overview, then continue to [i18n Overview](/i18n/overview/) and [Cards Translation](/i18n/cards-translation/) for the full workflow.
 
-Un bundle típico de Greentic se ve así:
+## Example: Hello World Pack
 
-```
-my-bundle/
-├── greentic.demo.yaml      # Main configuration
-├── providers/
-│   └── messaging/
-│       └── messaging-telegram.gtpack
-├── apps/
-│   └── my-app/
-│       └── flows/
-│           └── on_message.ygtc
-└── seeds.yaml              # Seed data (optional)
+Create a pack with a `hello_world` messaging flow by replaying the hosted wizard answers:
+
+```bash
+gtc wizard --answers https://docs.greentic.ai/examples/hello-world-answers.json
 ```
 
-## Archivo de Configuración
+The answers document creates `./hello-world-pack`, scaffolds the pack, adds `flows/hello.ygtc`, runs doctor, resolves the pack lock, and writes the built pack to `dist/hello-world-pack.gtpack`.
 
-El archivo de configuración principal (`greentic.demo.yaml`) define tu entorno:
+The generated pack contains the hello world flow alongside the scaffolded default flow:
 
-```yaml title="greentic.demo.yaml"
-name: my-digital-worker
-version: "1.0"
-
-providers:
-  messaging-telegram:
-    pack: "providers/messaging/messaging-telegram.gtpack"
-    setup_flow: "setup_default"
-
-apps:
-  my-app:
-    path: "apps/my-app"
-    default_flow: "on_message"
-
-tenants:
-  demo:
-    name: Demo Tenant
-    teams:
-      default:
-        channels:
-          telegram:
-            provider: messaging-telegram
+```text
+hello-world-pack/
+|-- pack.yaml
+|-- pack.lock.cbor
+|-- flows/
+|   |-- hello.ygtc
+|   `-- main.ygtc
+`-- dist/
+    `-- hello-world-pack.gtpack
 ```
 
-## Próximos Pasos
+## Bundle Structure
 
-Ahora que ya tienes una configuración básica en funcionamiento:
+After creating the hello world pack, create a bundle that includes it:
 
-- [Aprender sobre Flows](/es/concepts/flows/) - Comprender las definiciones de flujos
-- [Configurar Telegram](/es/providers/messaging/telegram/) - Configurar un bot de Telegram
-- [Configurar Slack](/es/providers/messaging/slack/) - Conectar a un workspace de Slack
-- [Crear componentes personalizados](/es/concepts/components/) - Crear tus propios componentes WASM
+```bash
+gtc wizard --answers https://docs.greentic.ai/examples/hello-world-bundle-answers.json
+```
+
+The answers document expects the pack artifact from the previous step at `./hello-world-pack/dist/hello-world-pack.gtpack`. It creates `./hello-world-bundle`, copies the pack into the bundle workspace, writes the bundle definition, and records default tenant access for the `hello-world` pack.
+
+The generated bundle looks like this:
+
+```text
+hello-world-bundle/
+|-- bundle.yaml
+|-- bundle.lock.json
+|-- packs/
+|   `-- hello-world-pack.gtpack
+|-- tenants/
+|   `-- default/
+|       `-- tenant.gmap
+|-- resolved/
+|   `-- default.yaml
+`-- state/
+    `-- resolved/
+        `-- default.yaml
+```
+
+`bundle.yaml` is the source definition. It names the bundle, lists the app pack references, records the global pack mapping, and keeps extension providers, catalogs, hooks, subscriptions, capabilities, setup intent, and export intent explicit:
+
+```yaml title="hello-world-bundle/bundle.yaml"
+schema_version: 1
+bundle_id: hello-world-bundle
+bundle_name: Hello World Bundle
+locale: en
+mode: create
+advanced_setup: false
+app_packs:
+  - ./hello-world-pack/dist/hello-world-pack.gtpack
+app_pack_mappings:
+  - reference: ./hello-world-pack/dist/hello-world-pack.gtpack
+    scope: global
+extension_providers: []
+remote_catalogs: []
+hooks: []
+subscriptions: []
+capabilities: []
+setup_execution_intent: false
+export_intent: false
+```
+
+`bundle.lock.json` records the resolved inputs for reproducible bundle operations. `packs/` contains the copied pack artifacts used by the bundle. `tenants/default/tenant.gmap` controls tenant access; in this example it allows `hello-world` and denies everything else:
+
+```text title="hello-world-bundle/tenants/default/tenant.gmap"
+_ = forbidden
+hello-world = public
+```
+
+## Next Steps
+
+Now that you have a basic setup running:
+
+- [Learn about Flows](/concepts/flows/) - Understand flow definitions
+- [Configure Telegram](/providers/messaging/telegram/) - Set up Telegram bot
+- [Configure Slack](/providers/messaging/slack/) - Connect to Slack workspace
+- [Build custom components](/concepts/components/) - Create your own WASM components

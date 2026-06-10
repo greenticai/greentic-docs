@@ -1,0 +1,167 @@
+---
+title: Extensions
+description: Understanding Greentic extension packs, capability offers, and runtime integration points
+---
+
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What Extensions Are
+
+An **extension** is a Greentic pack that adds platform behavior through explicit metadata in `pack.yaml`. The current implemented path is `.gtpack`-based:
+
+1. `gtc wizard` scaffolds the pack and captures extension answers.
+2. `gtc dev pack` validates and builds the pack.
+3. `gtc setup` resolves setup questions and configuration.
+4. `gtc start` loads the packed manifest and exposes the runtime behavior.
+
+Extensions let Greentic grow a digital-worker platform without baking every vendor, runtime service, or deployment target into application packs.
+
+<Aside type="tip">
+Use `gtc wizard --schema` before automating extension authoring. Coding agents can read the schema, generate an answers file, and replay it with `gtc wizard --answers extension-pack-answers.json`.
+</Aside>
+
+## Current Extension Keys
+
+Greentic currently documents these active manifest extension keys:
+
+| Extension key | What it is for |
+| --- | --- |
+| `greentic.ext.capabilities.v1` | Component-backed capability offers: messaging, events, OAuth, MCP, state, telemetry, secrets, admin, control, observer, contracts, ops hooks, and other runtime services. |
+| `greentic.deployer.v1` | Deployer contracts that describe how a deployer plans and performs deployment operations. |
+| `greentic.static-routes.v1` | Public HTTP routes for static assets packaged inside a pack. |
+
+These entries are packed into the `.gtpack` manifest with the components, flows, assets, i18n files, and setup questions they depend on.
+
+## Capability Offers
+
+Most extension packs use `greentic.ext.capabilities.v1`. A capability offer says that a component operation can provide a named capability.
+
+```yaml title="pack.yaml"
+extensions:
+  greentic.ext.capabilities.v1:
+    kind: greentic.ext.capabilities.v1
+    version: 1.0.0
+    inline:
+      schema_version: 1
+      offers:
+        - offer_id: messaging.webchat.inbound.01
+          cap_id: greentic.cap.messaging.webchat.v1
+          version: v1
+          provider:
+            component_ref: webchat-extension
+            op: messaging.dispatch
+          priority: 100
+          requires_setup: true
+          setup:
+            qa_ref: qa/webchat-setup.json
+          applies_to:
+            op_names:
+              - send
+              - receive
+```
+
+The pack tooling validates the important references:
+
+- `schema_version` must be `1`.
+- `offer_id`, `cap_id`, `version`, `provider.component_ref`, and `provider.op` must be present.
+- `provider.component_ref` must point at a component in the pack or at a lock-backed component reference.
+- `requires_setup: true` requires setup metadata and a valid `setup.qa_ref`.
+- `priority` lets multiple offers for the same capability resolve deterministically.
+- `applies_to` can narrow a capability to specific operations.
+
+## Extension Types in the Wizard
+
+The pack wizard uses a catalog to map human-facing extension types onto the manifest keys above. These are the types currently represented by the catalog:
+
+| Wizard type | Manifest key | Purpose |
+| --- | --- | --- |
+| `messaging` | `greentic.ext.capabilities.v1` | Chat and message transport such as WebChat, Slack, Teams, Telegram, WhatsApp, Webex, and email. |
+| `events` | `greentic.ext.capabilities.v1` | Event sources and sinks such as HTTP webhooks, timers, queues, pub/sub, SendGrid, Twilio, audit events, and domain events. |
+| `oauth` | `greentic.ext.capabilities.v1` | OAuth brokers, token validation, consent, and card-login surfaces. |
+| `mcp` | `greentic.ext.capabilities.v1` | MCP tool discovery and execution integrations. |
+| `state` | `greentic.ext.capabilities.v1` | Session, memory, checkpoint, and key-value state backends. |
+| `telemetry` | `greentic.ext.capabilities.v1` | Logs, metrics, traces, span enrichment, and exporters. |
+| `secrets` | `greentic.ext.capabilities.v1` | Environment, vault, Kubernetes, cloud, or custom secret brokers. |
+| `admin` | `greentic.ext.capabilities.v1` | Setup and runtime administration surfaces. |
+| `control` | `greentic.ext.capabilities.v1` | Lifecycle control, routing, throttling, pause/resume, and governance hooks. |
+| `observer` | `greentic.ext.capabilities.v1` | Audit, monitoring, supervision, and observation hooks. |
+| `deployer` | `greentic.deployer.v1` | Deployment target contracts and deployment operation flows. |
+| `runtime-capability` | `greentic.ext.capabilities.v1` | New host/runtime services that other packs can consume. |
+| `contract` | `greentic.ext.capabilities.v1` | Schemas, policies, rules, and validation contracts. |
+| `ops` | `greentic.ext.capabilities.v1` | Operational hooks and automation scaffolds. |
+| `capability-offer` | `greentic.ext.capabilities.v1` | A focused pack that mainly offers one or more capabilities. |
+| `custom-scaffold` | `greentic.ext.capabilities.v1` | A blank extension scaffold when the named categories do not fit. |
+
+The wizard persists catalog answers in JSON under `extensions/` and merges the canonical payload into `pack.yaml`.
+
+## Deployer Extensions
+
+Deployer metadata uses `greentic.deployer.v1`, not the capability-offer schema. The validated contract has a planner flow and a set of supported deployment capabilities.
+
+```yaml title="pack.yaml"
+extensions:
+  greentic.deployer.v1:
+    kind: greentic.deployer.v1
+    version: 1.0.0
+    inline:
+      schema_version: 1
+      planner:
+        flow_id: flows/plan.ygtc
+      capabilities:
+        - capability: plan
+          flow_id: flows/plan.ygtc
+        - capability: apply
+          flow_id: flows/apply.ygtc
+        - capability: status
+          flow_id: flows/status.ygtc
+```
+
+Validation requires `schema_version: 1`, a non-empty planner `flow_id`, no duplicate capability entries, and at least the `plan` capability. Supported deployer capabilities are `generate`, `plan`, `apply`, `destroy`, `status`, and `rollback`.
+
+## Static Routes
+
+Static web assets are exposed with `greentic.static-routes.v1`. The assets remain ordinary files under `assets/`; the extension metadata declares which subdirectory should be mounted under a public HTTP route when `gtc start` runs the bundle.
+
+```yaml title="pack.yaml"
+extensions:
+  greentic.static-routes.v1:
+    kind: greentic.static-routes.v1
+    version: 1.0.0
+    inline:
+      version: 1
+      routes:
+        - id: webchat-ui
+          public_path: /v1/web/webchat/{tenant}
+          source_root: assets/webchat
+          scope:
+            tenant: true
+            team: false
+          index_file: index.html
+          spa_fallback: index.html
+          cache:
+            strategy: public-max-age
+            max_age_seconds: 3600
+```
+
+Static route paths are deliberately constrained. Public paths must live under `/v1/web/`, `source_root` must point under `assets/`, and team-scoped routes must also be tenant-scoped.
+
+## Why Extensions Matter
+
+<CardGrid>
+  <Card title="Composable" icon="puzzle">
+    Application packs can require messaging, state, secrets, OAuth, telemetry, or control without hard-coding a specific vendor.
+  </Card>
+  <Card title="Tenant-aware" icon="users">
+    Setup data and capability resolution can vary per tenant, team, and environment.
+  </Card>
+  <Card title="Observable" icon="chart-line">
+    Observer and telemetry extensions make digital-worker activity traceable, auditable, and controllable in production.
+  </Card>
+  <Card title="Deployable anywhere" icon="rocket">
+    Deployer extensions let the same bundle target local development, Kubernetes, the three major clouds, or a custom enterprise deployer.
+  </Card>
+</CardGrid>
+
+## Legacy Terminology
+
+Older experiments used `.gtxpack`, `gtdx`, `DesignExtension`, `BundleExtension`, `DeployExtension`, and `ProviderExtension`. Those names describe the legacy design-time proposal, not the current runtime extension path. New extension docs should use `.gtpack`, `gtc wizard`, `gtc dev pack`, and the manifest keys above.

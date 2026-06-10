@@ -1,272 +1,201 @@
 ---
-title: 创建 MCP Tools
-description: 为 Greentic 构建自定义 MCP tools
+title: Creating MCP Tools
+description: Generate and package MCP tools for Greentic
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Aside } from '@astrojs/starlight/components';
 
-## 概述
+## Overview
 
-创建自定义 MCP tools，以通过外部集成、自定义逻辑和数据访问来扩展你的数字员工能力。
+The preferred way to create MCP tools for Greentic is to generate a WASM component from an API description, then call that component from a flow with `mcp.exec`.
 
-## 创建一个 Tool
+Use this path when you want a digital worker to call systems such as weather APIs, GitHub, Google APIs, ticketing systems, CRMs, HR systems, inventory systems, or internal HTTP services.
+
+<Aside type="caution" title="Do not start from the old generic WIT example">
+  Older docs showed a hand-written `wit/tool.wit`, `tool.yaml`, and `type: mcp-tool` flow node. That does not match the current local Greentic flow fixtures or MCP generator. Start with `greentic-mcp-gen` for API-backed MCP tools, or use the component wizard when you are building a custom Greentic component.
+</Aside>
+
+## Generate From OpenAPI
 
 <Steps>
 
-1. **定义 WIT Interface**
+1. **Prepare an OpenAPI or Swagger spec**
 
-   ```wit title="wit/tool.wit"
-   package greentic:my-tool;
+   Put the API description in your pack or workspace, for example:
 
-   interface tool {
-       record input {
-           query: string,
-           options: option<string>,
-       }
-
-       record output {
-           success: bool,
-           data: option<string>,
-           error: option<string>,
-       }
-
-       execute: func(input: input) -> output;
-   }
-
-   world my-tool {
-       export tool;
-   }
+   ```text
+   openapi/weatherapi.yaml
    ```
 
-2. **使用 Rust 实现**
-
-   ```rust title="src/lib.rs"
-   use wit_bindgen::generate;
-
-   generate!({
-       world: "my-tool",
-       path: "wit",
-   });
-
-   struct MyTool;
-
-   impl tool::Guest for MyTool {
-       fn execute(input: tool::Input) -> tool::Output {
-           // Your tool logic here
-           let result = process_query(&input.query);
-
-           tool::Output {
-               success: true,
-               data: Some(result),
-               error: None,
-           }
-       }
-   }
-
-   fn process_query(query: &str) -> String {
-       format!("Processed: {}", query)
-   }
-
-   export!(MyTool);
-   ```
-
-3. **构建 WASM Component**
+2. **List generated tools**
 
    ```bash
-   cargo build --target wasm32-wasip2 --release
+   greentic-mcp-gen \
+     --spec ./openapi/weatherapi.yaml \
+     --list-tools
    ```
 
-4. **创建 Tool Manifest**
+3. **Inspect the input schema for an operation**
 
-   ```yaml title="tool.yaml"
-   name: my_tool
-   version: "1.0.0"
-   description: My custom MCP tool
-
-   parameters:
-     - name: query
-       type: string
-       description: The query to process
-       required: true
-     - name: options
-       type: string
-       description: Optional configuration
-       required: false
-
-   returns:
-     type: object
-     properties:
-       success:
-         type: boolean
-       data:
-         type: string
-       error:
-         type: string
-
-   capabilities:
-     - network:outbound
+   ```bash
+   greentic-mcp-gen \
+     --spec ./openapi/weatherapi.yaml \
+     --tool-schema forecast_weather
    ```
 
-5. **注册 Tool**
+4. **Inspect the HTTP execution plan**
 
-   ```yaml title="greentic.demo.yaml"
-   mcp:
-     tools:
-       - name: my_tool
-         component: "tools/my-tool.wasm"
-         manifest: "tools/my-tool.yaml"
+   ```bash
+   greentic-mcp-gen \
+     --spec ./openapi/weatherapi.yaml \
+     --tool-plan forecast_weather
+   ```
+
+5. **Generate the component**
+
+   ```bash
+   greentic-mcp-gen \
+     --spec ./openapi/weatherapi.yaml \
+     --output-dir ./output
    ```
 
 </Steps>
 
-## Tool 示例
+The installed generator supports single-spec mode and batch mode. In batch mode it reads from `./input` and writes generated WASM files to `./output` unless you override those directories.
 
-### HTTP Request Tool
+## Generate From Google Discovery
 
-```rust
-impl tool::Guest for HttpTool {
-    fn execute(input: tool::Input) -> tool::Output {
-        let url = &input.url;
-        let method = input.method.unwrap_or("GET".to_string());
-
-        match http_request(&method, url, input.body.as_deref()) {
-            Ok(response) => tool::Output {
-                success: true,
-                data: Some(response),
-                error: None,
-            },
-            Err(e) => tool::Output {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            },
-        }
-    }
-}
-```
-
-### Database Query Tool
-
-```rust
-impl tool::Guest for DbTool {
-    fn execute(input: tool::Input) -> tool::Output {
-        // Get connection string from secrets
-        let conn_str = get_secret("database_url")?;
-
-        // Execute query (pseudo-code)
-        let results = db_query(&conn_str, &input.query)?;
-
-        tool::Output {
-            success: true,
-            data: Some(serde_json::to_string(&results)?),
-            error: None,
-        }
-    }
-}
-```
-
-### Email Tool
-
-```rust
-impl tool::Guest for EmailTool {
-    fn execute(input: tool::Input) -> tool::Output {
-        let api_key = get_secret("sendgrid_api_key")?;
-
-        let result = send_email(
-            &api_key,
-            &input.to,
-            &input.subject,
-            &input.body,
-        );
-
-        match result {
-            Ok(_) => tool::Output {
-                success: true,
-                data: Some("Email sent".to_string()),
-                error: None,
-            },
-            Err(e) => tool::Output {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            },
-        }
-    }
-}
-```
-
-## 在 Flows 中使用 Tools
-
-### 直接调用
-
-```yaml
-- id: call_tool
-  type: mcp-tool
-  config:
-    tool: "my_tool"
-    parameters:
-      query: "{{user_query}}"
-  output: tool_result
-```
-
-### 与 LLM Agent 配合
-
-```yaml
-- id: agent
-  type: llm
-  config:
-    model: "gpt-4"
-    system_prompt: |
-      You are an assistant with access to tools.
-      Use tools when needed to help the user.
-    tools:
-      - my_tool
-      - http_request
-      - send_email
-    tool_choice: "auto"
-```
-
-## 测试 Tools
-
-### 单元测试
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_execute() {
-        let input = tool::Input {
-            query: "test".to_string(),
-            options: None,
-        };
-
-        let output = MyTool::execute(input);
-
-        assert!(output.success);
-        assert!(output.data.is_some());
-    }
-}
-```
-
-### 集成测试
+For Google APIs, use discovery support directly:
 
 ```bash
-# Test with sample input
-echo '{"query": "test"}' | greentic-mcp test ./my-tool.wasm
+greentic-mcp-gen discovery \
+  --url "https://sheets.googleapis.com/$discovery/rest?version=v4" \
+  --profile sheets-crm \
+  --out ./output
 ```
 
-## 最佳实践
+Profiles restrict large APIs to a useful operation subset. The generator includes profile commands:
 
-1. **处理所有错误** - 永远不要 panic，始终在 output 中返回错误
-2. **验证输入** - 在处理前检查参数
-3. **使用 secrets** - 不要硬编码凭证
-4. **添加日志** - 便于调试
-5. **充分编写文档** - 在 manifest 中提供清晰描述
-6. **测试边界情况** - 处理空输入、大数据量等情况
+```bash
+greentic-mcp-gen profiles list
+greentic-mcp-gen profiles show sheets-crm
+```
 
-## 下一步
+You can also convert Discovery to OpenAPI first:
 
-- [MCP 概览](/zh/mcp/overview/)
-- [Components 指南](/zh/concepts/components/)
+```bash
+greentic-mcp-gen discovery-to-openapi \
+  --url "https://sheets.googleapis.com/$discovery/rest?version=v4" \
+  --profile sheets-crm \
+  --out ./specs/sheets.openapi.json
+```
+
+Then run the normal OpenAPI generation path against `./specs/sheets.openapi.json`.
+
+## Use the Tool in a Flow
+
+Once the generated component is available to the pack/runtime, call it with `mcp.exec`:
+
+```yaml title="flow.ygtc"
+nodes:
+  forecast_weather:
+    mcp.exec:
+      component: weather_api
+      action: forecast_weather
+      args:
+        q: in.q_location
+        days: 3
+    routing:
+      - to: weather_text
+```
+
+Use `component` for the logical component name, `action` for the operation, and `args` for the operation input.
+
+## Validate Tool Maps
+
+For tool-map based MCP wiring, keep a `toolmap.json` near the component artifacts:
+
+```json title="toolmap.json"
+{
+  "tools": [
+    {
+      "name": "weather_api",
+      "component": "./output/weatherapi_current.component.wasm",
+      "entry": "tool_invoke",
+      "timeout_ms": 5000,
+      "max_retries": 1,
+      "retry_backoff_ms": 250
+    }
+  ]
+}
+```
+
+Run doctor checks:
+
+```bash
+greentic-dev mcp doctor providers/weather --json
+```
+
+The doctor accepts a relative path to a tool-map file or a directory containing one of:
+
+- `toolmap.json`
+- `toolmap.yaml`
+- `toolmap.yml`
+- `mcp.json`
+- `mcp.yaml`
+
+It checks duplicate tool names, resolves component paths, and reports whether the referenced WASM files exist.
+
+## Package With a Pack
+
+An MCP tool is useful only when the pack also carries the right runtime information:
+
+- generated `.wasm` component artifact
+- flow nodes that call the component with `mcp.exec`
+- binding hints for required MCP servers or endpoints
+- secret requirements for API keys and OAuth tokens
+- network allowlists for outbound calls
+- observability/control settings for audit, tracing, retries, and policy
+
+Use the pack and bundle wizard flow for packaging. Coding agents should fetch the current wizard schema first, fill the answers JSON, then replay the wizard non-interactively:
+
+```bash
+gtc wizard --schema
+gtc wizard --answers pack-create-answers.json
+```
+
+## Custom Components
+
+If the integration is not well represented by OpenAPI or Discovery, create a custom Greentic component instead of forcing it into the MCP generator. Use the component wizard and current component templates:
+
+```bash
+gtc wizard --schema
+greentic-component wizard --schema
+```
+
+Then use the generated answers file with the relevant wizard command. The exact answers schema is versioned by the installed CLI, so always inspect `--schema` before generating files by hand or with a coding agent.
+
+## Testing Guidance
+
+Before packaging a generated MCP component:
+
+1. Use `--list-tools` to confirm the expected operations exist.
+2. Use `--tool-schema` to confirm required arguments and JSON shapes.
+3. Use `--tool-plan` to confirm the HTTP method, URL, path/query/body mapping, and base URL.
+4. Run the component against representative inputs in your local test harness.
+5. Run `greentic-dev mcp doctor` for tool-map based wiring.
+
+## Best Practices
+
+- Prefer generated MCP components for API-backed tools.
+- Keep operation names stable after flows depend on them.
+- Put API keys and OAuth tokens in secrets, not generated source or flow files.
+- Declare expected network endpoints so deployment and security tooling can enforce policy.
+- Keep retries and timeouts explicit for external systems.
+- Capture tool latency and failures through observer/telemetry extensions.
+
+## Next Steps
+
+- [MCP Overview](/mcp/overview/)
+- [Components Guide](/concepts/components/)
+- [Flows](/concepts/flows/)

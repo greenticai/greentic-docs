@@ -14,7 +14,7 @@ description: 動的コンテンツのための Handlebars テンプレート com
   type: template
   config:
     template: "Hello, {{name}}! Your order #{{order_id}} is ready."
-  next: send_message
+  to: send_message
 ```
 
 ## テンプレート構文

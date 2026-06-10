@@ -62,7 +62,7 @@ Every routing decision produces one of four directives:
 
 | Directive | Purpose | Fields |
 |-----------|---------|--------|
-| `dispatch` | Route to a specific flow | `target`, `confidence`, `reason` |
+| `dispatch` | Route to a specific flow | `target`, `confidence`, `reason`, `entities` ([prefill](#prefill)) |
 | `respond` | Return an immediate response | `message` |
 | `deny` | Block the request | `reason` |
 | `continue` | No decision — let the caller handle it | — |
@@ -81,23 +81,28 @@ Every routing decision produces one of four directives:
 {"type": "continue"}
 ```
 
-## Installation
+A `dispatch` directive can also carry an `entities` array of values extracted from the message (`location`, `date`, `time`, `person`) — see [Prefill](#prefill) for how to leverage it.
 
-fast2flow is distributed as a `.gtpack` artifact via GHCR:
+## Activation
 
-```bash
-# Pull from GHCR
-oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:latest
+fast2flow runs **inside the greentic-start runtime** as a `post_ingress` hook — you don't install it into your bundle. A pack turns it on by declaring `greentic.cap.fast2flow.v1` in `pack.yaml`; the runtime's `BundleCapabilityGate` runs the routing pipeline **only for packs that opt in** (see [Opting In From A Pack](#opting-in-from-a-pack)). Packs that don't declare the capability are never intercepted.
 
-# Or reference a specific version
-oras pull ghcr.io/greentic-biz/providers/routing-hook/fast2flow.gtpack:v0.4.6
-```
+## CLI & Tooling
 
-The pack registers a `post_ingress` hook that intercepts messages before they reach any flow.
+Two binaries back fast2flow, published as release artifacts from [`greentic-biz/greentic-fast2flow`](https://github.com/greentic-biz/greentic-fast2flow/releases):
+
+| Binary | Role |
+|--------|------|
+| `greentic-fast2flow` | Dev/CI CLI — build & inspect indexes, simulate routing, validate bundles and policies (see [CLI Reference](#cli-reference)). |
+| `greentic-fast2flow-routing-host` | The native routing host the runtime spawns at request time. Override the path with the `HOST_BIN` env var. |
+
+Download and unpack the release matching your platform from the releases page (artifacts are named `greentic-fast2flow-<version>-<target>.tar.gz`), or let `greentic-dev` provision it as part of the toolchain.
+
+Once it's on your `PATH`, the typical dev loop is: build an index from your bundle, simulate a few utterances, then ship — covered under [Bundle Workflow](#bundle-workflow) and [CLI Reference](#cli-reference) below.
 
 ## WASM Components
 
-fast2flow ships three WASM components (targeting `wasm32-wasip2`):
+fast2flow is built from three components (targeting `wasm32-wasip2`):
 
 | Component | Purpose | Operation |
 |-----------|---------|-----------|
@@ -105,17 +110,94 @@ fast2flow ships three WASM components (targeting `wasm32-wasip2`):
 | **Matcher** | Fast BM25-based intent matching against the index | `match` |
 | **Router** | Orchestrates the full routing pipeline | `route` |
 
-These components are coordinated by three flows defined in the pack:
+These operations are what the `greentic-fast2flow` CLI exposes (`index build`, `route simulate`, …) and what the runtime drives through the `greentic-fast2flow-routing-host` binary at request time.
 
-```yaml
-# flows/index.ygtc  — Runs at deploy time to build indexes
-# flows/match.ygtc  — Runtime BM25 intent matching
-# flows/route.ygtc  — Full routing pipeline with LLM fallback
+<Aside type="note">
+The runtime currently invokes the native `greentic-fast2flow-routing-host` binary. Running the components directly as a WASM `.gtpack` is on the roadmap; the operations and scoring are identical either way.
+</Aside>
+
+## Opting In From A Pack
+
+A pack tells the runtime "route my incoming text through fast2flow before flow dispatch" by declaring the `greentic.cap.fast2flow.v1` capability in its `pack.yaml`:
+
+```yaml title="pack.yaml"
+pack_id: greentic.example.demo
+version: 0.1.0
+kind: application
+publisher: Greentic
+capabilities:
+  - name: greentic.cap.fast2flow.v1
+    description: opts into fast2flow free-text routing
+components: []
+flows:
+  - id: default
+    file: flows/main.ygtc
+    tags: [default]
+    entrypoints: [default]
 ```
+
+`greentic-pack build` carries the declaration into the compiled `manifest.cbor`; the runtime's `BundleCapabilityGate` matches the exact string and enables the fast2flow pipeline for that pack.
+
+The pack can also ship its routing index inline as `assets/intent-index.json` — a pre-seeded ("prefilled") index with the same shape as the `index.json` produced by `greentic-fast2flow bundle index`.
+
+On a local run, **no environment variables are required**:
+
+- `GREENTIC_FAST2FLOW_INDEXES_PATH` defaults to `<temp_dir>/greentic-fast2flow-indexes`.
+- If no external `<indexes_path>/<scope>/index.json` exists, the runtime's pack-fallback materializer reads the inline asset and writes it there.
+- That materialized index is reused for the rest of the process lifetime.
+- External deployers (k8s, cloud bundle controllers) can still pin a durable path by setting `GREENTIC_FAST2FLOW_INDEXES_PATH` explicitly.
+
+```json title="assets/intent-index.json"
+{
+  "version": "v2",
+  "scope": "demo:default",
+  "generated_at_ms": 0,
+  "entries": [
+    {
+      "flow_id": "intent-checkin",
+      "pack_id": "greentic.example.demo",
+      "target": "greentic.example.demo/default/checkin_card",
+      "title": "Check in",
+      "tags": ["check", "checkin"],
+      "utterances": ["check in {{person}}", "{{person}} just arrived"],
+      "node_ids": ["checkin_card"]
+    }
+  ]
+}
+```
+
+See [pack-format / Capabilities](/reference/pack-format/#capabilities) for the broader capabilities story (per-component derived vs. author-declared).
+
+### End-to-end example: pet-daycare
+
+The [pet-daycare demo](https://github.com/greenticai/greentic-demo/tree/main/apps/pet-daycare-app) is the canonical worked example. Its `pack.yaml` declares `greentic.cap.fast2flow.v1`, it ships a pre-seeded `assets/intent-index.json`, and it runs with nothing but:
+
+```bash
+greentic-start start --bundle ../pet-daycare-demo-bundle --tenant demo --team default
+```
+
+No env vars are needed — the capability opens the gate and the materializer supplies the index. Its `{{person}}`/`{{time}}` utterances also exercise [Prefill](#prefill), so a check-in routes *and* hands the pet name and arrival time to the card.
+
+<Aside type="caution">
+Earlier builds required `GREENTIC_FAST2FLOW_FORCE_ENABLE=1` plus an explicit `GREENTIC_FAST2FLOW_INDEXES_PATH` to open the routing gate. Both are now obsolete — declare `greentic.cap.fast2flow.v1` in `pack.yaml` instead. `FORCE_ENABLE` is no longer read.
+</Aside>
+
+<Aside type="note">
+fast2flow dispatch currently emits `routeToCardId` only — it renders the matched flow's static card but does not inject `operation` metadata to invoke the underlying flow wasm. Use the button-driven path when the flow must execute logic on entry.
+</Aside>
 
 ## Bundle Workflow
 
-fast2flow indexes flows from your bundle's `.ygtc` files. The indexer scans your bundle directory, extracts metadata (title, description, tags), and builds a TF-IDF index with BM25 scoring.
+fast2flow can only route to what is in the **intent index** for a scope. The index is a catalog of intent entries — each with a `title`, `tags`, and (most importantly) example `utterances` — that the matcher scores against incoming text with BM25. **You must generate this index from your intent metadata before fast2flow can route correctly**; an empty or metadata-poor index is the most common reason routing falls through to `Continue`.
+
+There are two ways to produce the index:
+
+1. **Derive from flow metadata** — `greentic-fast2flow bundle index` scans your bundle's `.ygtc` files and extracts whatever `title` / `description` / `tags` they carry. This only works well if your flows are richly annotated.
+2. **Author an intent catalog** (the "prefill" route) — write the intent entries yourself (with `utterances`), build them with `greentic-fast2flow index build`, and ship the result as `assets/intent-index.json` in your pack. This is what the [pet-daycare demo](#end-to-end-example-pet-daycare) does, because its flows carry no routing metadata of their own.
+
+<Aside type="caution">
+`utterances` are the strongest routing signal and are **not** derivable from a typical flow file — a flow only has a `title`/`tags`. If you want phrase-level matching like `"who is here today"` → attendance, you almost always need the authored catalog route. Always `route simulate` a few real phrases before shipping.
+</Aside>
 
 ### Bundle Structure
 
@@ -158,7 +240,7 @@ nodes:
 ```
 
 <Aside type="tip">
-Title words receive a 2x TF-IDF boost, so choose descriptive titles for better routing accuracy.
+`tags` and `title` are the signals BM25 scores against (title words get a 2x boost). A flow file alone gives you no `utterances`, so for anything beyond keyword matches, author the intent catalog below.
 </Aside>
 
 ### Building the Index
@@ -175,14 +257,152 @@ greentic-fast2flow bundle index \
 ```
 
 This produces:
-- `index.json` — TF-IDF index with term frequencies and document frequencies
-- `intents.md` — Human-readable intent documentation
+- `index.json` — the scoped intent catalog (entries with `title`, `tags`, `utterances`, `target`) that the matcher scores with BM25 at request time
+- `intents.md` — human-readable summary of every intent the scan found
+
+<Aside type="tip">
+Open `intents.md` after building — it's the fastest way to catch a metadata-poor index. If your intents show empty tags and no utterances (as bare flow files do), the derived index won't route well and you should author the catalog instead.
+</Aside>
+
+### Generating the index from intent metadata
+
+When your flows don't carry rich metadata, author the intents directly and build the index with `index build`. The input is a JSON array of intent entries — `title`, `tags`, and `utterances` are what make routing work. The `{{person}}` / `{{time}}` markers in the `utterances` below do double duty: they drive routing **and** feed [Prefill](#prefill), so the matched card opens with those values already filled in.
+
+```json title="intents.json"
+[
+  {
+    "flow_id": "intent-checkin",
+    "pack_id": "greentic.pet-daycare.demo",
+    "target": "greentic.pet-daycare.demo/default/checkin_card",
+    "title": "Check in a pet for daycare",
+    "tags": ["check", "checkin", "check-in", "arrive", "dropoff", "daycare"],
+    "utterances": [
+      "check in {{person}}",
+      "check in {{person}} at {{time}}",
+      "{{person}} just arrived",
+      "drop off {{person}}"
+    ],
+    "node_ids": ["checkin_card"]
+  }
+]
+```
+
+Build, inspect, and simulate before shipping:
+
+```bash
+# Build the scope's index.json from the authored intents
+greentic-fast2flow index build \
+  --scope demo:default \
+  --flows intents.json \
+  --output ./state/indexes
+
+# Sanity-check the entries landed
+greentic-fast2flow index inspect --scope demo:default --input ./state/indexes
+
+# Prove a real phrase dispatches to the right target
+greentic-fast2flow route simulate \
+  --scope demo:default \
+  --text "drop off Rex" \
+  --indexes-path ./state/indexes
+```
+
+Then ship the built index inside the pack so the runtime materializes it with no operator setup (see [Opting In From A Pack](#opting-in-from-a-pack)):
+
+```
+my-pack/
+└── assets/
+    └── intent-index.json   # the v2-wrapped catalog the pack-fallback materializer loads
+```
+
+<Aside type="note">
+`assets/intent-index.json` wraps the same entries with `version`, `scope`, and `generated_at_ms` (see the [Opting In](#opting-in-from-a-pack) sample). The matcher computes BM25/TF-IDF from these entries in memory — the file itself is the catalog, not a precomputed term-frequency table.
+</Aside>
 
 ### Validating a Bundle
 
 ```bash
 greentic-fast2flow bundle validate --bundle ./my-bundle
 ```
+
+## Prefill
+
+When fast2flow routes a message it also runs a **deterministic NLU pass** over the inbound text and attaches the entities it finds to the `Dispatch` directive. This is **prefill**: the same `{{location}}`, `{{date}}`, `{{time}}`, and `{{person}}` markers you author into `utterances` are extracted from the live message as concrete values, so the target flow can prepopulate form fields without re-parsing the text or calling an LLM.
+
+**Key properties:**
+- **Automatic** — prefill always runs at routing time. There is nothing to enable in `pack.yaml` or policy; if your index uses markers, you get prefill for free.
+- **Deterministic** — gazetteer + rule-based extractors, no model and no network call. The same input always yields the same entities.
+- **Multilingual** — marker kinds are language-neutral, so `"weather in London tomorrow"` and `"quel temps à Londres demain"` both yield a `location` and a `date`.
+- **Time-aware** — relative dates (`tomorrow`, `next monday`) resolve against the request's reference time and `input_locale`, not the build time.
+
+### What gets extracted
+
+The runtime engine ships with four extractors today:
+
+| Marker kind | Example input | `normalized` |
+| --- | --- | --- |
+| `location` | "weather in **London**" | `London` |
+| `date` | "**tomorrow**" | `20260530` |
+| `time` | "at **2pm**" | `14:00` |
+| `person` | "check in **Rex**" | `Rex` |
+
+<Aside type="note">
+The entity model reserves more kinds (`datetime`, `duration`, `email`, `phone`, `url`, `money`, `number`, `id`, `organisation`), but only `location`, `date`, `time`, and `person` are wired into the bundled engine right now. Author your `utterances` around those four markers when you want to lean on prefill.
+</Aside>
+
+### What rides on the Dispatch
+
+Each extracted entity is attached as a `RoutingEntity` in the `entities` array of a `Dispatch` directive. Other directive types (`Respond`, `Deny`, `Continue`) never carry entities, and the array is omitted entirely when nothing is found:
+
+```json title="Dispatch with prefill"
+{
+  "type": "dispatch",
+  "target": "greentic.pet-daycare.demo/default/checkin_card",
+  "confidence": 0.88,
+  "reason": "index match",
+  "entities": [
+    { "kind": "person", "normalized": "Rex", "role": "for" },
+    { "kind": "date", "normalized": "20260530", "formats": { "iso": "2026-05-30" } },
+    { "kind": "time", "normalized": "14:00" }
+  ]
+}
+```
+
+Each `RoutingEntity` has:
+- **`kind`** — the marker kind (`location`, `date`, `time`, `person`).
+- **`normalized`** — the canonical value. Dates are `YYYYMMDD`, times are 24-hour `HH:MM`, locations and people are the resolved name.
+- **`role`** — optional preposition tag captured from the text (`"in"` / `"from"` / `"to"` for locations, `"for"` / `"with"` for people). Lets a flow tell *origin* from *destination*.
+- **`formats`** — optional alternate serializations. Dates carry an `iso` form (`2026-05-30`) because Adaptive Cards `Input.Date` and ISO-8601 consumers want hyphenated dates rather than the compact `normalized`.
+
+### Consuming prefill in a card
+
+`greentic-start` reads the `entities` off the Dispatch and writes each one into the message metadata under a stable naming convention, so card fields can opt in with a `${prefill_<key>}` placeholder. For every entity it emits:
+
+- `prefill_<kind>` — the `normalized` value (`prefill_location`, `prefill_date`, `prefill_person`).
+- `prefill_<kind>_<role>` — a role-tagged variant when the entity carries a `role` (`prefill_location_from`, `prefill_location_to`).
+- `prefill_<kind>_<format>` — each alternate serialization in `formats` (`prefill_date_iso`).
+
+A card author binds a field to one of those keys:
+
+```json title="checkin_card.json (excerpt)"
+{
+  "type": "Input.Text", "id": "pet", "value": "${prefill_person}"
+},
+{
+  "type": "Input.Date", "id": "arrival", "value": "${prefill_date_iso}"
+}
+```
+
+When the check-in routes, the card opens with the pet name and arrival date already filled in. Any `${prefill_*}` placeholder that no entity matched is substituted with an **empty string** (never left as literal placeholder text), so a card can safely reference keys that only sometimes arrive.
+
+### Leveraging prefill in a pack
+
+1. **Author marker-rich utterances.** Prefill extracts exactly the entity kinds you template into `utterances`. An entry like `"check in {{person}} at {{time}}"` both improves routing *and* guarantees the `person`/`time` values land on the Dispatch.
+2. **Bind card fields to `${prefill_*}`.** Opt each field in with the matching key (see above) — there's nothing else to wire up.
+3. **Use the `_iso` key for date inputs.** Bind Adaptive `Input.Date` fields to `${prefill_<kind>_iso}` (the hyphenated `YYYY-MM-DD` form), not the compact `normalized`.
+
+<Aside type="caution">
+Prefill entities travel on the **native routing-host** path that `greentic-start` drives. The WebAssembly (WIT) entrypoint has no vector type for entities yet, so it drops them — a flow dispatched through the wasm component receives the `Dispatch` target but an empty `entities` array. Use the [`greentic-fast2flow-routing-host`](#cli--tooling) binary when you need prefill end-to-end.
+</Aside>
 
 ## Policy Configuration
 
@@ -371,6 +591,10 @@ greentic-fast2flow policy validate --file policy.json
 
 ## Environment Variables
 
+The `FAST2FLOW_*` variables configure the native host binary and CLI. The `GREENTIC_FAST2FLOW_*` variables configure the runtime gate inside `greentic-start`.
+
+### Host & CLI (`greentic-fast2flow`)
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FAST2FLOW_LLM_PROVIDER` | `disabled` | LLM provider: `disabled`, `openai`, `ollama` |
@@ -379,6 +603,13 @@ greentic-fast2flow policy validate --file policy.json
 | `FAST2FLOW_MIN_CONFIDENCE` | `0.5` | Default minimum confidence threshold |
 | `FAST2FLOW_LLM_MIN_CONFIDENCE` | `0.5` | Default LLM minimum confidence |
 | `FAST2FLOW_CANDIDATE_LIMIT` | `20` | Default max candidates |
+
+### Runtime gate (`greentic-start`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GREENTIC_FAST2FLOW_INDEXES_PATH` | `<temp_dir>/greentic-fast2flow-indexes` | Where the pack-fallback materializer writes `<scope>/index.json`. Optional — override only to pin a durable path for k8s/cloud deploys. |
+| `GREENTIC_FAST2FLOW_FORCE_ENABLE` | — | **Deprecated / no-op.** Superseded by declaring the `greentic.cap.fast2flow.v1` capability in `pack.yaml`. No longer read. |
 
 ## Performance
 
@@ -400,12 +631,13 @@ Start with deterministic BM25 routing. Only enable LLM fallback if your flows ha
 1. **Write descriptive titles** — Title words get 2x TF-IDF boost for better scoring
 2. **Use specific tags** — Tags are the primary signal for BM25 matching
 3. **Set appropriate thresholds** — Start with `min_confidence: 0.5` and tune up
-4. **Use policies for overrides** — Change behavior per scope/channel/provider without redeploying
-5. **Monitor Continue rate** — High `Continue` output indicates gaps in your flow coverage
-6. **Keep LLM as fallback** — Deterministic routing is faster and more predictable
+4. **Tune down for short utterances** — The `0.5` default is tuned for longer marker-templated utterances. Short, marker-free utterances (e.g. `"who is here today"`) score lower under BM25; if a pre-seeded index under-dispatches, lower `FAST2FLOW_MIN_CONFIDENCE` to ~`0.05` rather than raising it
+5. **Use policies for overrides** — Change behavior per scope/channel/provider without redeploying
+6. **Monitor Continue rate** — High `Continue` output indicates gaps in your flow coverage
+7. **Keep LLM as fallback** — Deterministic routing is faster and more predictable
 
 ## Next Steps
 
 - [Flows Guide](/concepts/flows/) — Learn about `.ygtc` flow definitions
 - [Packs Guide](/concepts/packs/) — Understand `.gtpack` distribution
-- [Control Chains Reference](/reference/control-chains/) — Hook registration and policies
+- [Architecture Overview](/concepts/architecture/) — See how hooks, runtime control, and extensions fit together

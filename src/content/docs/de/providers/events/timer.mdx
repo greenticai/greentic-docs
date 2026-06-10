@@ -46,7 +46,7 @@ nodes:
     config:
       method: GET
       url: "https://api.example.com/reports/daily"
-    next: send_report
+    to: send_report
 
   - id: send_report
     type: reply
@@ -110,7 +110,7 @@ nodes:
     config:
       model: "gpt-4"
       prompt: "Generate weekly summary from: {{data}}"
-    next: send_summary
+    to: send_summary
 
 triggers:
   - type: timer
@@ -127,14 +127,14 @@ nodes:
     config:
       method: GET
       url: "https://api.example.com/health"
-    next: check_result
+    to: check_result
 
   - id: check_result
     type: branch
     config:
       conditions:
         - expression: "http_response.status != 200"
-          next: alert
+          to: alert
       default: done
 
   - id: alert

@@ -1,70 +1,74 @@
 ---
 title: gtc setup
-description: 在你的 Greentic bundle 中配置 provider
+description: Configure extensions and secrets in your Greentic bundle
 ---
 
-import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-## 概览
+## Overview
 
-`gtc setup` 命令用于配置你的 Greentic bundle 中的 provider。它会为每个已启用的 provider 运行 setup flow，收集凭据并配置 webhook。
+The `gtc setup` command configures extension packs in your Greentic bundle. It runs setup flows for enabled messaging, event, OAuth, secrets, and runtime extensions, collecting credentials and configuring webhooks where needed.
 
-## 用法
+## Usage
 
 ```bash
 gtc setup [OPTIONS] <BUNDLE_PATH>
 ```
 
-## 选项
+## Options
 
-| 选项 | 说明 |
+| Option | Description |
 |--------|-------------|
-| `--answers <FILE>` | answers 文件路径（非交互模式） |
-| `--dry-run` | 预览 setup 过程而不进行实际更改 |
-| `--emit-answers <FILE>` | 生成 answers 模板 |
-| `--advanced` | 在 answers 模板中包含可选字段 |
-| `--provider <NAME>` | 仅设置特定 provider |
-| `--skip <NAME>` | 跳过特定 provider |
-| `-v, --verbose` | 启用详细输出 |
+| `--answers <FILE>` | Path to answers file (non-interactive) |
+| `--key <KEY>` | Encryption/decryption key for answer documents that include secrets |
+| `--dry-run` | Preview setup without making changes |
+| `--emit-answers <FILE>` | Generate answers template |
+| `--advanced` | Include optional fields in answers template |
+| `--tenant <TENANT>` | Tenant identifier (default: `demo`) |
+| `--team <TEAM>` | Team identifier |
+| `--env <ENV>` | Environment (`dev`, `staging`, `prod`; default: `dev`) |
+| `--locale <LOCALE>` | UI locale as a BCP-47 tag |
+| `--ui` / `--no-ui` | Enable or disable the web setup UI |
+| `--non-interactive` | Fail instead of prompting when answers are incomplete |
 
-## 交互式 Setup
+## Interactive Setup
 
-以交互方式运行 setup，CLI 会针对每个 provider 提示你输入：
+Run setup interactively to be prompted for each extension:
 
 ```bash
 gtc setup ./my-bundle
 ```
 
-CLI 会提示你提供：
-- Provider 凭据（API keys、tokens）
-- 用于 webhook 的公开 URL
-- 可选配置项
+The CLI will prompt for:
+- Extension credentials (API keys, tokens)
+- Public URL for webhooks
+- Optional configuration options
 
-## 非交互式 Setup
+## Non-Interactive Setup
 
 ### Demo Catalog Flows
 
-[`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog 中的每个 demo，都会在其 pack 旁边发布一个 `*-setup-answers.json` 文档。你可以将它应用到使用 `gtc wizard` 创建的 bundle：
+Every demo in the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog publishes a `*-setup-answers.json` document alongside its pack. Apply it to a bundle that you created with `gtc wizard`:
 
 ```bash
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
+gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
 ```
 
-同样的模式适用于任何 demo，只需替换 demo ID 即可。完整 catalog、说明以及所需凭据请参见[运行 Demo](/zh/getting-started/running-demos/)。
+The same pattern works for any demo — just substitute the demo ID. See [Running Demos](/getting-started/running-demos/) for the full catalog with descriptions and required credentials.
 
-你也可以让 `gtc setup` 直接处理已发布的 `.gtbundle` artifact：
+You can also point `gtc setup` directly at a published `.gtbundle` artifact:
 
 ```bash
 gtc setup https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo.gtbundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/cloud-deploy-demo-setup-answers.json
 ```
 
 <Aside type="note">
-`gtc setup` 会从 `tenants/` 目录自动检测 bundle 的 tenant，因此即使 bundle 不是用默认的 `demo` tenant 创建的，secrets 也会写入正确的 tenant URI。它还会对 bundle 中的每个 pack 运行**依赖 capability 校验**，如果仍有任何必需 capability（例如 `greentic:state/state-store`）未满足，就会发出警告。
+`gtc setup` auto-detects the bundle's tenant from the `tenants/` directory, so secrets are written to the correct tenant URI even when the bundle was not created with the default `demo` tenant. It also runs **dependency capability validation** across every pack in the bundle and warns if any required capability (e.g. `greentic:state/state-store`) is still unsatisfied.
 </Aside>
 
-### 生成 Answers 模板
+### Generate Answers Template
 
-首先，生成包含所有必填字段的模板：
+First, generate a template with all required fields:
 
 ```bash
 # Basic template (required fields only)
@@ -74,10 +78,7 @@ gtc setup --dry-run --emit-answers answers.json ./my-bundle
 gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 ```
 
-### Answers 文件格式
-
-<Tabs>
-<TabItem label="JSON">
+### Answers File Format
 
 ```json title="answers.json"
 {
@@ -100,37 +101,15 @@ gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 }
 ```
 
-</TabItem>
-<TabItem label="YAML">
+Setup answers are JSON. Use `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to generate the current schema-backed file instead of hand-writing one from memory.
 
-```yaml title="answers.yaml"
-messaging-telegram:
-  enabled: true
-  public_base_url: https://xxx.ngrok-free.app
-  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-
-messaging-slack:
-  enabled: true
-  public_base_url: https://xxx.ngrok-free.app
-  api_base_url: https://slack.com/api
-  bot_token: xoxb-xxx-xxx-xxx
-  slack_app_id: A07XXXXXX
-  slack_configuration_token: xoxe.xoxp-xxx
-
-messaging-teams:
-  enabled: false
-```
-
-</TabItem>
-</Tabs>
-
-### 应用 Answers
+### Apply Answers
 
 ```bash
 gtc setup --answers answers.json ./my-bundle
 ```
 
-## Provider 专用配置
+## Extension-Specific Configuration
 
 ### Telegram
 
@@ -144,10 +123,10 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-**如何获取凭据：**
-1. 在 Telegram 中联系 [@BotFather](https://t.me/botfather)
-2. 发送 `/newbot` 并按照提示操作
-3. 复制 bot token
+**How to get credentials:**
+1. Message [@BotFather](https://t.me/botfather) on Telegram
+2. Send `/newbot` and follow prompts
+3. Copy the bot token
 
 ### Slack
 
@@ -163,12 +142,12 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-**如何获取凭据：**
-1. 访问 [api.slack.com/apps](https://api.slack.com/apps)
-2. 创建一个新应用或选择现有应用
-3. 在 OAuth & Permissions 中获取 Bot Token
-4. 在 Basic Information 中获取 App ID
-5. 在 App Manifest 中获取 Configuration Token
+**How to get credentials:**
+1. Go to [api.slack.com/apps](https://api.slack.com/apps)
+2. Create a new app or select existing
+3. Get Bot Token from OAuth & Permissions
+4. Get App ID from Basic Information
+5. Get Configuration Token from App Manifest
 
 ### Microsoft Teams
 
@@ -198,13 +177,13 @@ gtc setup --answers answers.json ./my-bundle
 }
 ```
 
-## 公开 URL 配置
+## Public URL Configuration
 
 <Aside type="caution">
-基于 webhook 的 provider 需要一个可公开访问的 URL。使用 `gtc start` 配合 ngrok 或 cloudflared 时，`public_base_url` 会被自动替换。
+Webhook-based extensions require a publicly accessible URL. The `public_base_url` will be automatically replaced when using ngrok or cloudflared with `gtc start`.
 </Aside>
 
-### 使用 ngrok
+### Using ngrok
 
 ```bash
 # Start ngrok in separate terminal
@@ -214,7 +193,7 @@ ngrok http 8080
 # Use this as public_base_url in answers
 ```
 
-### 使用 Cloudflared
+### Using Cloudflared
 
 ```bash
 # Cloudflared generates URL automatically with gtc start
@@ -223,122 +202,115 @@ gtc start ./my-bundle --cloudflared on
 
 ## Bundle Capabilities
 
-`bundle.yaml` 文件可以声明 capabilities，以在 setup 期间启用额外行为。Capabilities 以 capability 标识符数组的形式列出。
+The `bundle.yaml` file can declare capabilities that unlock additional behavior during setup. Capabilities are listed as an array of capability identifiers.
 
 ### Bundle Assets (`greentic.cap.bundle_assets.read.v1`)
 
-当 `bundle.yaml` 中存在 `greentic.cap.bundle_assets.read.v1` capability 时，`gtc setup` 会在 bundle 根目录创建一个 `assets/` 目录，并将 provider packs 中的 asset 文件 scaffold 到该目录。
+When the `greentic.cap.bundle_assets.read.v1` capability is present in `bundle.yaml`, `gtc setup` creates an `assets/` directory at the bundle root and scaffolds eligible asset files from extension packs into it.
 
 ```yaml title="bundle.yaml"
 capabilities:
   - greentic.cap.bundle_assets.read.v1
 ```
 
-具体来说，provider packs 中的 assets（例如 `assets/webchat-gui/` 条目）会被复制到 bundle 级别的 `assets/` 目录中。这让你可以在不修改原始 pack 内容的情况下，自定义 provider assets，例如 webchat-gui 皮肤和配置文件。
+Specifically, public assets from extension packs (currently `assets/webchat-gui/` entries) are copied into the bundle-level `assets/` directory. This gives you a place to customize extension assets -- for example, webchat-gui skins and configuration files -- without modifying the original pack contents.
 
-**工作方式：**
+**How it works:**
 
-- 在 setup 期间，包含 asset 目录的 provider packs（例如 `assets/webchat-gui/`）会将这些文件 scaffold 到 bundle 根目录下的 `assets/` 目录。
-- 之后你可以自由编辑这些文件。运行时会优先使用 bundle 级别的 asset 文件，而不是 pack 默认值。
-- 这对于自定义 webchat widget 的外观和体验、调整配置或应用品牌皮肤非常有用。
+- During setup, extension packs that include eligible asset directories (e.g., `assets/webchat-gui/`) have those files scaffolded into the bundle root `assets/` directory.
+- You can then edit these files freely. Bundle-level asset files override pack defaults at runtime.
+- This is useful for customizing the look and feel of webchat widgets, adjusting configuration, or applying branded skins.
 
 <Aside type="tip">
-setup 完成 asset scaffold 后，你可以安全地修改它们。运行时加载 assets 时，你在 bundle 级别所做的自定义会优先于 pack 默认值。
+After setup scaffolds the assets, you can safely modify them. Your bundle-level customizations take precedence over the pack defaults when the runtime loads assets.
 </Aside>
 
-## Setup Flow 执行过程
+## Setup Flow Execution
 
-当你运行 `gtc setup` 时，它会：
+When you run `gtc setup`, it:
 
 <Steps>
 
-1. **加载 bundle 配置**
+1. **Loads bundle configuration**
 
-   读取 `greentic.demo.yaml` 以查找 providers。
+   Reads `bundle.yaml` and the resolved bundle metadata to find extension packs and setup requirements.
 
-2. **校验 answers**
+2. **Validates answers**
 
-   检查所有必填字段是否存在。
+   Checks all required fields are present.
 
-3. **运行 setup flows**
+3. **Runs setup flows**
 
-   执行每个 provider 的 `setup_flow`（例如 webhook 注册）。
+   Executes each extension's setup flow (e.g., webhook registration).
 
-4. **存储凭据**
+4. **Stores credentials**
 
-   将凭据保存到已配置的 secrets store。
+   Saves credentials to the configured secrets store.
 
-5. **执行验证**
+5. **Runs verification**
 
-   运行 `verify_flow` 以确认 setup 是否成功。
+   Executes `verify_flow` to confirm setup worked.
 
 </Steps>
 
-## 选择性 Setup
+## Re-run Setup
 
-### 设置单个 Provider
-
-```bash
-gtc setup --provider messaging-telegram ./my-bundle
-```
-
-### 跳过特定 Provider
+`gtc setup` is idempotent. Re-run it with the same answers file after credential or public URL changes:
 
 ```bash
-gtc setup --skip messaging-teams ./my-bundle
+gtc setup ./my-bundle --answers answers.json
 ```
 
-### 重新运行 Setup
+For headless automation, combine an answers file with strict non-interactive mode:
 
 ```bash
-# Force re-setup (useful after URL changes)
-gtc start ./my-bundle --force-setup
+gtc setup ./my-bundle --answers answers.json --non-interactive --no-ui
 ```
 
-## 故障排查
+## Troubleshooting
 
-### Webhook 注册失败
+### Webhook Registration Failed
 
 ```
 Error: Failed to register webhook: 401 Unauthorized
 ```
 
-检查你的 bot token 是否正确且未过期。
+Check that your bot token is correct and not expired.
 
-### 缺少必填字段
+### Missing Required Field
 
 ```
 Error: Missing required field 'bot_token' for messaging-telegram
 ```
 
-确认你的 answers 文件中包含所有必填字段。
+Ensure all required fields are in your answers file.
 
-### 无法访问公开 URL
+### Public URL Not Accessible
 
 ```
 Error: Webhook verification failed: Connection refused
 ```
 
-确认你的公开 URL 可从互联网访问，并检查 ngrok/cloudflared 是否正在运行。
+Ensure your public URL is accessible from the internet. Check ngrok/cloudflared is running.
 
-### 找不到凭据
+### Credential Not Found
 
 ```
 Error: Secret 'slack_bot_token' not found
 ```
 
-运行 `gtc setup` 来配置该 provider，或检查你的 answers 文件。
+Run `gtc setup` to configure the extension, or check your answers file.
 
-## 最佳实践
+## Best Practices
 
-1. **在 CI/CD 中使用 answers 文件** - 避免在自动化流水线中使用交互式提示
-2. **妥善保护凭据** - 不要将包含真实 token 的 answers 文件提交到 git
-3. **使用环境变量** - 在 answers 中通过 `$ENV_VAR` 引用 secrets
-4. **先使用 dry-run 测试** - 在实际更改前先预览 setup 结果
-5. **URL 变化后重新生成** - 当你的公开 URL 发生变化时重新运行 setup
+1. **Use answers files in CI/CD** - Avoid interactive prompts in automated pipelines
+2. **Keep credentials secure** - Don't commit answers files with real tokens to git
+3. **Use environment variables** - Reference secrets via `$ENV_VAR` in answers
+4. **Test with dry-run** - Preview setup before making changes
+5. **Regenerate on URL change** - Re-run setup when your public URL changes
 
-## 下一步
+## Next Steps
 
-- [gtc start](/zh/cli/start/) - 运行 runtime server
-- [Telegram Setup](/zh/providers/messaging/telegram/) - 详细的 Telegram 指南
-- [Slack Setup](/zh/providers/messaging/slack/) - 详细的 Slack 指南
+- [gtc start](/cli/start/) - Run the runtime server
+- [Telegram Setup](/providers/messaging/telegram/) - Detailed Telegram guide
+- [Slack Setup](/providers/messaging/slack/) - Detailed Slack guide

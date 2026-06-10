@@ -7,7 +7,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Overview
 
-The WhatsApp provider integrates with the WhatsApp Business API (via Meta). It supports:
+The WhatsApp provider integrates with the WhatsApp Business Platform Cloud API (via Meta). It supports:
 
 - Text messages
 - Template messages
@@ -38,13 +38,13 @@ The WhatsApp provider integrates with the WhatsApp Business API (via Meta). It s
    In your Meta app dashboard:
    - Go to WhatsApp → Getting Started
    - Copy **Phone Number ID**
-   - Generate and copy **Permanent Access Token**
+   - Generate an access token. Use a system user or other production-grade token strategy for production deployments.
    - Note your **Business Account ID**
 
 3. **Configure Webhook**
 
    In WhatsApp → Configuration:
-   - Set Callback URL: `https://your-domain.com/webhook/whatsapp/{tenant}/{team}`
+   - Set Callback URL: `https://your-domain.com/v1/messaging/ingress/messaging-whatsapp/{tenant}/{team}`
    - Set Verify Token (any string you choose)
    - Subscribe to: `messages`
 
@@ -52,13 +52,16 @@ The WhatsApp provider integrates with the WhatsApp Business API (via Meta). It s
 
    ```json title="answers.json"
    {
-     "messaging-whatsapp": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "phone_number_id": "123456789012345",
-       "access_token": "EAAxxxxx...",
-       "verify_token": "your-verify-token",
-       "business_account_id": "987654321098765"
+     "setup_answers": {
+       "messaging-whatsapp": {
+         "phone_number_id": "123456789012345",
+         "public_base_url": "https://your-domain.ngrok-free.app",
+         "business_account_id": "987654321098765",
+         "api_base_url": "https://graph.facebook.com",
+         "api_version": "v17.0",
+         "whatsapp_token": "EAAxxxxx...",
+         "whatsapp_verify_token": "your-verify-token"
+       }
      }
    }
    ```
@@ -75,13 +78,28 @@ The WhatsApp provider integrates with the WhatsApp Business API (via Meta). It s
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `enabled` | Yes | Enable/disable provider |
 | `public_base_url` | Yes | Public URL for webhook |
 | `phone_number_id` | Yes | WhatsApp phone number ID |
-| `access_token` | Yes | Permanent access token |
-| `verify_token` | Yes | Webhook verification token |
-| `business_account_id` | No | WhatsApp Business Account ID |
-| `api_version` | No | Graph API version (default: v18.0) |
+| `whatsapp_token` | Yes | WhatsApp Cloud API access token |
+| `whatsapp_verify_token` | Yes | Webhook verification token |
+| `business_account_id` | Yes | WhatsApp Business Account ID |
+| `api_base_url` | Yes | Graph API base URL, normally `https://graph.facebook.com` |
+| `api_version` | Yes | Graph API version used by the installed pack |
+
+<Aside type="note">
+The setup layer also accepts the older `access_token` alias and stores it as `whatsapp_token`, but new answers files should use the generated key. Use `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to confirm the exact fields for the pack version in your bundle.
+</Aside>
+
+## Network Access
+
+WhatsApp Cloud API uses Meta webhooks for incoming messages and Meta Graph API calls for outgoing sends. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` from Meta to Greentic | Webhook verification and WhatsApp message callbacks |
+| Outgoing | HTTPS `443` from Greentic to `graph.facebook.com` or the configured `api_base_url` | Cloud API sends, media operations, and webhook setup/verification calls when supported |
+
+No WhatsApp-specific TCP port needs to be opened on the Greentic host. Meta must be able to reach the configured callback URL over HTTPS and validate the verify token.
 
 ## Features
 
@@ -223,11 +241,11 @@ nodes:
     config:
       conditions:
         - expression: "button.id == 'help'"
-          next: show_help
+          to: show_help
         - expression: "button.id == 'status'"
-          next: check_status
+          to: check_status
         - expression: "button.id == 'human'"
-          next: escalate
+          to: escalate
       default: unknown
 
   - id: show_help
@@ -246,7 +264,7 @@ triggers:
 
 1. Go to Meta Business Suite → WhatsApp Manager → Message Templates
 2. Create a new template with required components
-3. Submit for approval (usually 24-48 hours)
+3. Submit for approval. Approval timing is controlled by Meta and varies by account, category, and template content.
 
 ### Template Components
 
@@ -291,7 +309,7 @@ WhatsApp enforces a 24-hour messaging window. After 24 hours without user respon
   config:
     conditions:
       - expression: "last_message_time + 86400 > now"
-        next: send_freeform
+        to: send_freeform
       default: send_template
 
 - id: send_freeform
@@ -311,7 +329,7 @@ WhatsApp enforces a 24-hour messaging window. After 24 hours without user respon
 
 ### Webhook Verification Failed
 
-1. Verify `verify_token` matches configuration
+1. Verify `whatsapp_verify_token` matches the token configured in Meta
 2. Check webhook URL is publicly accessible
 3. Ensure HTTPS is properly configured
 
@@ -324,10 +342,7 @@ WhatsApp enforces a 24-hour messaging window. After 24 hours without user respon
 
 ### Rate Limiting
 
-WhatsApp has rate limits based on quality rating:
-- Tier 1: 1,000 messages/day
-- Tier 2: 10,000 messages/day
-- Tier 3: 100,000 messages/day
+WhatsApp messaging limits are controlled by Meta and depend on the phone number, account quality, messaging limit, conversation category, and current platform policy. Check WhatsApp Manager and Meta's current messaging-limits documentation for the exact limit that applies to your number.
 
 Handle gracefully:
 

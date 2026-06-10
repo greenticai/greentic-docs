@@ -41,6 +41,15 @@ export default defineConfig({
 					label: 'Deutsch',
 					lang: 'de',
 				},
+				fr: {
+					label: 'Français',
+					lang: 'fr',
+				},
+				ar: {
+					label: 'العربية',
+					lang: 'ar',
+					dir: 'rtl',
+				},
 			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/greenticai' }],
 			head: [
@@ -81,6 +90,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Introduction', slug: 'getting-started/introduction' },
 						{ label: 'Quick Start', slug: 'getting-started/quick-start' },
+						{ label: 'Multi-Language and i18n', slug: 'getting-started/multilanguage-i18n' },
 						{ label: 'Running Demos', slug: 'getting-started/running-demos' },
 						{ label: 'Installation', slug: 'getting-started/installation' },
 					],
@@ -90,11 +100,14 @@ export default defineConfig({
 					items: [
 						{ label: 'Architecture Overview', slug: 'concepts/architecture' },
 						{ label: 'Flows', slug: 'concepts/flows' },
+						{ label: 'Agentic Workers', slug: 'concepts/agentic-workers' },
+						{ label: 'Agentic Workers in the Designer', slug: 'concepts/agentic-workers-designer' },
 						{ label: 'Packs', slug: 'concepts/packs' },
 						{ label: 'Components', slug: 'concepts/components' },
-						{ label: 'Providers', slug: 'concepts/providers' },
+						{ label: 'Extensions', slug: 'concepts/extensions' },
 						{ label: 'Bundle Assets', slug: 'concepts/bundle-assets' },
 						{ label: 'Multi-Tenancy', slug: 'concepts/multi-tenancy' },
+						{ label: 'Secrets', slug: 'concepts/secrets' },
 					],
 				},
 				{
@@ -110,12 +123,14 @@ export default defineConfig({
 				{
 					label: 'Extensions',
 					items: [
-						{ label: 'Designer Extensions', slug: 'extensions/designer-extensions' },
-						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
-						{ label: 'Adaptive Cards', slug: 'extensions/adaptive-cards' },
-						{ label: 'Bundle Extensions', slug: 'extensions/bundle-extensions' },
-						{ label: 'Deploy Extensions', slug: 'extensions/deploy-extensions' },
-						{ label: 'Writing an Extension', slug: 'extensions/writing-extensions' },
+						{ label: 'Overview', slug: 'concepts/extensions' },
+						{ label: 'Writing Extension Packs', slug: 'extensions/writing-extensions' },
+						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
+						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },
+						{ label: 'Deployer Extensions', slug: 'extensions/deploy-extensions' },
+						{ label: 'Static Routes & Assets', slug: 'extensions/bundle-extensions' },
+						{ label: 'Publishing Extension Packs', slug: 'extensions/publishing-extensions' },
+						{ label: 'Extension CI', slug: 'extensions/github-action' },
 					],
 				},
 				{
@@ -126,7 +141,7 @@ export default defineConfig({
 					],
 				},
 				{
-					label: 'Messaging Providers',
+					label: 'Messaging Extensions',
 					items: [
 						{ label: 'Overview', slug: 'providers/messaging/overview' },
 						{ label: 'Slack', slug: 'providers/messaging/slack' },
@@ -140,7 +155,7 @@ export default defineConfig({
 					],
 				},
 				{
-					label: 'Events Providers',
+					label: 'Event Extensions',
 					items: [
 						{ label: 'Overview', slug: 'providers/events/overview' },
 						{ label: 'Webhook', slug: 'providers/events/webhook' },
@@ -152,11 +167,14 @@ export default defineConfig({
 				{
 					label: 'Components',
 					items: [
+						{ label: 'Templates (Handlebars)', slug: 'components/templates' },
+						{ label: 'Adaptive Cards', slug: 'components/adaptive-cards' },
+						{ label: 'QA', slug: 'components/qa' },
 						{ label: 'fast2flow', slug: 'components/fast2flow' },
+						{ label: 'slot-extractor', slug: 'components/slot-extractor' },
 						{ label: 'cards2pack', slug: 'components/cards2pack' },
 						{ label: 'flow2flow', slug: 'components/flow2flow' },
 						{ label: 'LLM OpenAI', slug: 'components/llm-openai' },
-						{ label: 'Templates (Handlebars)', slug: 'components/templates' },
 						{ label: 'Script (Rhai)', slug: 'components/script-rhai' },
 					],
 				},
@@ -180,8 +198,14 @@ export default defineConfig({
 					items: [
 						{ label: 'Flow YAML Schema', slug: 'reference/flow-schema' },
 						{ label: 'Pack Format', slug: 'reference/pack-format' },
+						{ label: 'Bundle Format', slug: 'reference/bundle-format' },
 						{ label: 'WIT Interfaces', slug: 'reference/wit-interfaces' },
 						{ label: 'Configuration', slug: 'reference/configuration' },
+						{
+							label: 'CLI --help (auto-generated)',
+							collapsed: true,
+							autogenerate: { directory: 'reference/cli' },
+						},
 					],
 				},
 			],

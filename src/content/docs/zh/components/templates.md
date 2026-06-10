@@ -14,7 +14,7 @@ description: 用于动态内容的 Handlebars 模板组件
   type: template
   config:
     template: "Hello, {{name}}! Your order #{{order_id}} is ready."
-  next: send_message
+  to: send_message
 ```
 
 ## 模板语法

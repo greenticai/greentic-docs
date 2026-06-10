@@ -17,7 +17,7 @@ Greentic 采用分层架构，并对关注点进行清晰分离：
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                   Gateway (HTTP/NATS)                    │
+│                    Gateway (HTTP)                       │
 │                 Public Endpoint Router                   │
 └─────────────────────────────────────────────────────────┘
                             │
@@ -66,7 +66,7 @@ Greentic 采用分层架构，并对关注点进行清晰分离：
 | **WASM Runtime** | Wasmtime v41 | Component model 执行 |
 | **Async Runtime** | Tokio v1 | 异步 I/O、任务调度 |
 | **HTTP Server** | Axum v0.8 | REST API、webhooks |
-| **Message Bus** | NATS | 事件分发、发布/订阅 |
+| **Message Bus** | Internal event bus | 事件分发、发布/订阅 |
 | **Session Store** | Memory/Redis | Flow 状态持久化 |
 | **Secrets** | AWS/Azure/GCP/Vault | 凭证管理 |
 
@@ -79,7 +79,7 @@ Greentic 采用分层架构，并对关注点进行清晰分离：
    │
 2. Webhook Handler (Provider Ingress)
    │
-3. NATS: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
+3. Message bus: greentic.messaging.ingress.{env}.{tenant}.{team}.{channel}
    │
 4. Flow Router (tenant/team resolution)
    │
@@ -89,7 +89,7 @@ Greentic 采用分层架构，并对关注点进行清晰分离：
    │
 7. Reply/Action Nodes
    │
-8. NATS: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
+8. Message bus: greentic.messaging.egress.{env}.{tenant}.{team}.{channel}
    │
 9. Provider Egress → External Service
 ```
@@ -141,27 +141,108 @@ pub struct TenantCtx {
 Greentic 使用 **WebAssembly Interface Types (WIT)** 规范来定义组件接口：
 
 ```wit
-// greentic-interfaces/wit/component.wit
-package greentic:component;
+// greentic-interfaces/wit/greentic/component@0.6.0/package.wit
+package greentic:component@0.6.0;
 
-interface types {
-    record message {
-        id: string,
-        content: string,
-        sender: string,
-        timestamp: u64,
-    }
+interface control {
+  should-cancel: func() -> bool;
+  yield-now: func();
+}
 
-    record outcome {
-        success: bool,
-        data: option<string>,
-        error: option<string>,
-    }
+interface node {
+  use greentic:types-core/core@0.6.0.{capability-id, component-id, flow-id, node-error, step-id, tenant-ctx};
+
+  record invocation-envelope {
+    ctx: tenant-ctx,
+    flow-id: flow-id,
+    step-id: step-id,
+    component-id: component-id,
+    attempt: u32,
+    payload-cbor: list<u8>,
+    metadata-cbor: option<list<u8>>,
+  }
+
+  record invocation-result {
+    ok: bool,
+    output-cbor: list<u8>,
+    output-metadata-cbor: option<list<u8>>,
+  }
+
+  variant schema-source {
+    cbor-schema-id(string),
+    inline-cbor(list<u8>),
+    ref-pack-path(string),
+    ref-uri(string),
+  }
+
+  record io-schema {
+    schema: schema-source,
+    content-type: string,
+    schema-version: option<string>,
+  }
+
+  record example {
+    title: string,
+    input-cbor: list<u8>,
+    output-cbor: list<u8>,
+  }
+
+  record schema-ref {
+    id: string,
+    content-type: string,
+    blake3-hash: string,
+    version: string,
+    bytes: option<list<u8>>,
+    uri: option<string>,
+  }
+
+  record setup-example {
+    title: string,
+    answers-cbor: list<u8>,
+  }
+
+  record setup-template-scaffold {
+    template-ref: string,
+    output-layout: option<string>,
+  }
+
+  variant setup-output {
+    config-only,
+    template-scaffold(setup-template-scaffold),
+  }
+
+  record setup-contract {
+    qa-spec: schema-source,
+    answers-schema: schema-source,
+    examples: list<setup-example>,
+    outputs: list<setup-output>,
+  }
+
+  record op {
+    name: string,
+    summary: option<string>,
+    input: io-schema,
+    output: io-schema,
+    examples: list<example>,
+  }
+
+  record component-descriptor {
+    name: string,
+    version: string,
+    summary: option<string>,
+    capabilities: list<capability-id>,
+    ops: list<op>,
+    schemas: list<schema-ref>,
+    setup: option<setup-contract>,
+  }
+
+  describe: func() -> component-descriptor;
+  invoke: func(op: string, envelope: invocation-envelope) -> result<invocation-result, node-error>;
 }
 
 world component {
-    import types;
-    export execute: func(input: types.message) -> types.outcome;
+  import control;
+  export node;
 }
 ```
 

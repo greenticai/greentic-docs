@@ -75,7 +75,7 @@ nodes:
         let data = event.payload;
         // Process webhook data
         data
-    next: respond
+    to: respond
 
   - id: respond
     type: http_response
@@ -99,9 +99,9 @@ nodes:
     config:
       conditions:
         - expression: "headers['x-github-event'] == 'push'"
-          next: handle_push
+          to: handle_push
         - expression: "headers['x-github-event'] == 'pull_request'"
-          next: handle_pr
+          to: handle_pr
       default: ignore
 
   - id: handle_push
@@ -126,9 +126,9 @@ nodes:
     config:
       conditions:
         - expression: "event.payload.type == 'payment_intent.succeeded'"
-          next: payment_success
+          to: payment_success
         - expression: "event.payload.type == 'payment_intent.failed'"
-          next: payment_failed
+          to: payment_failed
 
 triggers:
   - type: event
@@ -176,7 +176,7 @@ triggers:
   type: http_response
   config:
     status: 200
-  next: async_process  # Process async after responding
+  to: async_process  # Process async after responding
 ```
 
 ### 非同期処理
@@ -191,7 +191,7 @@ nodes:
       status: 202
       body:
         message: "Processing"
-    next: process_async
+    to: process_async
 
   - id: process_async
     type: async

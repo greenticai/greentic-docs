@@ -52,7 +52,7 @@ External Service / Timer
     │
     ▼ Normalized Event
 ┌─────────────────────────────────────────┐
-│              NATS Bus                   │
+│           Runtime Router                │
 │    greentic.events.{env}.{tenant}.{type}│
 └─────────────────────────────────────────┘
     │
@@ -105,22 +105,13 @@ nodes:
         // Process the event
         let payload = event.payload;
         process_payload(payload)
-    next: respond
+    to: respond
 
 triggers:
   - type: event
     event_type: "order.created"
     target: process
 ```
-
-## NATS Subjects
-
-事件通过 NATS 流转：
-
-| Subject | 用途 |
-|---------|---------|
-| `greentic.events.{env}.{tenant}.{type}` | 事件通知 |
-| `greentic.events.{env}.{tenant}.{type}.result` | 事件处理结果 |
 
 ## 常见模式
 
@@ -133,9 +124,9 @@ nodes:
     config:
       conditions:
         - expression: "event.event_type == 'order.created'"
-          next: send_confirmation
+          to: send_confirmation
         - expression: "event.event_type == 'order.shipped'"
-          next: send_tracking
+          to: send_tracking
 ```
 
 ### 定时任务
@@ -147,7 +138,7 @@ nodes:
     config:
       method: GET
       url: "https://api.example.com/reports/daily"
-    next: send_email
+    to: send_email
 
 triggers:
   - type: timer

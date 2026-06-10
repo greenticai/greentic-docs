@@ -1,332 +1,203 @@
 ---
-title: 构建 Packs
-description: 创建、构建并管理 Greentic packs
+title: Building Packs
+description: Create Greentic packs with the gtc wizard
 ---
 
-import { Aside, FileTree, Steps } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
-## 概述
+## Overview
 
-Packs 是 Greentic 中的分发单元。本指南介绍如何使用 CLI 工具创建、构建、签名和发布 packs。
+Packs are Greentic's distribution unit for application logic, extension logic, flows, components, and assets. Create them through `gtc wizard` first. The wizard delegates to `greentic-pack`, and the pack wizard can in turn delegate to `greentic-flow` and `greentic-component`, so pack metadata, flow edits, component scaffolding, assets, capability declarations, doctor checks, and optional build/sign steps live in one replayable JSON workflow.
 
-## Pack CLI 命令
+Use direct developer passthroughs such as `gtc dev pack build --in ...` only after the wizard has created the pack or when you are doing a narrow maintenance task.
 
-### gtc pack
+## Create with `gtc wizard`
 
-```bash
-gtc pack <COMMAND>
-
-Commands:
-  build     Build a pack from source directory
-  verify    Verify pack signature and contents
-  info      Display pack metadata
-  extract   Extract pack contents
-  sign      Sign a pack
-  publish   Publish pack to registry
-```
-
-## 创建 Pack
-
-<Steps>
-
-1. **创建 pack 目录结构**
-
-   ```bash
-   mkdir -p my-pack/{flows,components,assets}
-   ```
-
-2. **创建 pack 清单**
-
-   ```toml title="my-pack/pack.toml"
-   [pack]
-   name = "my-feature"
-   version = "1.0.0"
-   description = "My awesome feature pack"
-   authors = ["Your Name <you@example.com>"]
-
-   [capabilities]
-   id = "greentic.cap.app.v1"
-   provides = ["my-feature"]
-
-   [flows]
-   main = "flows/main.ygtc"
-
-   [components]
-   processor = "components/processor.wasm"
-
-   [assets]
-   templates = "assets/templates/"
-   ```
-
-3. **添加 flows**
-
-   ```yaml title="my-pack/flows/main.ygtc"
-   name: main
-   version: "1.0"
-   description: Main flow
-
-   nodes:
-     - id: process
-       type: reply
-       config:
-         message: "Hello from my pack!"
-
-   triggers:
-     - type: message
-       target: process
-   ```
-
-4. **添加 components**（如果有）
-
-   构建 WASM components 并放入 `components/`：
-
-   ```bash
-   cd my-component
-   cargo build --target wasm32-wasip2 --release
-   cp target/wasm32-wasip2/release/my_component.wasm ../my-pack/components/
-   ```
-
-</Steps>
-
-## 构建 Packs
-
-### 基础构建
+Run the interactive launcher when you are exploring:
 
 ```bash
-gtc pack build ./my-pack
-
-# Output: my-feature-1.0.0.gtpack
+gtc wizard
 ```
 
-### 使用选项构建
+Choose the pack workflow from the launcher. For automation and coding agents, start with the live schema:
 
 ```bash
-# Specify output path
-gtc pack build ./my-pack --output ./dist/my-feature.gtpack
-
-# Skip WASM optimization
-gtc pack build ./my-pack --no-optimize
-
-# Include debug info
-gtc pack build ./my-pack --debug
+gtc wizard --schema
 ```
 
-### 构建输出
+`gtc wizard --schema` returns the launcher schema and embeds the delegated pack schema. For pack work, set `answers.selected_action` to `pack` and place a `greentic-pack.wizard.answers` document in `answers.delegate_answer_document`.
 
-<FileTree>
-- my-feature-1.0.0.gtpack
-  - manifest.cbor
-  - flows/
-    - main.ygtc
-  - components/
-    - processor.wasm
-  - assets/
-    - templates/
-  - sbom.json
-</FileTree>
-
-## 为 Packs 签名
-
-<Aside type="caution">
-分发前务必为 packs 签名。在生产环境中，未签名的 packs 可能会被运行时拒绝。
+<Aside type="note">
+Running `gtc wizard --dry-run --non-interactive --yes` without an answers file is not enough. The launcher requires interactive input, or an AnswerDocument passed with `--answers`, `validate`, or `apply`.
 </Aside>
 
-### 生成签名密钥
+## AnswerDocument Shape
+
+Use this shape when you want the top-level `gtc wizard` launcher to delegate into the pack wizard:
+
+```json title="pack-create-answers.json"
+{
+  "wizard_id": "greentic-dev.wizard.launcher.main",
+  "schema_id": "greentic-dev.launcher.main",
+  "schema_version": "1.0.0",
+  "locale": "en",
+  "answers": {
+    "selected_action": "pack",
+    "delegate_answer_document": {
+      "wizard_id": "greentic-pack.wizard.run",
+      "schema_id": "greentic-pack.wizard.answers",
+      "schema_version": "1.0.0",
+      "answers": {
+        "pack_dir": "./packs/research-assistant",
+        "mode": "create",
+        "create_pack_id": "research-assistant",
+        "create_pack_scaffold": true,
+        "run_doctor": true,
+        "run_build": false,
+        "sign": false
+      }
+    }
+  }
+}
+```
+
+Validate the AnswerDocument and preview the plan before writing files:
 
 ```bash
-# Generate new Ed25519 key pair
-gtc pack keygen --output my-signing-key
-
-# Creates:
-# - my-signing-key.pem (private key - keep secret!)
-# - my-signing-key.pub (public key - distribute)
+gtc wizard validate --answers pack-create-answers.json
+gtc wizard --answers pack-create-answers.json --dry-run --yes --non-interactive
 ```
 
-### 为 Pack 签名
+Apply it when the plan is correct:
 
 ```bash
-gtc pack sign my-feature-1.0.0.gtpack --key my-signing-key.pem
-
-# Output: my-feature-1.0.0.gtpack (updated with signature)
+gtc wizard apply --answers pack-create-answers.json --yes --non-interactive
 ```
 
-### 验证签名
+The pack wizard can delegate to flow and component wizards. Use these fields inside the nested pack AnswerDocument when needed:
+
+| Field | Purpose |
+|-------|---------|
+| `asset_staging` | Copy files or directories into the pack before validation/build steps run. |
+| `flow_wizard_answers` | Add, update, or delete flows and steps through the embedded `greentic-flow` plan schema. |
+| `component_wizard_answers` | Create or update WASM component projects through the embedded `greentic-component` schema. |
+| `run_delegate_flow` | Run the nested flow wizard step. |
+| `run_delegate_component` | Run the nested component wizard step. |
+| `run_doctor` | Run pack validation from the wizard workflow. |
+| `run_build` | Build the pack from the wizard workflow. |
+| `sign` and `sign_key_path` | Sign the pack after building. |
+
+## Nested Flow and Component Work
+
+Use `gtc wizard --schema` as the starting point when an agent is creating the entire pack. For lower-level contracts, inspect the delegated schemas before composing the nested answers:
 
 ```bash
-gtc pack verify my-feature-1.0.0.gtpack --pubkey my-signing-key.pub
-
-# Output: Signature valid
+gtc dev pack wizard run --schema
+gtc dev flow wizard --help
+gtc dev component wizard --help
 ```
 
-## Pack 检查
-
-### 查看元数据
+For component-backed flow steps, fetch the exact step-answer schema from the component before writing `flow_wizard_answers`:
 
 ```bash
-gtc pack info my-feature-1.0.0.gtpack
+gtc dev flow component-schema <component-ref> --mode default
 ```
 
-输出：
-```
-Pack: my-feature
-Version: 1.0.0
-Description: My awesome feature pack
-Authors: Your Name <you@example.com>
+This keeps the pack creation workflow schema-aware. The coding agent writes JSON answers, `gtc wizard validate` catches contract drift, and `gtc wizard apply` performs the actual pack, flow, and component mutations.
 
-Capabilities:
-  ID: greentic.cap.app.v1
-  Provides: my-feature
+## Direct Pack Commands
 
-Contents:
-  Flows: 1
-  Components: 1
-  Assets: 2 directories
+The local `gtc dev pack --help` command exposes these pack operations:
 
-Signature: Valid (signed by: ABC123...)
-```
+| Command | Purpose |
+|---------|---------|
+| `build` | Build a pack component and supporting artifacts |
+| `lint` | Lint a pack manifest, flows, and templates |
+| `components` | Sync `pack.yaml` components with files under `components/` |
+| `update` | Sync `pack.yaml` components and flows with files under the pack root |
+| `new` | Scaffold a new pack directory |
+| `sign` | Sign a pack manifest using an Ed25519 private key |
+| `verify` | Verify a pack manifest signature |
+| `gui` | GUI-related pack tooling |
+| `doctor` | Diagnose a pack archive or source directory |
+| `inspect` | Deprecated alias for `doctor` |
+| `inspect-lock` | Inspect `pack.lock.cbor` as stable JSON |
+| `qa` | Run component QA and store answers |
+| `config` | Inspect resolved configuration, provenance, and warnings |
+| `info` | Describe a `.gtpack` archive |
+| `plan` | Generate a deployment plan from a pack archive or source directory |
+| `providers` | Legacy provider-extension helpers |
+| `add-extension` | Add extension data to a pack; provider extension path is legacy/schema-core |
+| `resolve` | Resolve component references and write `pack.lock.cbor` |
+| `wizard` | Pack wizard helpers |
 
-### 列出内容
+Run `gtc dev pack <command> --help` before scripting a direct command in CI. These commands are useful for validation, inspection, and maintenance, but pack creation should stay in the wizard workflow whenever possible.
+
+## Build After Wizard Creation
+
+Prefer `run_build: true` in the pack wizard when the build should be part of a replayable creation/update workflow. For an existing pack source directory, build with:
 
 ```bash
-gtc pack info my-feature-1.0.0.gtpack --list
-
-# Lists all files in the pack
+gtc dev pack build --in ./packs/research-assistant
 ```
 
-### 解包 Pack
+Validate the source directory or generated archive:
 
 ```bash
-gtc pack extract my-feature-1.0.0.gtpack --output ./extracted/
-
-# Extracts pack contents for inspection
+gtc dev pack doctor --in ./packs/research-assistant
+gtc dev pack info ./dist/research-assistant.gtpack
 ```
 
-## Flow 验证
+`gtc dev pack info` supports human and JSON output:
 
-### 验证 Flows
+```bash
+gtc dev pack info ./dist/research-assistant.gtpack --format json
+```
+
+## Flow Validation
+
+Prefer `run_doctor: true` in the pack wizard. For standalone checks, use `gtc dev flow doctor`; it delegates to `greentic-flow doctor` and accepts flow files or directories.
 
 ```bash
 # Validate all flows in a directory
-gtc flow doctor ./my-pack/flows/
+gtc dev flow doctor ./my-pack/flows/
 
-# Validate specific flow
-gtc flow validate ./my-pack/flows/main.ygtc
+# Validate a specific flow
+gtc dev flow doctor ./my-pack/flows/main.ygtc
+
+# Emit machine-readable diagnostics for one flow
+gtc dev flow doctor ./my-pack/flows/main.ygtc --json
 ```
 
-### Doctor 输出
+## Component Work
+
+Components are WASM components. Create and maintain them through the pack wizard's `component_wizard_answers` or the component wizard directly. Coding agents should use the wizard schema and answers workflow instead of hand-writing every manifest and binding:
 
 ```bash
-gtc flow doctor ./flows/
-
-# Output:
-# Checking flows/main.ygtc... OK
-# Checking flows/helper.ygtc... OK
-#
-# 2 flows checked, 0 errors, 0 warnings
+gtc dev pack wizard run --schema
+gtc dev component wizard --help
+gtc dev component new --help
+gtc dev component build --help
+gtc dev component doctor --help
 ```
 
-### 常见验证错误
+## Signing and Verification
 
-| 错误 | 原因 | 修复方法 |
-|-------|-------|-----|
-| `Unknown node type` | 节点类型无效 | 检查可用的节点类型 |
-| `Missing target node` | 边指向不存在的节点 | 修正节点 ID 引用 |
-| `Circular dependency` | 节点形成循环 | 打破循环 |
-| `No trigger defined` | Flow 没有入口点 | 添加触发器 |
-
-## 发布 Packs
-
-### 发布到 OCI Registry
+The pack CLI includes `sign` and `verify` commands:
 
 ```bash
-# Login to registry
-gtc pack login ghcr.io --username USER --password TOKEN
-
-# Publish pack
-gtc pack publish my-feature-1.0.0.gtpack --registry ghcr.io/greentic
+gtc dev pack sign --help
+gtc dev pack verify --help
 ```
 
-### 从 Registry 拉取
+<Aside type="caution">
+Use the installed command help when wiring signing into automation. The current local binary exposes the signing commands, but the exact key and archive flags should be taken from `gtc dev pack sign --help` and `gtc dev pack verify --help` for the toolchain you are running.
+</Aside>
 
-```bash
-gtc pack pull ghcr.io/greentic/my-feature:1.0.0
-```
-
-### 在 Bundle 中使用
-
-```yaml title="greentic.demo.yaml"
-apps:
-  my-app:
-    pack: "oci://ghcr.io/greentic/my-feature:1.0.0"
-```
-
-## Pack 模板
-
-### Provider Pack 模板
-
-```toml title="pack.toml"
-[pack]
-name = "messaging-custom"
-version = "1.0.0"
-description = "Custom messaging provider"
-
-[capabilities]
-id = "greentic.cap.messaging.provider.v1"
-provides = ["custom"]
-
-[flows]
-setup_default = "flows/setup.ygtc"
-verify_webhooks = "flows/verify.ygtc"
-
-[components]
-ingress = "components/ingress.wasm"
-egress = "components/egress.wasm"
-operator = "components/operator.wasm"
-
-[secrets]
-required = ["api_key"]
-optional = ["webhook_secret"]
-```
-
-### 应用 Pack 模板
-
-```toml title="pack.toml"
-[pack]
-name = "helpdesk-bot"
-version = "1.0.0"
-description = "IT Helpdesk bot"
-
-[capabilities]
-id = "greentic.cap.app.v1"
-provides = ["helpdesk"]
-
-[dependencies]
-greentic-templates = "^0.4"
-greentic-llm-openai = "^0.4"
-
-[flows]
-on_message = "flows/on_message.ygtc"
-on_ticket = "flows/on_ticket.ygtc"
-
-[assets]
-cards = "assets/cards/"
-templates = "assets/templates/"
-```
-
-## 最佳实践
-
-1. **使用语义化版本** - 使用 semver（MAJOR.MINOR.PATCH）
-2. **为所有发布版本签名** - 绝不要分发未签名的 packs
-3. **包含 SBOM** - 为安全审计记录依赖
-4. **发布前测试** - 验证 flows 并测试 components
-5. **完整编写文档** - 在 pack 中包含 README
-6. **让 packs 保持聚焦** - 每个 pack 只负责一个功能或 provider
-7. **使用 CI/CD** - 自动化构建和发布
-
-## CI/CD 示例
+## CI/CD Example
 
 ```yaml title=".github/workflows/pack.yml"
-name: Build and Publish Pack
+name: Build Pack
 
 on:
   push:
@@ -340,24 +211,24 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.90.0
+        uses: dtolnay/rust-toolchain@1.95.0
 
-      - name: Build Pack
-        run: gtc pack build ./my-pack
-
-      - name: Sign Pack
+      - name: Install GTC
         run: |
-          echo "${{ secrets.SIGNING_KEY }}" > key.pem
-          gtc pack sign my-feature-*.gtpack --key key.pem
+          cargo install cargo-binstall
+          cargo binstall gtc
+          gtc install
+          gtc doctor
 
-      - name: Publish
-        run: |
-          gtc pack login ghcr.io --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
-          gtc pack publish my-feature-*.gtpack --registry ghcr.io/${{ github.repository }}
+      - name: Build pack
+        run: gtc dev pack build --in ./packs/research-assistant
+
+      - name: Validate pack
+        run: gtc dev pack doctor --in ./packs/research-assistant
 ```
 
-## 下一步
+## Next Steps
 
-- [Pack Format Reference](/zh/reference/pack-format/) - 完整规范
-- [Flow Schema Reference](/zh/reference/flow-schema/) - YAML schema
-- [Components Guide](/zh/concepts/components/) - 构建 WASM components
+- [Pack Format Reference](/reference/pack-format/) - Complete specification
+- [Flow Schema Reference](/reference/flow-schema/) - YAML flow schema
+- [Components Guide](/concepts/components/) - Building WASM components

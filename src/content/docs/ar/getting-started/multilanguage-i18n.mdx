@@ -1,0 +1,143 @@
+---
+title: Multi-Language and i18n
+description: How Greentic handles implementation languages, user-facing languages, locale resolution, and translation assets
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+Greentic uses "multi-language" in two different but related ways:
+
+- **Implementation languages** - Digital-worker components run as WebAssembly components, so teams can build reusable operations in Rust, Go, JavaScript, Python, or any language that can target WASI Preview 2.
+- **User-facing languages** - Messages, Adaptive Cards, WebChat labels, templates, prompts, and other visible strings can be translated and selected by locale at runtime.
+
+The important design point is that language support is packaged and deployed with the worker. An application pack can carry translation files, WebChat extensions can scaffold locale-aware assets into a bundle, and tenant/session context tells the runtime which locale to use for a given user interaction.
+
+## How Greentic Chooses a Language
+
+Greentic treats locale as runtime context, not as a hard-coded global. A request or session can carry a locale, and the runtime can fall back through broader scopes when a narrower locale is not set.
+
+Typical resolution order:
+
+1. Session or user locale
+2. Team default locale
+3. Tenant default locale
+4. Bundle or global default locale
+5. Source language fallback
+
+`TenantCtx` also carries localization context through host calls and component invocations. That means a component, flow node, messaging extension, or WebChat surface can resolve text consistently while still preserving tenant, team, session, trace, and correlation information.
+
+<Aside type="tip">
+For production workers, set a clear default locale and make missing translations non-fatal. The worker should continue with source text rather than breaking a business flow because one string is missing.
+</Aside>
+
+## Where Translations Live
+
+Greentic keeps translations close to the worker artifacts that use them:
+
+| Location | Used for |
+|----------|----------|
+| **Application pack assets** | Cards, templates, prompts, app-specific messages, and flow-owned UI strings |
+| **Bundle assets** | Deployment-specific overrides, WebChat skins, locale files, embed snippets, and tenant-specific customizations |
+| **Extension pack defaults** | Default WebChat labels, skins, and public extension assets |
+| **Runtime context** | Current locale, tenant, team, session, trace, and fallback context |
+
+This avoids forking an application pack for every language or customer. You can ship one pack, then override or add locale files at the bundle level for a specific tenant or deployment.
+
+## WebChat i18n
+
+For WebChat-based workers, enable the WebChat i18n capability when creating the bundle:
+
+```json title="create-answers.json"
+{
+  "answers": {
+    "delegate_answer_document": {
+      "answers": {
+        "capabilities": [
+          "greentic.cap.bundle_assets.read.v1",
+          "greentic.cap.webchat.i18n.v1"
+        ]
+      }
+    }
+  }
+}
+```
+
+When `greentic.cap.webchat.i18n.v1` is enabled, `gtc wizard` and `gtc setup` can scaffold locale-aware WebChat assets under the bundle `./assets/` directory. The bundle can then override extension defaults without modifying the original `.gtpack`.
+
+Example bundle asset layout:
+
+```text
+my-bundle/
+└── assets/
+    └── webchat-gui/
+        └── skins/
+            └── demo/
+                └── i18n/
+                    ├── en.json
+                    ├── de.json
+                    ├── es.json
+                    └── ja.json
+```
+
+The WebChat UI can expose a locale picker, remember the selected locale in the session, and resolve labels and messages from the active locale file.
+
+## Adaptive Cards and Templates
+
+Adaptive Cards and templates should use stable translation keys instead of duplicating card files for every language. Current Greentic packs use readable JSON catalog keys such as `card.main_menu.body_0.text` and references such as `{{i18n:card.main_menu.body_0.text}}`.
+
+The usual workflow is:
+
+<Steps>
+
+1. **Create or extract source strings** from cards, templates, or other assets into an English source map.
+
+   ```json title="assets/i18n/en.json"
+   {
+     "card.welcome.body_0.text": "Welcome",
+     "card.welcome.actions_0.title": "Get Started"
+   }
+   ```
+
+2. **Translate the locale files** manually or through your translation tooling.
+
+   ```bash
+   greentic-i18n-translator translate --langs de,es,ja --en assets/i18n/en.json
+   ```
+
+3. **Package translations** into an application pack or copy them into bundle assets.
+
+4. **Resolve text at runtime** from the current session, team, tenant, or default locale.
+
+</Steps>
+
+## How This Works With Tenants
+
+Multi-tenancy and i18n are connected. The same digital worker can serve many tenants while each tenant has different:
+
+- Default locale
+- Enabled languages
+- WebChat skin and labels
+- Brand-specific phrasing
+- Legal or compliance wording
+- Team-level terminology
+
+Bundle assets make those differences deployment-specific. A pack can provide defaults, while `./assets/` overlays customize the visible experience for a tenant or bundle.
+
+## What To Do First
+
+For a new worker:
+
+1. Decide the source language, for example `en`.
+2. Enable `greentic.cap.webchat.i18n.v1` if the worker uses WebChat.
+3. Keep user-facing strings in cards, templates, or locale files rather than hard-coding them in component logic.
+4. Use stable i18n keys for strings that need translation.
+5. Test at least one non-default locale before publishing the pack.
+
+## Next Steps
+
+- [Bundle Assets](/concepts/bundle-assets/) - How bundle-level asset overlays work
+- [i18n Overview](/i18n/overview/) - Translation IDs, locale lookup, and runtime switching
+- [Cards Translation](/i18n/cards-translation/) - Translating Adaptive Cards
+- [Multi-Tenancy](/concepts/multi-tenancy/) - How tenant and team context flows through Greentic

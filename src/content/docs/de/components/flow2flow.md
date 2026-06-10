@@ -26,9 +26,9 @@ nodes:
     config:
       conditions:
         - expression: "context.needs_auth"
-          next: call_auth_flow
+          to: call_auth_flow
         - expression: "context.is_returning"
-          next: call_returning_flow
+          to: call_returning_flow
       default: call_new_user_flow
 
   - id: call_auth_flow
@@ -36,21 +36,21 @@ nodes:
     config:
       target_flow: "auth/login"
       pass_context: true
-    next: continue_main
+    to: continue_main
 
   - id: call_returning_flow
     type: flow2flow
     config:
       target_flow: "users/returning"
       pass_context: true
-    next: continue_main
+    to: continue_main
 
   - id: call_new_user_flow
     type: flow2flow
     config:
       target_flow: "users/onboarding"
       pass_context: true
-    next: continue_main
+    to: continue_main
 
   - id: continue_main
     type: reply

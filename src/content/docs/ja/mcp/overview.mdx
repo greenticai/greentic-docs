@@ -1,143 +1,208 @@
 ---
-title: MCP 概要
-description: Greentic における Model Context Protocol integration
+title: MCP Overview
+description: Model Context Protocol integration in Greentic
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-## はじめに
+## Introduction
 
-**MCP (Model Context Protocol)** は、AI model を external tool や data source に接続するための標準です。Greentic では次の用途で MCP を実装しています。
+**MCP (Model Context Protocol)** is a standard way to describe tools that an AI system can call. In Greentic, MCP is used as an integration surface for digital workers that need to call external APIs, SaaS systems, internal services, and generated tool components.
 
-- sandboxed な WASM environment での tool execution
-- 安全な external API access
-- database query
-- file system operation
+Greentic does not treat MCP as a separate hand-written YAML tool language. The current implementation centers on:
 
-## 主な機能
+- generated `wasm32-wasip2` MCP components, usually from OpenAPI or Google Discovery documents
+- flow nodes that call MCP-backed operations with `mcp.exec`
+- host binding hints for MCP servers, network access, secrets, and environment variables
+- tool maps that can be inspected with `greentic-dev mcp doctor`
+
+<Aside type="caution" title="Older examples">
+  Older examples used `type: mcp-tool`, `greentic-mcp test`, and per-tool YAML manifests. Those are not the current flow shape in the local Greentic sources. Use `mcp.exec` in flows and generated MCP components or validated tool maps for runtime wiring.
+</Aside>
+
+## Where MCP Fits
+
+```text
+OpenAPI / Discovery document
+        |
+        v
+greentic-mcp-gen
+        |
+        v
+wasm32-wasip2 MCP component
+        |
+        v
+Greentic pack / bundle
+        |
+        v
+Flow node: mcp.exec
+        |
+        v
+Host bindings: MCP endpoint, network, secrets, telemetry
+```
+
+## Key Concepts
 
 <CardGrid>
-  <Card title="WASM Sandboxing" icon="puzzle">
-    MCP ツールは security のために分離された WebAssembly environment で実行されます。
+  <Card title="Generated Components" icon="puzzle">
+    `greentic-mcp-gen` turns API descriptions into WASM components that expose MCP tools.
   </Card>
-  <Card title="Tool Discovery" icon="magnifier">
-    自動的なツール登録と capability advertisement を提供します。
+  <Card title="Flow Calls" icon="seti:flow">
+    Flows call MCP-backed operations through `mcp.exec`, passing an action and JSON-style arguments.
   </Card>
-  <Card title="Type Safety" icon="approve-check">
-    WIT interface により type-safe な tool invocation を実現します。
+  <Card title="Binding Hints" icon="setting">
+    Packs can describe MCP servers, endpoints, transports, capability tags, secrets, environment variables, and network allowlists for the host.
   </Card>
-  <Card title="Observability" icon="seti:pulse">
-    tool execution のための tracing と logging を標準で備えています。
+  <Card title="Doctor Checks" icon="approve-check">
+    `greentic-dev mcp doctor` inspects tool maps and reports missing component files, entries, retry settings, and timeouts.
   </Card>
 </CardGrid>
 
-## アーキテクチャ
+## MCP in Flows
 
-```
-LLM (with tool use)
-       │
-       ▼ Tool Call Request
-┌─────────────────────────────────┐
-│       greentic-mcp              │
-│   (MCP Executor / WASI Bridge)  │
-└─────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│    WASM Tool Component          │
-│   (Sandboxed execution)         │
-└─────────────────────────────────┘
-       │
-       ▼ Tool Result
-Back to LLM
+Current Greentic flow fixtures use component-style nodes. An MCP call is represented as a node operation named `mcp.exec`:
+
+```yaml title="weather_bot.ygtc"
+nodes:
+  forecast_weather:
+    mcp.exec:
+      component: weather_api
+      action: forecast_weather
+      args:
+        q: in.q_location
+        days: parameters.days_default
+    routing:
+      - to: weather_text
 ```
 
-## Flow における MCP
+The important fields are:
 
-### Tool Definition
+| Field | Purpose |
+| --- | --- |
+| `component` | Logical MCP component or adapter name available to the pack/runtime. |
+| `action` | Tool operation to call on that component. |
+| `args` | Arguments passed to the operation. These should match the tool input schema. |
 
-```yaml title="tools/database-query.yaml"
-name: database_query
-description: Query the customer database
-parameters:
-  - name: query
-    type: string
-    description: SQL query to execute
-    required: true
-  - name: limit
-    type: integer
-    description: Maximum rows to return
-    default: 10
-returns:
-  type: array
-  items:
-    type: object
-```
-
-### Flow でツールを使う
+This is different from older docs that showed:
 
 ```yaml
-- id: query_orders
-  type: mcp-tool
-  config:
-    tool: "database_query"
-    parameters:
-      query: "SELECT * FROM orders WHERE customer_id = '{{customer_id}}'"
-      limit: 5
-  output: orders_result
-  next: process_orders
+type: mcp-tool
 ```
 
-### LLM と組み合わせる
+Do not use that older shape for new flows.
 
-```yaml
-- id: agent_step
-  type: llm
-  config:
-    model: "gpt-4"
-    system_prompt: "You are a helpful assistant with database access."
-    tools:
-      - database_query
-      - send_email
-      - create_ticket
-    tool_choice: "auto"
-  next: handle_response
+## Generating MCP Components
+
+Use `greentic-mcp-gen` to generate MCP components from an API description:
+
+```bash
+greentic-mcp-gen \
+  --spec ./openapi/weatherapi.yaml \
+  --output-dir ./output
 ```
 
-## 利用可能なツール
+Useful validation commands:
 
-Greentic には、いくつかの built-in MCP tool が用意されています。
-
-| Tool | Description |
-|------|-------------|
-| `http_request` | HTTP request を実行する |
-| `database_query` | database を query する |
-| `file_read` | file を読み取る（sandboxed） |
-| `file_write` | file に書き込む（sandboxed） |
-| `send_email` | email を送信する |
-| `create_ticket` | support ticket を作成する |
-
-## セキュリティ
-
-### WASM Sandboxing
-
-すべての MCP tool は WASM sandbox で実行されます。
-- 直接の filesystem access は不可
-- 明示的に許可されない限り network access は不可
-- memory isolation
-- CPU time limit
-
-### Capability Model
-
-ツールは必要な capability を宣言します。
-
-```yaml
-capabilities:
-  - network:outbound  # Can make outbound requests
-  - filesystem:read   # Can read files in sandbox
+```bash
+greentic-mcp-gen --spec ./openapi/weatherapi.yaml --list-tools
+greentic-mcp-gen --spec ./openapi/weatherapi.yaml --tool-schema forecast_weather
+greentic-mcp-gen --spec ./openapi/weatherapi.yaml --tool-plan forecast_weather
 ```
 
-## 次のステップ
+The installed generator help states that generated components target the current protocol with:
 
-- [Creating MCP Tools](/ja/mcp/creating-tools/)
-- [LLM OpenAI Component](/ja/components/llm-openai/)
+```bash
+greentic-mcp-gen --protocol latest
+```
+
+The local generator source currently supports `latest` / `25.06.18`.
+
+## Google Discovery Documents
+
+For Google APIs, use the discovery subcommand:
+
+```bash
+greentic-mcp-gen discovery \
+  --url "https://sheets.googleapis.com/$discovery/rest?version=v4" \
+  --profile sheets-crm \
+  --out ./output
+```
+
+You can also convert Discovery to OpenAPI first:
+
+```bash
+greentic-mcp-gen discovery-to-openapi \
+  --url "https://sheets.googleapis.com/$discovery/rest?version=v4" \
+  --profile sheets-crm \
+  --out ./specs/sheets.openapi.json
+```
+
+## Binding Hints
+
+Greentic types include MCP binding hints so the runner can prepare host-side tool access:
+
+```json
+{
+  "mcp": {
+    "servers": [
+      {
+        "name": "weather_api",
+        "transport": "http",
+        "endpoint": "https://api.weather.example",
+        "caps": ["weather"]
+      }
+    ]
+  }
+}
+```
+
+Binding hints are not a substitute for secrets or policy. They tell the host what the pack expects so runtime setup can wire the right endpoint, transport, and capability tags.
+
+## Tool Maps
+
+The dev CLI can inspect MCP tool maps. The current source accepts JSON or YAML files named `toolmap.json`, `toolmap.yaml`, `toolmap.yml`, `mcp.json`, or `mcp.yaml`.
+
+```json title="toolmap.json"
+{
+  "tools": [
+    {
+      "name": "echo",
+      "component": "./target/wasm32-wasi/release/echo_tool.wasm",
+      "entry": "tool_invoke",
+      "timeout_ms": 3000,
+      "max_retries": 1,
+      "retry_backoff_ms": 100
+    }
+  ]
+}
+```
+
+Run:
+
+```bash
+greentic-dev mcp doctor providers/weather
+```
+
+or:
+
+```bash
+greentic-dev mcp doctor providers/weather --json
+```
+
+The doctor resolves component paths relative to the tool-map file and reports missing components, entry names, retry settings, and timeout settings.
+
+## Security
+
+MCP integrations still follow Greentic's host capability model:
+
+- network access should be declared and allowlisted
+- credentials should come from secret bindings, not component source code
+- environment variables must be explicitly passed through
+- generated components should be tested against their input schemas before they are packaged
+- telemetry and observer extensions should capture tool failures, latency, and retry behavior
+
+## Next Steps
+
+- [Creating MCP Tools](/mcp/creating-tools/)
+- [Flows](/concepts/flows/)
+- [Components](/concepts/components/)

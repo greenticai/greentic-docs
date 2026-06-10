@@ -40,7 +40,7 @@ No necesitas generar nada manualmente. Todas las demos se lanzan con los mismos 
 </Steps>
 
 <Aside type="tip">
-Sustituye `<demo>` por uno de los IDs de demo del catálogo siguiente. El directorio de bundle creado en el paso 1 lleva el nombre de la demo (por ejemplo, `quickstart-demo-bundle`).
+Sustituye `<demo>` por uno de los IDs de demo del catálogo siguiente. El directorio de bundle creado en el paso 1 lleva el nombre de la demo (por ejemplo, `deep-research-demo-bundle`).
 </Aside>
 
 ## Prerrequisitos
@@ -66,23 +66,9 @@ La experiencia mínima de Greentic. Una tarjeta de bienvenida, una tarjeta infor
 - **Demo ID:** `quickstart`
 
 ```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
-gtc start ./quickstart-demo-bundle
-```
-
-### quickstart-event
-
-Ejercita todos los proveedores de eventos en un solo bundle: webhooks, temporizadores cron, correo transaccional mediante SendGrid y SMS mediante Twilio.
-
-- **Canales:** WebChat GUI
-- **Servicios externos:** SendGrid (opcional), Twilio (opcional), webhook entrante
-- **Demo ID:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-create-answers.json
+gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
+gtc start ./deep-research-demo-bundle
 ```
 
 ### hr-onboarding
@@ -139,20 +125,6 @@ Asistente de inventario y supply-chain: comprobaciones de stock, seguimiento de 
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-Flujo de creación de incidentes con adaptive cards que apunta a WebChat y Webex, y luego abre un incidente en Better Stack.
-
-- **Canales:** WebChat GUI, Webex
-- **Servicios externos:** Better Stack (`betterstack_token` en setup-answers)
-- **Demo ID:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ Ambos comandos admiten `--dry-run` para previsualizar la salida sin tocar el sis
 gtc stop ./<demo>-bundle
 ```
 
-Esto apaga el runner y cualquier proceso auxiliar (NATS, túneles) que `gtc start` haya levantado.
+Esto apaga el runner y cualquier proceso auxiliar (túneles) que `gtc start` haya levantado.
 
 ## Solución de Problemas
 

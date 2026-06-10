@@ -1,0 +1,131 @@
+---
+title: Webex
+description: Connect your digital worker to Cisco Webex
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+The Webex provider integrates with Webex messaging. It supports:
+
+- Direct messages
+- Space (room) messages
+- Adaptive Cards
+- File attachments
+- @mentions
+
+## Prerequisites
+
+- Webex account
+- Webex Developer access
+
+## Setup
+
+<Steps>
+
+1. **Create a Webex Bot**
+
+   Go to [developer.webex.com](https://developer.webex.com):
+   - Navigate to My Webex Apps → Create a Bot
+   - Fill in bot details
+   - Copy the **Bot Access Token**
+
+2. **Create a Webhook**
+
+   The provider will create webhooks automatically, or create manually:
+   - Go to Documentation → Webhooks API
+   - Create webhook pointing to your endpoint
+
+3. **Configure Provider**
+
+   ```json title="answers.json"
+   {
+     "messaging-webex": {
+       "enabled": true,
+       "public_base_url": "https://your-domain.ngrok-free.app",
+       "api_base_url": "https://webexapis.com/v1",
+       "webex_bot_token": "your-bot-access-token",
+       "default_room_id": "optional-room-id",
+       "default_to_person_email": "optional-person@example.com"
+     }
+   }
+   ```
+
+4. **Run Setup**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+</Steps>
+
+## Configuration Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `enabled` | Yes | Enable/disable provider |
+| `public_base_url` | Yes | Public URL for webhook |
+| `webex_bot_token` | Yes | Bot access token |
+| `api_base_url` | No | Webex API URL (default: `https://webexapis.com/v1`) |
+| `default_room_id` | No | Default space/room for outbound messages |
+| `default_to_person_email` | No | Default person email for direct messages |
+
+<Aside type="note">
+The setup layer also accepts the older `bot_token` alias and stores it as `webex_bot_token`, but new answers files should use the wizard-generated key.
+</Aside>
+
+## Features
+
+### Text Messages
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help?"
+```
+
+### Markdown
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - List item
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+Webex Buttons and Cards use Adaptive Cards and currently document support for Adaptive Cards version 1.3 with Webex-specific limitations. Test cards in Webex, especially when using images, fallback behavior, or complex actions.
+
+```yaml
+- id: card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.3"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+```
+
+### File Attachments
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your document"
+    files:
+      - url: "https://example.com/doc.pdf"
+```
+
+## Next Steps
+
+- [Slack Provider](/providers/messaging/slack/)
+- [Teams Provider](/providers/messaging/teams/)

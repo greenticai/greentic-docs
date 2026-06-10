@@ -40,7 +40,7 @@ Anda tidak perlu melakukan scaffold apa pun secara manual. Setiap demo dijalanka
 </Steps>
 
 <Aside type="tip">
-Ganti `<demo>` dengan salah satu ID demo di katalog di bawah. Direktori bundle yang dibuat pada langkah 1 dinamai berdasarkan demo tersebut (misalnya `quickstart-demo-bundle`).
+Ganti `<demo>` dengan salah satu ID demo di katalog di bawah. Direktori bundle yang dibuat pada langkah 1 dinamai berdasarkan demo tersebut (misalnya `deep-research-demo-bundle`).
 </Aside>
 
 ## Prasyarat
@@ -66,23 +66,9 @@ Pengalaman Greentic paling minimal. Kartu sambutan, kartu tentang, dan interaksi
 - **ID demo:** `quickstart`
 
 ```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-create-answers.json
-gtc setup ./quickstart-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-setup-answers.json
-gtc start ./quickstart-demo-bundle
-```
-
-### quickstart-event
-
-Menguji setiap provider event dalam satu bundle: webhook, cron timer, transactional email melalui SendGrid, dan SMS melalui Twilio.
-
-- **Channel:** WebChat GUI
-- **Layanan eksternal:** SendGrid (opsional), Twilio (opsional), incoming webhook
-- **ID demo:** `quickstart-event`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-create-answers.json
-gtc setup ./quickstart-event-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/quickstart-event-setup-answers.json
-gtc start ./quickstart-event-demo-bundle --ngrok on
+gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-create-answers.json
+gtc setup ./deep-research-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/deep-research-demo-setup-answers.json
+gtc start ./deep-research-demo-bundle
 ```
 
 ### hr-onboarding
@@ -139,20 +125,6 @@ Asisten inventaris dan supply-chain: pengecekan stok, pelacakan pesanan, peringa
 gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-create-answers.json
 gtc setup ./supply-chain-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/supply-chain-setup-answers.json
 gtc start ./supply-chain-demo-bundle
-```
-
-### incident
-
-Flow pembuatan incident berbasis adaptive card yang menargetkan WebChat dan Webex, lalu membuka incident di Better Stack.
-
-- **Channel:** WebChat GUI, Webex
-- **Layanan eksternal:** Better Stack (`betterstack_token` di setup-answers)
-- **ID demo:** `incident`
-
-```bash
-gtc wizard --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-create-answers.json
-gtc setup ./incident-demo-bundle --answers https://github.com/greenticai/greentic-demo/releases/latest/download/incident-setup-answers.json
-gtc start ./incident-demo-bundle
 ```
 
 ### redbutton
@@ -284,7 +256,7 @@ Kedua perintah mendukung `--dry-run` untuk meninjau output tanpa menyentuh files
 gtc stop ./<demo>-bundle
 ```
 
-Ini mematikan runner dan proses tambahan apa pun (NATS, tunnel) yang dijalankan oleh `gtc start`.
+Ini mematikan runner dan proses tambahan apa pun (tunnel) yang dijalankan oleh `gtc start`.
 
 ## Pemecahan Masalah
 

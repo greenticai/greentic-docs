@@ -57,7 +57,7 @@ Greentic 的每个方面都围绕多租户设计：
 | WASM Runtime | Wasmtime v41 |
 | WASM Target | `wasm32-wasip2` |
 | HTTP Server | Axum v0.8 |
-| Messaging Bus | NATS |
+| Message Routing | Internal runtime routing |
 | 序列化 | serde + CBOR + YAML |
 
 ## 使用场景

@@ -1,0 +1,18 @@
+{
+  "delegate_answer_document": {
+    "answers": {
+      "create_pack_id": "research-assistant",
+      "create_pack_scaffold": true,
+      "mode": "create",
+      "pack_dir": "/private/tmp/gtc-wizard-pack-example",
+      "run_build": false,
+      "run_doctor": true,
+      "sign": false
+    },
+    "locale": "en",
+    "schema_id": "greentic-pack.wizard.answers",
+    "schema_version": "1.0.0",
+    "wizard_id": "greentic-pack.wizard.run"
+  },
+  "selected_action": "pack"
+}

@@ -57,7 +57,7 @@ workflow は YAML file (`.ygtc`) 内の **directed graph** として定義され
 | WASM Runtime | Wasmtime v41 |
 | WASM Target | `wasm32-wasip2` |
 | HTTP Server | Axum v0.8 |
-| Messaging Bus | NATS |
+| Message Routing | Internal runtime routing |
 | Serialization | serde + CBOR + YAML |
 
 ## Use Cases

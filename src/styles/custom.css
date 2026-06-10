@@ -15,18 +15,19 @@
    ============================================================ */
 
 :root {
-	/* Starlight accent tokens, tuned to match greentic.ai exactly */
+	/* Starlight accent tokens, tuned to match greentic.ai exactly.
+	 *
+	 * Note: the base gray ramp (--sl-color-white / gray-1..6 / black) is
+	 * intentionally NOT overridden here. Declaring them at `:root` would
+	 * tie with Starlight's `[data-theme='light']` on specificity and win
+	 * on source order, leaving light mode with a dark background because
+	 * `--sl-color-bg = var(--sl-color-black) = #17181c`. Starlight's
+	 * built-in values already match our design, so let its auto-inversion
+	 * flip them in light mode. Per-theme overrides live in the
+	 * `[data-theme='...']` blocks below. */
 	--sl-color-accent-low: #0f3c31;
 	--sl-color-accent: #22c39e;
 	--sl-color-accent-high: #3be0b8;
-	--sl-color-white: #ffffff;
-	--sl-color-gray-1: #eceef2;
-	--sl-color-gray-2: #c0c2c7;
-	--sl-color-gray-3: #888b96;
-	--sl-color-gray-4: #545861;
-	--sl-color-gray-5: #353841;
-	--sl-color-gray-6: #24272f;
-	--sl-color-black: #17181c;
 
 	/* Greentic brand extension tokens */
 	--greentic-primary: #22c39e;
@@ -97,11 +98,6 @@ body {
 	padding-bottom: 0.4rem;
 }
 
-:root[data-theme='light'] .sl-markdown-content h2 {
-	color: var(--sl-color-black);
-	border-bottom-color: var(--sl-color-gray-2);
-}
-
 .sl-markdown-content h3 {
 	font-family: var(--sl-font);
 	font-size: 1.35rem;
@@ -123,10 +119,6 @@ body {
 .sl-markdown-content p {
 	margin-bottom: 1.25rem;
 	color: var(--sl-color-gray-2);
-}
-
-:root[data-theme='light'] .sl-markdown-content p {
-	color: var(--sl-color-gray-4);
 }
 
 /* Links */
@@ -157,10 +149,6 @@ body {
 	color: var(--sl-color-gray-2);
 }
 
-:root[data-theme='light'] .sl-markdown-content li {
-	color: var(--sl-color-gray-4);
-}
-
 .sl-markdown-content li::marker {
 	color: var(--sl-color-accent);
 }
@@ -188,12 +176,6 @@ body {
 	border: 1px solid var(--sl-color-gray-5);
 }
 
-:root[data-theme='light'] .sl-markdown-content code:not(pre code) {
-	background: var(--sl-color-gray-1);
-	color: var(--sl-color-accent-high);
-	border-color: var(--sl-color-gray-2);
-}
-
 /* Code blocks */
 .expressive-code {
 	margin: 1.5rem 0;
@@ -202,10 +184,6 @@ body {
 .expressive-code pre {
 	border-radius: 0.5rem;
 	border: 1px solid var(--sl-color-gray-5);
-}
-
-:root[data-theme='light'] .expressive-code pre {
-	border-color: var(--sl-color-gray-2);
 }
 
 .expressive-code .frame {
@@ -223,11 +201,6 @@ body {
 	font-weight: 500;
 }
 
-:root[data-theme='light'] .expressive-code .header {
-	background: var(--sl-color-gray-1);
-	border-bottom-color: var(--sl-color-gray-2);
-}
-
 /* ========================================
    Tables
    ======================================== */
@@ -242,16 +215,8 @@ body {
 	border: 1px solid var(--sl-color-gray-5);
 }
 
-:root[data-theme='light'] .sl-markdown-content table {
-	border-color: var(--sl-color-gray-2);
-}
-
 .sl-markdown-content thead {
 	background: var(--sl-color-gray-6);
-}
-
-:root[data-theme='light'] .sl-markdown-content thead {
-	background: var(--sl-color-gray-1);
 }
 
 .sl-markdown-content th {
@@ -268,17 +233,8 @@ body {
 	color: var(--sl-color-gray-2);
 }
 
-:root[data-theme='light'] .sl-markdown-content td {
-	border-bottom-color: var(--sl-color-gray-2);
-	color: var(--sl-color-gray-4);
-}
-
 .sl-markdown-content tbody tr:hover {
 	background: var(--sl-color-gray-6);
-}
-
-:root[data-theme='light'] .sl-markdown-content tbody tr:hover {
-	background: var(--sl-color-gray-1);
 }
 
 .sl-markdown-content tbody tr:last-child td {
@@ -305,10 +261,6 @@ body {
 .sl-markdown-content blockquote p {
 	margin-bottom: 0;
 	color: var(--sl-color-gray-3);
-}
-
-:root[data-theme='light'] .sl-markdown-content blockquote p {
-	color: var(--sl-color-gray-4);
 }
 
 /* ========================================
@@ -397,10 +349,6 @@ body {
 	gap: 0;
 }
 
-:root[data-theme='light'] [role='tablist'] {
-	border-bottom-color: var(--sl-color-gray-2);
-}
-
 [role='tab'] {
 	padding: 0.75rem 1.25rem;
 	font-weight: 500;
@@ -434,11 +382,6 @@ body {
 	transition: all 0.2s ease;
 }
 
-:root[data-theme='light'] .card {
-	border-color: var(--sl-color-gray-2);
-	background: var(--sl-color-white);
-}
-
 .card:hover {
 	border-color: var(--sl-color-accent);
 	transform: translateY(-2px);
@@ -463,10 +406,6 @@ nav.sidebar a {
 nav.sidebar a:hover {
 	background: var(--sl-color-gray-6);
 	color: var(--sl-color-accent);
-}
-
-:root[data-theme='light'] nav.sidebar a:hover {
-	background: var(--sl-color-gray-1);
 }
 
 nav.sidebar a[aria-current='page'] {
@@ -518,17 +457,9 @@ starlight-toc a[aria-current='true'] {
 	transition: all 0.2s ease;
 }
 
-:root[data-theme='light'] .pagination-links a {
-	border-color: var(--sl-color-gray-2);
-}
-
 .pagination-links a:hover {
 	border-color: var(--sl-color-accent);
 	background: var(--sl-color-gray-6);
-}
-
-:root[data-theme='light'] .pagination-links a:hover {
-	background: var(--sl-color-gray-1);
 }
 
 /* ========================================

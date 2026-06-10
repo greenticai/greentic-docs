@@ -26,91 +26,72 @@ Provider Slack mengintegrasikan digital worker Anda dengan workspace Slack. Prov
 
 <Steps>
 
-1. **Buat App Slack**
+1. **Buat pasangan token konfigurasi Slack**
 
-   Buka [api.slack.com/apps](https://api.slack.com/apps) dan klik "Create New App":
-   - Pilih "From scratch"
-   - Masukkan nama app (misalnya, "My Support Bot")
-   - Pilih workspace Anda
+   Buka [api.slack.com/apps](https://api.slack.com/apps) dan buat pasangan token konfigurasi app. Salin kedua nilai:
+   - Token akses konfigurasi (`xoxe.xoxp-...`)
+   - Token refresh konfigurasi (`xoxe-1-...`)
 
-2. **Konfigurasikan Bot Token Scopes**
-
-   Buka **OAuth & Permissions** → **Scopes** → **Bot Token Scopes**:
-
-   Scope yang diperlukan:
-   - `chat:write` - Mengirim pesan
-   - `im:history` - Membaca riwayat DM
-   - `im:write` - Membuka DM
-   - `users:read` - Membaca info pengguna
-
-   Scope opsional:
-   - `channels:history` - Membaca pesan channel
-   - `channels:read` - Menampilkan daftar channel
-   - `files:read` - Membaca file
-   - `files:write` - Mengunggah file
-
-3. **Aktifkan Event Subscriptions**
-
-   Buka **Event Subscriptions**:
-   - Aktifkan Events
-   - Atur Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}`
-
-   Subscribe ke event bot:
-   - `message.im` - Pesan DM
-   - `message.channels` - Pesan channel
-   - `app_mention` - @mention
-
-4. **Aktifkan Interactivity**
-
-   Buka **Interactivity & Shortcuts**:
-   - Aktifkan Interactivity
-   - Atur Request URL: `https://your-domain.com/webhook/slack/{tenant}/{team}/interactive`
-
-5. **Install App ke Workspace**
-
-   Buka **Install App** → **Install to Workspace**
-
-   Salin **Bot User OAuth Token** (diawali dengan `xoxb-`)
-
-6. **Dapatkan Kredensial App**
-
-   Dari **Basic Information**:
-   - App ID
-   - Configuration Token (untuk pembaruan manifest)
-
-7. **Konfigurasikan Provider**
+2. **Konfigurasikan provider**
 
    ```json title="answers.json"
    {
-     "messaging-slack": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "api_base_url": "https://slack.com/api",
-       "bot_token": "xoxb-xxx-xxx-xxx",
-       "slack_app_id": "A07XXXXXX",
-       "slack_configuration_token": "xoxe.xoxp-xxx"
+     "setup_answers": {
+       "messaging-slack": {
+         "slack_configuration_access_token": "xoxe.xoxp-xxx",
+         "slack_configuration_refresh_token": "xoxe-1-xxx"
+       }
      }
    }
    ```
 
-8. **Jalankan Setup**
+3. **Jalankan setup**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
+
+4. **Klik Add to Slack**
+
+   Setup mendaftarkan atau memperbarui app Slack dan menampilkan aksi **Add to Slack**. Buka URL otorisasi Slack yang dibuat, pilih workspace, tinjau scope yang diminta, lalu setujui instalasi.
+
+   Saat redirect OAuth kembali ke setup, Greentic menyimpan Slack app id, client id, client secret, dan jawaban OAuth runtime untuk tenant. Jika callback tidak ditangani otomatis, jalankan `gtc setup --answers answers.json ./my-bundle` lagi setelah menyetujui instalasi.
+
+5. **Tambahkan app di Slack**
+
+   Buka Slack dan pastikan app sudah terinstal di workspace. Untuk percakapan channel, tambahkan app ke channel tempat worker harus merespons. Anda dapat melakukannya dari pengaturan integrasi channel atau dengan menyebut/mengundang app di channel.
+
+6. **Mulai atau mulai ulang runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   Saat startup, `slack_app_id` yang tersimpan dan pasangan token konfigurasi digunakan untuk memperbarui manifest app Slack dengan URL webhook saat ini.
+
+7. **Uji channel**
+
+   Kirim direct message ke app atau mention app di channel Slack tempat Anda menambahkannya. Event channel hanya masuk untuk channel tempat app menjadi anggota dan scope terpasang mengizinkan event tersebut.
 
 </Steps>
 
 ## Opsi Konfigurasi
 
 | Opsi | Wajib | Deskripsi |
-|------|-------|-----------|
-| `enabled` | Ya | Aktifkan/nonaktifkan provider |
-| `public_base_url` | Ya | URL publik untuk webhook |
-| `bot_token` | Ya | Bot User OAuth Token (`xoxb-...`) |
-| `slack_app_id` | Ya | App ID dari Basic Information |
-| `slack_configuration_token` | Tidak | Untuk pembaruan manifest otomatis |
-| `api_base_url` | Tidak | URL API Slack (default: `https://slack.com/api`) |
+|--------|----------|-------------|
+| `slack_configuration_access_token` | Ya | Token konfigurasi Slack berumur pendek yang digunakan untuk pembaruan manifest app |
+| `slack_configuration_refresh_token` | Ya | Token refresh yang digunakan untuk merotasi token akses konfigurasi |
+| `slack_app_id` | Dibuat | Slack app id yang dibuat atau dikembalikan oleh setup |
+| `slack_client_id` | Dibuat | Slack OAuth client id yang dikembalikan oleh pendaftaran app |
+| `client_secret` | Secret dibuat | Slack OAuth client secret yang dikembalikan oleh pendaftaran app |
+
+<Aside type="note">
+Flow setup baru tidak mengharuskan Anda memasukkan `slack_bot_token` secara manual. Aksi setup dan flow instal OAuth menyimpan kredensial runtime. Jika Anda meng-upgrade bundle lama, buat ulang jawaban dengan `gtc setup --dry-run --emit-answers answers.json ./my-bundle` lalu jalankan setup lagi.
+</Aside>
+
+<Aside type="caution">
+Token akses konfigurasi Slack akan kedaluwarsa. Simpan token refresh pasangannya di penyimpanan secret setup agar provider dapat merotasi pasangan tersebut saat pembaruan manifest.
+</Aside>
 
 ## Fitur
 
@@ -234,6 +215,8 @@ Balas dalam thread:
 
 ### Unggah File
 
+API file Slack berubah dari waktu ke waktu. Gunakan ini hanya ketika pack `messaging-slack` yang terpasang mengekspos dukungan file untuk versi Anda; jika tidak, kirim tautan atau gunakan alur upload eksternal Slack saat ini.
+
 ```yaml
 - id: upload_file
   type: reply
@@ -271,9 +254,9 @@ nodes:
     config:
       conditions:
         - expression: "action_id == 'help_clicked'"
-          next: show_help
+          to: show_help
         - expression: "action_id == 'create_ticket'"
-          next: create_ticket
+          to: create_ticket
       default: unknown_action
 
   - id: show_help
@@ -294,9 +277,9 @@ triggers:
   config:
     conditions:
       - expression: "selected_value == 'technical'"
-        next: technical_flow
+        to: technical_flow
       - expression: "selected_value == 'billing'"
-        next: billing_flow
+        to: billing_flow
 ```
 
 ## Slash Commands
@@ -377,7 +360,7 @@ tenants:
 
 3. **Uji Webhook:**
    ```bash
-   curl https://your-domain.com/webhook/slack/demo/default
+   curl https://your-domain.com/v1/messaging/ingress/messaging-slack/demo/default
    ```
 
 ### Error "not_authed"
@@ -417,4 +400,4 @@ Greentic secara otomatis memvalidasi:
 ## Langkah Berikutnya
 
 - [Block Kit Builder](https://api.slack.com/tools/block-kit-builder) - Rancang pesan kaya
-- [Provider Teams](/id/providers/messaging/teams/) - Tambahkan integrasi Teams
+- [Provider Teams](/providers/messaging/teams/) - Tambahkan integrasi Teams

@@ -14,7 +14,7 @@ Komponen **Templates** menyediakan templating berbasis Handlebars untuk menghasi
   type: template
   config:
     template: "Hello, {{name}}! Your order #{{order_id}} is ready."
-  next: send_message
+  to: send_message
 ```
 
 ## Sintaks Template

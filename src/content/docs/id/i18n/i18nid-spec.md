@@ -1,156 +1,106 @@
 ---
-title: Spesifikasi I18nId
-description: Spesifikasi identifier internasionalisasi yang deterministik
+title: Translation Keys
+description: Stable key naming for Greentic i18n catalogs
 ---
 
-## Ringkasan
+## Overview
 
-Spesifikasi **I18nId v1** mendefinisikan bagaimana string dikonversi menjadi identifier yang deterministik dan tahan benturan untuk internasionalisasi.
+Greentic translation catalogs are flat JSON key/value maps. Older docs referred to deterministic `I18nId` values, but the current demos and local tooling use readable stable keys such as:
 
-## Format
-
-```
-i18n:v1:<hash>
-```
-
-Dengan keterangan:
-- `i18n` - Identifier protokol
-- `v1` - Versi spesifikasi
-- `<hash>` - Hash BLAKE3 dari string yang telah dinormalisasi (encoded hex, 16 karakter)
-
-## Contoh
-
-| Source String | I18nId |
-|---------------|--------|
-| "Hello" | `i18n:v1:a5b9c3d7e8f0` |
-| "Hello, World!" | `i18n:v1:b6c8d4e9f1a2` |
-| "  Hello  " | `i18n:v1:a5b9c3d7e8f0` (sama setelah normalisasi) |
-
-## Normalisasi
-
-Sebelum hashing, string dinormalisasi:
-
-1. **Trim whitespace** - Hapus spasi di awal/akhir
-2. **Collapse internal whitespace** - Beberapa spasi → satu spasi
-3. **Unicode normalization** - Bentuk NFC
-4. **Lowercase** (opsional, dapat dikonfigurasi)
-
-```rust
-fn normalize(input: &str) -> String {
-    input
-        .trim()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+```text
+card.main_menu.body_0.text
+card.customer_form.body_2.label
+qa.install.title
+cli.root.about
 ```
 
-## Pembuatan Hash
+The practical rule is simple: keys must be stable, unique within the catalog, and meaningful enough that translators and reviewers can understand their context.
 
-```rust
-use blake3::Hasher;
+## Key Format
 
-fn generate_i18n_id(text: &str) -> String {
-    let normalized = normalize(text);
-    let hash = blake3::hash(normalized.as_bytes());
-    let hex = hex::encode(&hash.as_bytes()[..8]); // First 8 bytes = 16 hex chars
-    format!("i18n:v1:{}", hex)
-}
+Recommended key shape:
+
+```text
+{domain}.{screen_or_component}.{path}.{field}
 ```
 
-## Properti
+Examples:
 
-### Deterministik
+| Key | Meaning |
+| --- | --- |
+| `card.main_menu.body_0.text` | First body text block in the main menu card. |
+| `card.main_menu.actions_0.title` | First action title in the main menu card. |
+| `card.customer_form.body_2.placeholder` | Placeholder text in a form input. |
+| `qa.install.title` | Component setup UI title. |
+| `qa.field.api_key.help` | Help text for a setup field. |
 
-Input yang sama selalu menghasilkan output yang sama:
+Some existing packs use variants such as `cards.about_card.body.i0.text`. Keep existing keys stable once a pack is published; do not rename keys only for style.
 
-```rust
-assert_eq!(
-    generate_i18n_id("Hello"),
-    generate_i18n_id("Hello")
-);
-```
+## Adaptive Card References
 
-### Tahan Benturan
-
-BLAKE3 dengan 64 bit menyediakan birthday resistance sekitar ~2^32, cocok untuk sebagian besar aplikasi.
-
-### Stabil
-
-ID tetap stabil di berbagai:
-- Platform yang berbeda
-- Bahasa pemrograman yang berbeda
-- Versi yang berbeda (di dalam v1)
-
-## Penggunaan di Greentic
-
-### Pesan Flow
-
-```yaml
-- id: greet
-  type: reply
-  config:
-    message_key: "i18n:v1:a5b9c3d7e8f0"
-```
-
-### Cards
+Use the key from the locale catalog in the card:
 
 ```json
 {
   "type": "TextBlock",
-  "text": "{{i18n:i18n:v1:a5b9c3d7e8f0}}"
+  "text": "{{i18n:card.main_menu.body_0.text}}"
 }
 ```
 
-### Template
+Then define the value in each locale:
 
-```handlebars
-{{t "i18n:v1:a5b9c3d7e8f0"}}
+```json title="assets/i18n/en.json"
+{
+  "card.main_menu.body_0.text": "Welcome"
+}
 ```
 
-## Tool CLI
-
-### Generate ID
-
-```bash
-greentic-i18n id "Hello, World!"
-# Output: i18n:v1:b6c8d4e9f1a2
+```json title="assets/i18n/fr.json"
+{
+  "card.main_menu.body_0.text": "Bienvenue"
+}
 ```
 
-### Verifikasi ID
+## Normalization and Fallback
 
-```bash
-greentic-i18n verify "i18n:v1:b6c8d4e9f1a2" "Hello, World!"
-# Output: Valid
+The local Greentic i18n runtime normalizes BCP 47-ish locale tags before lookup:
+
+- `en_US.UTF-8` becomes `en-US`
+- `ja-JP` can fall back to `ja`
+- unknown locales fall back to `en` when an English catalog is available
+- missing keys fall back to the key or source text depending on the caller
+
+This is locale fallback, not hash generation.
+
+## Extracted Card Keys
+
+Card extraction helpers usually derive keys from:
+
+1. a prefix such as `card`
+2. the card id or filename
+3. the JSON path of the field
+4. the translated field name
+
+Example:
+
+```text
+card.welcome.body_0.text
+card.welcome.actions_0.title
+card.form.body_1.placeholder
+card.form.body_0_choices_2.title
 ```
 
-## Migrasi dari Sistem Lain
+## Best Practices
 
-### Dari Berbasis Key
+1. Keep keys stable after release.
+2. Do not translate keys, only values.
+3. Keep placeholders intact, for example `{{name}}` or `{tenant}`.
+4. Use `assets/i18n/en.json` as the source catalog unless your source language is different.
+5. Add the same keys to every translated locale file.
+6. Run `greentic-i18n-translator validate` for translated files.
+7. Prefer readable keys over opaque hashes for pack assets and cards.
 
-```json
-// Before
-{ "greeting.hello": "Hello" }
+## Next Steps
 
-// After (auto-migration)
-{ "i18n:v1:a5b9c3d7e8f0": "Hello" }
-```
-
-### Script Migrasi
-
-```bash
-greentic-i18n migrate ./old-translations.json --output ./new-translations.json
-```
-
-## Praktik Terbaik
-
-1. **Selalu gunakan CLI** untuk menghasilkan ID
-2. **Jangan ubah ID secara manual** - generate ulang jika sumber berubah
-3. **Simpan string sumber** bersama terjemahan untuk referensi
-4. **Versikan file terjemahan Anda** - memungkinkan rollback
-5. **Uji dengan banyak locale** - tangkap terjemahan yang hilang
-
-## Langkah Berikutnya
-
-- [Cards Translation](/id/i18n/cards-translation/)
-- [i18n Overview](/id/i18n/overview/)
+- [Cards Translation](/i18n/cards-translation/)
+- [i18n Overview](/i18n/overview/)

@@ -1,44 +1,44 @@
 ---
-title: Bundle-Assets
-description: Generische Bundle-weite Assets-Capability für Skins, Vorlagen und erweiterbare Datei-Overlays
+title: Bundle Assets
+description: Generic bundle-level assets capability for skins, templates, and extensible file overlays
 ---
 
-import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Überblick
+## Overview
 
-Bundle-Assets ist ein generischer, Capability-basierter Mechanismus, mit dem Bundles ihre eigenen Dateien (Skins, Vorlagen, Embed-Snippets, Locales) in einem standardisierten Verzeichnis `./assets/` mitführen können. Packs, die Zugriff auf diese Dateien benötigen, deklarieren eine Capability, und die Runtime gewährt beim Laden schreibgeschützten Zugriff.
+Bundle Assets is a generic, capability-based mechanism that lets bundles carry their own files (skins, templates, embed snippets, locales) in a standard `./assets/` directory. Packs that need access to these files declare a capability, and the runtime grants read-only access at load time.
 
 <Aside type="tip">
-Dies folgt Maartens zentralem Designprinzip: **generische Mechanismen statt spezifischer Lösungen.** Statt für jeden Anwendungsfall Pfade wie `/template/demo/` fest zu codieren, stellt Greentic ein einheitliches Muster `./assets/` bereit, das Kunden auf unvorhergesehene Weise erweitern können. Spezifische Pfade erzeugen Wartungsalbträume; ein generisches Capability-Muster skaliert.
+This follows Maarten's core design principle: **generic mechanisms, not specific solutions.** Rather than hard-coding paths like `/template/demo/` for each use case, Greentic provides a single `./assets/` pattern that customers can extend in unforeseen ways. Specific paths create maintenance nightmares; a generic capability pattern scales.
 </Aside>
 
-## So funktioniert es
+## How It Works
 
-Das Bundle-Assets-System hat drei bewegliche Teile:
+The bundle assets system has three moving parts:
 
-1. **Capability-Deklaration** -- die Answers-Datei des Bundles (oder die Wizard-Prompts) deklariert, welche Asset-Capabilities aktiviert sind.
-2. **Scaffold** -- `gtc wizard` oder `gtc setup` kopiert automatisch Standarddateien aus Provider-Packs in das Verzeichnis `./assets/` des Bundles und passt Tenant-Referenzen an.
-3. **Overlay** -- zur Laufzeit überschreiben Dateien im Verzeichnis `./assets/` des Bundles übereinstimmende Dateien aus den integrierten Standardwerten des Packs. Dadurch können Sie Skins, Vorlagen und Locale-Strings anpassen, ohne das Pack selbst zu ändern.
+1. **Capability declaration** -- the bundle's JSON AnswerDocument (or wizard prompts) declares which asset capabilities are enabled.
+2. **Scaffold** -- `gtc wizard` or `gtc setup` automatically copies eligible `assets/webchat-gui/` files from extension `.gtpack` files into the bundle's `./assets/` directory.
+3. **Overlay** -- at runtime, files in the bundle's `./assets/` directory override matching files from the pack's built-in defaults. This lets you customize skins, templates, and locale strings without modifying the pack itself.
 
 ## Capabilities
 
-Jede Capability schaltet einen bestimmten Satz an Assets und Verhaltensweisen frei. Capabilities folgen der Namenskonvention `greentic.cap.{category}.v{N}`.
+Each capability unlocks a specific set of assets and behaviors. Capabilities follow the naming convention `greentic.cap.{category}.v{N}`.
 
-| Capability ID | Zweck | Was sie aktiviert |
+| Capability ID | Purpose | What It Enables |
 |---------------|---------|-----------------|
-| `greentic.cap.bundle_assets.read.v1` | Bundle-weites Asset-Verzeichnis | Erstellt die Verzeichnisstruktur `./assets/` und scaffoldet Standard-Skin-Dateien aus Provider-Packs |
-| `greentic.cap.webchat.oauth.v1` | OAuth-Authentifizierung für WebChat | Fügt OAuth-Auth-Provider-Konfiguration zu Tenant-Konfigurationsdateien hinzu |
-| `greentic.cap.webchat.i18n.v1` | Mehrsprachiges WebChat | Aktiviert den Locale-Picker und scaffoldet Locale-JSON-Dateien unter `./assets/` |
-| `greentic.cap.webchat.embed.v1` | Einbettbares WebChat-Widget | Erzeugt Embed-HTML-Snippets (Fullpage-Link, Inline-iframe, Chat Bubble) pro Tenant |
+| `greentic.cap.bundle_assets.read.v1` | Bundle-level asset directory | Creates the `./assets/` directory structure and scaffolds eligible default skin files from extension packs |
+| `greentic.cap.webchat.oauth.v1` | OAuth authentication for WebChat | Adds OAuth auth provider configuration to tenant config files |
+| `greentic.cap.webchat.i18n.v1` | Multi-language WebChat | Enables locale picker and scaffolds locale JSON files under `./assets/` |
+| `greentic.cap.webchat.embed.v1` | Embeddable WebChat widget | Generates embed HTML snippets (fullpage link, inline iframe, chat bubble) per tenant |
 
 <Aside>
-Capabilities sind additiv. Das Aktivieren von `greentic.cap.webchat.embed.v1` erfordert implizit `greentic.cap.bundle_assets.read.v1`, weil die Embed-Snippets in das Verzeichnis `./assets/` geschrieben werden.
+Capabilities are additive. Enabling `greentic.cap.webchat.embed.v1` implicitly requires `greentic.cap.bundle_assets.read.v1` because the embed snippets are written to the `./assets/` directory.
 </Aside>
 
-## Wizard-Prompts
+## Wizard Prompts
 
-Wenn Sie `gtc wizard` ausführen, fragt der Wizard für jede Capability:
+When you run `gtc wizard`, the wizard prompts for each capability:
 
 ```
 ? Enable bundle-level assets (./assets/)? [Y/n]
@@ -47,72 +47,70 @@ Wenn Sie `gtc wizard` ausführen, fragt der Wizard für jede Capability:
 ? Enable embeddable WebChat widget? [y/N]
 ```
 
-Wenn Sie bei einer Capability mit "yes" antworten, wird sie dem erzeugten Bundle hinzugefügt und der entsprechende Scaffold-Schritt ausgelöst.
+Answering "yes" to a capability adds it to the generated bundle and triggers the corresponding scaffold step.
 
-Sie können Capabilities auch direkt in der Answers-Datei ohne interaktive Eingaben festlegen (siehe [Konfiguration](#configuration) unten).
+You can also set capabilities directly in a JSON AnswerDocument without interactive prompts (see [Configuration](#configuration) below).
 
-## Konfiguration
+## Configuration
 
-### In der Answers-Datei
+### In the Wizard AnswerDocument
 
-<Tabs>
-  <TabItem label="JSON">
-```json title="wizard-answers.json"
+Start from the live schema instead of copying old examples:
+
+```bash
+gtc wizard --schema
+```
+
+`gtc wizard --schema` prints the current launcher schema, including the embedded `greentic-bundle` answer schema. Coding agents should fetch that schema first, fill a JSON AnswerDocument, validate it, then apply it.
+
+```json title="bundle-assets-create-answers.json"
 {
-  "project": {
-    "name": "my-digital-worker",
-    "version": "1.0.0"
-  },
-  "providers": {
-    "messaging": ["webchat", "telegram"]
-  },
-  "capabilities": [
-    "greentic.cap.bundle_assets.read.v1",
-    "greentic.cap.webchat.oauth.v1",
-    "greentic.cap.webchat.i18n.v1",
-    "greentic.cap.webchat.embed.v1"
-  ],
-  "tenants": [
-    {
-      "id": "demo",
-      "name": "Demo Tenant",
-      "teams": [{ "id": "default", "channels": ["webchat"] }]
+  "wizard_id": "greentic-dev.wizard.launcher.main",
+  "schema_id": "greentic-dev.launcher.main",
+  "schema_version": "1.0.0",
+  "locale": "en",
+  "answers": {
+    "selected_action": "bundle",
+    "delegate_answer_document": {
+      "wizard_id": "greentic-bundle.wizard.run",
+      "schema_id": "greentic-bundle.wizard.answers",
+      "schema_version": "1.0.0",
+      "locale": "en",
+      "answers": {
+        "bundle_name": "My Digital Worker",
+        "bundle_id": "my-digital-worker",
+        "output_dir": "./my-digital-worker",
+        "extension_providers": [
+          "messaging-webchat"
+        ],
+        "capabilities": [
+          "greentic.cap.bundle_assets.read.v1",
+          "greentic.cap.webchat.oauth.v1",
+          "greentic.cap.webchat.i18n.v1",
+          "greentic.cap.webchat.embed.v1"
+        ]
+      },
+      "locks": {
+        "execution": "execute"
+      }
     }
-  ]
+  },
+  "locks": {
+    "execution": "execute"
+  }
 }
 ```
-  </TabItem>
-  <TabItem label="YAML">
-```yaml title="wizard-answers.yaml"
-project:
-  name: my-digital-worker
-  version: "1.0.0"
 
-providers:
-  messaging:
-    - webchat
-    - telegram
-
-capabilities:
-  - greentic.cap.bundle_assets.read.v1
-  - greentic.cap.webchat.oauth.v1
-  - greentic.cap.webchat.i18n.v1
-  - greentic.cap.webchat.embed.v1
-
-tenants:
-  - id: demo
-    name: Demo Tenant
-    teams:
-      - id: default
-        channels:
-          - webchat
+```bash
+gtc wizard validate --answers bundle-assets-create-answers.json
+gtc wizard apply --answers bundle-assets-create-answers.json --yes
 ```
-  </TabItem>
-</Tabs>
+
+The answers file for `gtc wizard` is JSON only. The generated workspace still contains `bundle.yaml`; that file is runtime workspace state, not the wizard replay format.
 
 ### In bundle.yaml
 
-Capabilities werden auch in der erzeugten `bundle.yaml` gespeichert, damit die Runtime weiß, welche Funktionen aktiv sind:
+Capabilities are also recorded in the generated `bundle.yaml` so the runtime knows which features are active:
 
 ```yaml title="bundle.yaml"
 name: my-digital-worker
@@ -124,44 +122,41 @@ capabilities:
   - greentic.cap.webchat.i18n.v1
   - greentic.cap.webchat.embed.v1
 
-providers:
-  messaging-webchat:
-    pack: "providers/messaging/messaging-webchat.gtpack"
-    setup_flow: "setup_default"
+extension_providers:
+  - "messaging-webchat"
 ```
 
-## So funktioniert Scaffold
+## How Scaffold Works
 
-Wenn eine Capability aktiviert ist, führt der Wizard (oder das Setup) einen Scaffold-Schritt aus, der das Verzeichnis `./assets/` des Bundles mit Standarddateien befüllt. Der Scaffold-Prozess:
+When a capability is enabled, the wizard (or setup) runs a scaffold step that populates the bundle's `./assets/` directory with default files. The scaffold process:
 
 <Steps>
 
-1. **Liest Standarddateien aus dem Provider-Pack**
+1. **Reads eligible files from extension packs**
 
-   Jedes Provider-Pack liefert ein Verzeichnis `skins/default/` mit grundlegenden Skin-Dateien (HTML-Vorlagen, CSS, JSON-Konfiguration, Embed-Snippets).
+   Extension `.gtpack` files can ship files under `assets/webchat-gui/`, including skin JSON, HTML templates, CSS, locale JSON, and embed snippets. Bundle asset scaffold intentionally copies only this public webchat asset subtree; internal pack assets such as fixtures, schemas, and secret requirement files are not copied.
 
-2. **Kopiert Standards in das Bundle**
+2. **Copies public assets into the bundle**
 
-   Der Scaffold kopiert `skins/default/` nach `assets/webchat-gui/skins/{tenant}/` und erstellt dabei ein Skin-Verzeichnis pro Tenant, der im Bundle definiert ist.
+   The scaffold writes matching files to the same relative path under the bundle root, for example `assets/webchat-gui/skins/demo/skin.json`.
 
-3. **Ersetzt Tenant-Referenzen**
+3. **Preserves existing customizations**
 
-   Platzhalter-Tokens wie `{{tenant_id}}` und `{{team_id}}` in den kopierten Dateien werden durch die tatsächlichen Tenant- und Team-Identifier ersetzt.
+   Existing files are not overwritten. This is deliberate: once a team customizes `./assets/`, setup and wizard reruns should not destroy those edits.
 
-4. **Erzeugt Embed-Snippets**
+4. **Generates embed snippets**
 
-   Wenn `greentic.cap.webchat.embed.v1` aktiviert ist, erzeugt der Scaffold Embed-HTML-Dateien (Fullpage-Link, Inline-iframe, Chat Bubble) in `assets/webchat-gui/embed/{tenant}.html` mit vorausgefüllter Konfiguration.
+   When `greentic.cap.webchat.embed.v1` is enabled and the selected WebChat extension provides embed assets, those snippets are made available under `assets/webchat-gui/embed/`.
 
 </Steps>
 
-## Verzeichnisstruktur nach dem Scaffold
+## Directory Structure After Scaffold
 
-Mit allen vier aktivierten Capabilities und einem einzelnen Tenant `demo` sieht das Bundle so aus:
+With all four capabilities enabled and a single tenant `demo`, the bundle looks like this:
 
 ```
 my-digital-worker/
 ├── bundle.yaml
-├── greentic.demo.yaml
 ├── providers/
 │   └── messaging/
 │       ├── messaging-webchat.gtpack
@@ -169,18 +164,18 @@ my-digital-worker/
 ├── assets/
 │   └── webchat-gui/
 │       ├── skins/
-│       │   └── demo/                    # Tenant-spezifischer Skin (aus Pack-Standards kopiert)
-│       │       ├── skin.json            # Theme-Farben, Titel, Logo, Feature-Flags
+│       │   └── demo/                    # Per-tenant skin (copied from pack defaults)
+│       │       ├── skin.json            # Theme colors, title, logo, feature flags
 │       │       ├── fullpage/
-│       │       │   ├── index.html       # Fullpage-Chat-HTML
-│       │       │   └── page.css         # Benutzerdefiniertes CSS für Fullpage
+│       │       │   ├── index.html       # Fullpage chat HTML
+│       │       │   └── page.css         # Fullpage custom CSS
 │       │       ├── embed/
-│       │       │   └── bubble.css       # Benutzerdefiniertes CSS für Chat Bubble
+│       │       │   └── bubble.css       # Chat bubble custom CSS
 │       │       └── i18n/
-│       │           ├── en.json          # Englische Locale-Strings
-│       │           └── id.json          # Indonesische Locale-Strings
+│       │           ├── en.json          # English locale strings
+│       │           └── id.json          # Indonesian locale strings
 │       └── embed/
-│           └── demo.html               # Erzeugte Embed-Snippets für den Tenant
+│           └── demo.html               # Generated embed snippets for tenant
 ├── tenants/
 │   └── demo/
 │       ├── tenant.gmap
@@ -190,23 +185,23 @@ my-digital-worker/
 └── seeds.yaml
 ```
 
-## Overlay-Mechanismus
+## Overlay Mechanism
 
-Zur Laufzeit löst die Greentic-Plattform Asset-Dateien mit einer Overlay-Strategie auf:
+At runtime, the Greentic platform resolves asset files using an overlay strategy:
 
-1. **Bundle-Dateien haben Vorrang.** Wenn eine Datei unter `./assets/webchat-gui/skins/{tenant}/skin.json` existiert, wird sie statt der integrierten Datei `skins/default/skin.json` des Packs verwendet.
-2. **Pack-Standards sind der Fallback.** Wenn das Bundle eine Datei nicht überschreibt, wird die integrierte Version des Packs verwendet.
-3. **Overlay gilt pro Datei.** Sie können `skin.json` überschreiben und gleichzeitig das Standard-`page.css` des Packs beibehalten. Es gibt kein Alles-oder-nichts.
+1. **Bundle files take priority.** If a file exists in `./assets/webchat-gui/skins/{tenant}/skin.json`, it is used instead of the pack's built-in `skins/default/skin.json`.
+2. **Pack defaults are the fallback.** If the bundle does not override a file, the pack's built-in version is used.
+3. **Overlay is per-file.** You can override `skin.json` while keeping the pack's default `page.css`. There is no all-or-nothing requirement.
 
-Das bedeutet, dass Sie Dateien unter `./assets/` gefahrlos bearbeiten können, um Ihr Deployment anzupassen, ohne das Pack zu forken oder neu zu bauen.
+This means you can safely edit files in `./assets/` to customize your deployment without forking or rebuilding the pack.
 
 <Aside type="caution">
-Wenn Sie ein Provider-Pack auf eine neue Version aktualisieren, prüfen Sie Ihre überschriebenen Dateien. Neue Pack-Versionen können Felder zu `skin.json` hinzufügen oder die Struktur der HTML-Vorlage ändern. Ihr Bundle-Overlay hat weiterhin Vorrang, daher müssen Sie neue Änderungen manuell zusammenführen.
+When you upgrade an extension pack to a new version, review your overridden files. New pack versions may add fields to `skin.json` or change the HTML template structure. Your bundle overlay will still take priority, so you need to merge any new changes manually.
 </Aside>
 
-## Beispiel: Den WebChat-Skin anpassen
+## Example: Customizing the WebChat Skin
 
-Bearbeiten Sie nach dem Scaffold die Skin-Konfiguration passend zu Ihrer Marke:
+After scaffold, edit the skin configuration to match your brand:
 
 ```json title="assets/webchat-gui/skins/demo/skin.json"
 {
@@ -221,11 +216,11 @@ Bearbeiten Sie nach dem Scaffold die Skin-Konfiguration passend zu Ihrer Marke:
 }
 ```
 
-Die Runtime liefert diesen Skin aus, wenn ein Benutzer sich für den Tenant `demo` mit WebChat verbindet. Ein Neuaufbau des Packs ist nicht erforderlich.
+The runtime serves this skin when a user connects to the WebChat for the `demo` tenant. No pack rebuild is needed.
 
-## Nächste Schritte
+## Next Steps
 
-- [WebChat-Einbettung](/de/greentic-docs/providers/messaging/webchat-embedding/) -- Embed-Typen und Konfigurationsreferenz
-- [WebChat Provider](/de/greentic-docs/providers/messaging/webchat/) -- vollständiges WebChat-Setup und Funktionen
-- [Packs](/de/greentic-docs/concepts/packs/) -- wie Packs Capabilities deklarieren und verwenden
-- [gtc wizard](/de/greentic-docs/cli/wizard/) -- Referenz für Wizard-Antwortdateien
+- [WebChat Embedding](/providers/messaging/webchat-embedding/) -- embed types and configuration reference
+- [WebChat Extension](/providers/messaging/webchat/) -- full WebChat setup and features
+- [Packs](/concepts/packs/) -- how packs declare and consume capabilities
+- [gtc wizard](/cli/wizard/) -- wizard answers file reference

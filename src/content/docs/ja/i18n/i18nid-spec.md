@@ -1,156 +1,106 @@
 ---
-title: I18nId 仕様
-description: 決定論的な国際化 identifier の仕様
+title: Translation Keys
+description: Stable key naming for Greentic i18n catalogs
 ---
 
-## 概要
+## Overview
 
-**I18nId v1** 仕様は、文字列を国際化のための決定論的かつ衝突耐性のある identifier に変換する方法を定義します。
+Greentic translation catalogs are flat JSON key/value maps. Older docs referred to deterministic `I18nId` values, but the current demos and local tooling use readable stable keys such as:
 
-## 形式
-
-```
-i18n:v1:<hash>
-```
-
-内訳:
-- `i18n` - protocol identifier
-- `v1` - 仕様バージョン
-- `<hash>` - 正規化した文字列の BLAKE3 hash（16 文字の hex encoded）
-
-## 例
-
-| Source String | I18nId |
-|---------------|--------|
-| "Hello" | `i18n:v1:a5b9c3d7e8f0` |
-| "Hello, World!" | `i18n:v1:b6c8d4e9f1a2` |
-| "  Hello  " | `i18n:v1:a5b9c3d7e8f0` （正規化後は同じ） |
-
-## 正規化
-
-hash 化の前に、文字列は次のように正規化されます。
-
-1. **前後の空白を除去** - 先頭と末尾の空白を削除
-2. **内部の空白を圧縮** - 複数の空白を 1 つにまとめる
-3. **Unicode normalization** - NFC 形式
-4. **小文字化**（任意、設定可能）
-
-```rust
-fn normalize(input: &str) -> String {
-    input
-        .trim()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+```text
+card.main_menu.body_0.text
+card.customer_form.body_2.label
+qa.install.title
+cli.root.about
 ```
 
-## Hash 生成
+The practical rule is simple: keys must be stable, unique within the catalog, and meaningful enough that translators and reviewers can understand their context.
 
-```rust
-use blake3::Hasher;
+## Key Format
 
-fn generate_i18n_id(text: &str) -> String {
-    let normalized = normalize(text);
-    let hash = blake3::hash(normalized.as_bytes());
-    let hex = hex::encode(&hash.as_bytes()[..8]); // First 8 bytes = 16 hex chars
-    format!("i18n:v1:{}", hex)
-}
+Recommended key shape:
+
+```text
+{domain}.{screen_or_component}.{path}.{field}
 ```
 
-## 特性
+Examples:
 
-### 決定論的
+| Key | Meaning |
+| --- | --- |
+| `card.main_menu.body_0.text` | First body text block in the main menu card. |
+| `card.main_menu.actions_0.title` | First action title in the main menu card. |
+| `card.customer_form.body_2.placeholder` | Placeholder text in a form input. |
+| `qa.install.title` | Component setup UI title. |
+| `qa.field.api_key.help` | Help text for a setup field. |
 
-同じ入力は常に同じ出力を生成します。
+Some existing packs use variants such as `cards.about_card.body.i0.text`. Keep existing keys stable once a pack is published; do not rename keys only for style.
 
-```rust
-assert_eq!(
-    generate_i18n_id("Hello"),
-    generate_i18n_id("Hello")
-);
-```
+## Adaptive Card References
 
-### 衝突耐性
-
-64 bit の BLAKE3 は約 2^32 の birthday resistance を提供し、ほとんどの用途で十分です。
-
-### 安定性
-
-ID は次の違いがあっても安定して維持されます。
-- 異なるプラットフォーム
-- 異なる programming language
-- 異なるバージョン（v1 の範囲内）
-
-## Greentic での利用
-
-### Flow Messages
-
-```yaml
-- id: greet
-  type: reply
-  config:
-    message_key: "i18n:v1:a5b9c3d7e8f0"
-```
-
-### Cards
+Use the key from the locale catalog in the card:
 
 ```json
 {
   "type": "TextBlock",
-  "text": "{{i18n:i18n:v1:a5b9c3d7e8f0}}"
+  "text": "{{i18n:card.main_menu.body_0.text}}"
 }
 ```
 
-### Templates
+Then define the value in each locale:
 
-```handlebars
-{{t "i18n:v1:a5b9c3d7e8f0"}}
+```json title="assets/i18n/en.json"
+{
+  "card.main_menu.body_0.text": "Welcome"
+}
 ```
 
-## CLI ツール
-
-### ID を生成する
-
-```bash
-greentic-i18n id "Hello, World!"
-# Output: i18n:v1:b6c8d4e9f1a2
+```json title="assets/i18n/fr.json"
+{
+  "card.main_menu.body_0.text": "Bienvenue"
+}
 ```
 
-### ID を検証する
+## Normalization and Fallback
 
-```bash
-greentic-i18n verify "i18n:v1:b6c8d4e9f1a2" "Hello, World!"
-# Output: Valid
+The local Greentic i18n runtime normalizes BCP 47-ish locale tags before lookup:
+
+- `en_US.UTF-8` becomes `en-US`
+- `ja-JP` can fall back to `ja`
+- unknown locales fall back to `en` when an English catalog is available
+- missing keys fall back to the key or source text depending on the caller
+
+This is locale fallback, not hash generation.
+
+## Extracted Card Keys
+
+Card extraction helpers usually derive keys from:
+
+1. a prefix such as `card`
+2. the card id or filename
+3. the JSON path of the field
+4. the translated field name
+
+Example:
+
+```text
+card.welcome.body_0.text
+card.welcome.actions_0.title
+card.form.body_1.placeholder
+card.form.body_0_choices_2.title
 ```
 
-## 他システムからの移行
+## Best Practices
 
-### Key-Based から
+1. Keep keys stable after release.
+2. Do not translate keys, only values.
+3. Keep placeholders intact, for example `{{name}}` or `{tenant}`.
+4. Use `assets/i18n/en.json` as the source catalog unless your source language is different.
+5. Add the same keys to every translated locale file.
+6. Run `greentic-i18n-translator validate` for translated files.
+7. Prefer readable keys over opaque hashes for pack assets and cards.
 
-```json
-// Before
-{ "greeting.hello": "Hello" }
+## Next Steps
 
-// After (auto-migration)
-{ "i18n:v1:a5b9c3d7e8f0": "Hello" }
-```
-
-### 移行スクリプト
-
-```bash
-greentic-i18n migrate ./old-translations.json --output ./new-translations.json
-```
-
-## ベストプラクティス
-
-1. **ID の生成には必ず CLI を使う**
-2. **ID を手動で変更しない** - 元文字列が変わったら再生成する
-3. **参照用に元文字列を翻訳と一緒に保存する**
-4. **翻訳ファイルを version 管理する** - rollback を可能にする
-5. **複数の locale でテストする** - 翻訳漏れを検出する
-
-## 次のステップ
-
-- [Cards Translation](/ja/i18n/cards-translation/)
-- [i18n Overview](/ja/i18n/overview/)
+- [Cards Translation](/i18n/cards-translation/)
+- [i18n Overview](/i18n/overview/)

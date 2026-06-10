@@ -1,0 +1,332 @@
+---
+title: Microsoft Teams
+description: اربط العامل الرقمي لديك بـ Microsoft Teams
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## نظرة عامة
+
+يدمج موفر Microsoft Teams العامل الرقمي لديك مع قنوات Teams ومحادثاته. وهو يدعم:
+
+- رسائل القنوات
+- المحادثات الشخصية
+- المحادثات الجماعية
+- Adaptive Cards
+- المكونات التفاعلية
+- مرفقات الملفات
+
+## المتطلبات المسبقة
+
+- مستأجر Microsoft 365
+- Microsoft Entra application client id عام يدعم OAuth عبر كود الجهاز
+- صلاحية منح نطاقات Graph التي يستخدمها الإعداد أو الموافقة عليها
+- صلاحية إنشاء قنوات في الفريق المحدد عندما تريد من الإعداد إنشاء قناة مطلوبة غير موجودة
+
+## الإعداد
+
+يدعم إعداد Teams شكلين للتكوين:
+
+| الوضع | استخدمه عندما | الحقول الرئيسية |
+|------|----------------|-----------------|
+| وضع قناة Graph | تريد إرسال رسائل القنوات والاشتراكات عبر Graph. هذا هو وضع الإعداد الافتراضي. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| وضع Bot Framework | لديك Azure Bot وبيان تطبيق Teams للرسائل الواردة عبر Bot Framework. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+
+<Steps>
+
+1. **تكوين تلميح الإعداد**
+
+   يمكنك تشغيل الإعداد باستخدام client id العام الافتراضي فقط، أو توفير `client_id` خاص بك. أضف `desired_channel_name` عندما تريد من الإعداد العثور على قناة قياسية محددة أو إنشائها:
+
+   ```json title="answers.json"
+   {
+     "setup_answers": {
+       "messaging-teams": {
+         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
+         "desired_channel_name": "hr onboarding"
+       }
+     }
+   }
+   ```
+
+2. **بدء إعداد Teams**
+
+   ```bash
+   gtc setup --answers answers.json ./my-bundle
+   ```
+
+3. **إكمال OAuth عبر كود الجهاز**
+
+   يبدأ الإعداد تدفق كود جهاز Microsoft. انسخ الكود، وافتح عنوان URL للتحقق، وسجل الدخول بحساب Microsoft 365 الذي يمكنه الوصول إلى الفريق الهدف، ثم وافق على نطاقات Graph المطلوبة.
+
+   ارجع إلى الطرفية وتابع عندما يطلب الإعداد التحقق من Microsoft Teams. بعد ذلك يستعلم Greentic من Microsoft Graph، ويحفظ الرموز المفوضة كأسرار، ويشغل الاكتشاف بعد تسجيل الدخول.
+
+4. **اختيار الفريق والقناة أو التحقق منهما**
+
+   يستدعي الإعداد Microsoft Graph لسرد الفرق والقنوات التي انضم إليها المستخدم المسجل دخوله. اختر الفريق والقناة عند الطلب، أو اترك `desired_channel_name` يوجه تدفق الإنشاء عند عدم وجود القناة.
+
+   يحفظ الإعداد المعرفات والتسميات:
+   - `team_id` و `team_name`
+   - `channel_id` و `channel_name`
+
+   تستخدم عمليات الإرسال في وقت التشغيل وإعداد الاشتراكات هذه المعرفات. أما أسماء العرض فهي للمشغلين وواجهات الإعداد.
+
+5. **التحقق من القناة في Teams**
+
+   افتح Microsoft Teams وانتقل إلى الفريق والقناة المحددين. إذا أنشأ الإعداد `desired_channel_name`، فتأكد من وجود القناة وأن الحساب المسجل دخوله يمكنه الوصول إليها.
+
+   إذا لم يكن لدى الفريق المحدد هذه القناة بالفعل، فيمكن للإعداد إنشاء قناة قياسية ثم حفظ `channel_id` و `channel_name` الناتجين. يظل المعرف هو المرجع لعمليات الإرسال في وقت التشغيل والاشتراكات.
+
+6. **بدء وقت التشغيل أو إعادة تشغيله**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   يعلن حزمة Teams عن بيانات تعريف الاشتراك المطلوبة، بما في ذلك قالب مورد Graph وحقول تكوين المكون وقالب عنوان URL للإشعارات وقالب عنوان URL لإشعارات دورة الحياة. يجب أن تستخدم المضيفات هذه البيانات بدلا من ترميز مسارات موارد Teams بشكل ثابت.
+
+7. **اختبار القناة الهدف**
+
+   أرسل رسالة في قناة Teams المحددة أو شغل تدفقا يرسل إلى Teams. إذا لم تظهر الرسائل، فأعد تشغيل الإعداد وتحقق من أن `team_id` و `channel_id` المحفوظين لا يزالان يطابقان القناة المفتوحة في Teams.
+
+</Steps>
+
+## خيارات التكوين
+
+| الخيار | مطلوب | الوصف |
+|--------|----------|-------------|
+| `client_id` | نعم لإعداد Graph | Microsoft application client id عام يستخدم لـ OAuth عبر كود الجهاز |
+| `tenant_id` | منشأ | Tenant id يتم اكتشافه من Microsoft Graph |
+| `team_id` | منشأ أو محدد | Teams team id يستخدم لإرسال رسائل القنوات والاشتراكات |
+| `team_name` | منشأ أو محدد | اسم عرض الفريق المحدد |
+| `channel_id` | منشأ أو محدد | Channel id يستخدم للإرسال والاشتراكات |
+| `channel_name` | منشأ أو محدد | اسم عرض القناة المحددة |
+| `desired_channel_name` | لا | تلميح افتراضي/بحث، واسم إنشاء القناة عندما يكون الإنشاء مدعوما |
+| `chat_id` | لا | Chat id لاشتراكات الدردشة عند الاقتضاء |
+| `ms_bot_app_id` | وضع Bot Framework | Microsoft Bot Framework app id |
+| `ms_bot_app_password` | وضع Bot Framework | كلمة مرور تطبيق Bot Framework |
+| `bot_display_name` | وضع Bot Framework | اسم العرض المستخدم في تدفقات بيان تطبيق Teams |
+| `messaging_endpoint` | وضع Bot Framework | Endpoint عام لمراسلة Bot Framework |
+
+<Aside type="note">
+تستخدم عمليات إرسال Teams وإعداد الاشتراكات المعرفات، لا أسماء العرض. تحفظ التسميات للمشغلين وواجهات الإعداد، لكن `channel_id` أو `team_id` أو `chat_id` تظل معرفات وقت التشغيل.
+</Aside>
+
+<Aside type="caution">
+يتطلب إنشاء قناة Teams مفقودة صلاحية Graph المفوضة `Channel.Create` ومستخدما مسجل الدخول يسمح له بإنشاء قنوات في الفريق المحدد.
+</Aside>
+
+## Features
+
+### Text Messages
+
+```yaml
+- id: reply
+  type: reply
+  config:
+    message: "Hello! How can I help you today?"
+```
+
+### Markdown Formatting
+
+Teams supports a subset of Markdown:
+
+```yaml
+- id: formatted
+  type: reply
+  config:
+    message: |
+      **Bold** *Italic*
+      - Bullet 1
+      - Bullet 2
+      [Link](https://example.com)
+```
+
+### Adaptive Cards
+
+يدعم Teams بطاقات Adaptive Card بشكل أصلي عبر مرفقات Bot Framework. استخدم الإصدار الذي يدعمه عميل Teams الهدف ونموذج الإجراءات لديك؛ فميزات Adaptive Cards 1.4 مثل Universal Actions خاصة بسيناريوهات البوت المدعومة.
+
+```yaml
+- id: send_card
+  type: adaptive-card
+  config:
+    card:
+      type: AdaptiveCard
+      version: "1.4"
+      body:
+        - type: TextBlock
+          text: "Welcome!"
+          size: Large
+          weight: Bolder
+        - type: TextBlock
+          text: "How can I assist you today?"
+        - type: ActionSet
+          actions:
+            - type: Action.Submit
+              title: "Get Help"
+              data:
+                action: "help"
+            - type: Action.Submit
+              title: "Create Ticket"
+              data:
+                action: "ticket"
+```
+
+### Hero Cards
+
+```yaml
+- id: hero_card
+  type: reply
+  config:
+    hero_card:
+      title: "Support Bot"
+      subtitle: "Your AI Assistant"
+      text: "I can help with technical issues, billing questions, and more."
+      images:
+        - url: "https://example.com/bot-image.png"
+      buttons:
+        - type: messageBack
+          title: "Get Started"
+          text: "get started"
+          displayText: "Getting started..."
+```
+
+### Suggestions (Quick Replies)
+
+```yaml
+- id: suggestions
+  type: reply
+  config:
+    message: "What would you like to do?"
+    suggested_actions:
+      - title: "Check Status"
+        value: "status"
+      - title: "Create Ticket"
+        value: "ticket"
+      - title: "Contact Human"
+        value: "human"
+```
+
+### File Attachments
+
+```yaml
+- id: send_file
+  type: reply
+  config:
+    message: "Here's your report"
+    attachments:
+      - contentType: "application/pdf"
+        contentUrl: "https://example.com/report.pdf"
+        name: "report.pdf"
+```
+
+## Handling Card Actions
+
+```yaml title="flows/on_card_action.ygtc"
+name: handle_card_action
+version: "1.0"
+
+nodes:
+  - id: route_action
+    type: branch
+    config:
+      conditions:
+        - expression: "data.action == 'help'"
+          to: show_help
+        - expression: "data.action == 'ticket'"
+          to: create_ticket
+      default: unknown_action
+
+  - id: show_help
+    type: reply
+    config:
+      message: "Here's how I can help..."
+
+triggers:
+  - type: invoke
+    name: "adaptiveCard/action"
+    target: route_action
+```
+
+## Channel Configuration
+
+### Team Channel
+
+```yaml title="greentic.demo.yaml"
+tenants:
+  demo:
+    teams:
+      support:
+        channels:
+          teams:
+            provider: messaging-teams
+            config:
+              team_id: "19:xxx@thread.tacv2"
+              channel_id: "19:yyy@thread.tacv2"
+```
+
+### Personal Chat
+
+For personal 1:1 chats, no channel configuration needed. The bot responds to whoever messages it.
+
+## Proactive Messaging
+
+Send messages without user initiation:
+
+```yaml
+- id: proactive
+  type: reply
+  config:
+    message: "Reminder: Your ticket #123 needs attention"
+    conversation_reference:
+      conversation_id: "{{stored_conversation_id}}"
+      service_url: "{{stored_service_url}}"
+```
+
+<Aside type="note">
+Store the conversation reference when users first interact with your bot to enable proactive messaging later.
+</Aside>
+
+## Troubleshooting
+
+### Bot Not Responding
+
+1. **Check endpoint configuration** in Azure Bot Service
+2. **Verify SSL certificate** is valid
+3. **Check app credentials** are correct
+4. **Review activity logs** in Azure
+
+### "Unauthorized" Error
+
+- Verify App ID and Password
+- Check tenant ID for single-tenant apps
+- Ensure bot is enabled in Teams channel
+
+### Card Not Rendering
+
+- Validate card JSON with [Adaptive Cards Designer](https://adaptivecards.io/designer/)
+- Check Teams supports the card version and action type
+- Verify all required fields are present
+
+### Messages Delayed
+
+- Teams can batch messages; this is normal
+- Check your server performance
+- Verify no rate limiting
+
+## Security
+
+<Aside type="caution">
+تحقق دائما من رموز مصادقة Bot Framework الواردة للتأكد من أن الطلبات صادرة من Microsoft.
+</Aside>
+
+Greentic automatically validates:
+- JWT signature
+- Issuer and audience claims
+- Token expiration
+
+## Next Steps
+
+- [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Design cards visually
+- [موفر Slack](/providers/messaging/slack/) - إضافة تكامل Slack
+- [موفر WebChat](/providers/messaging/webchat/) - تضمينه في مواقع الويب

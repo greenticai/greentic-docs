@@ -19,113 +19,77 @@ Der Microsoft Teams-Provider integriert Ihren digitalen Worker in Teams-Kanäle 
 ## Voraussetzungen
 
 - Microsoft 365-Tenant
-- Admin-Zugriff auf Azure AD
+- Öffentliche Microsoft Entra application client id mit Unterstützung für Device-Code-OAuth
+- Berechtigung, die von Setup verwendeten Graph-Scopes zu erteilen oder ihnen zuzustimmen
+- Berechtigung, im ausgewählten Team Kanäle zu erstellen, wenn Setup einen fehlenden desired channel erstellen soll
 
 ## Einrichtung
 
+Das Teams-Setup unterstützt zwei Konfigurationsformen:
+
+| Modus | Verwenden, wenn | Hauptfelder |
+|------|-----------------|-------------|
+| Graph-Kanalmodus | Sie Graph-basierte Kanalversendungen und Abonnements verwenden möchten. Dies ist der Standard-Setupmodus. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
+| Bot Framework-Modus | Sie einen Azure Bot und ein Teams-App-Manifest für eingehende Bot Framework-Nachrichten haben. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+
 <Steps>
 
-1. **Azure Bot Registration erstellen**
+1. **Provider konfigurieren**
 
-   Gehen Sie zum [Azure Portal](https://portal.azure.com):
-   - Suchen Sie nach "Bot Services"
-   - Klicken Sie auf "Create"
-   - Füllen Sie die Details aus:
-     - Bot handle: your-bot-name
-     - Subscription: Ihr Abonnement
-     - Resource group: erstellen oder auswählen
-     - Pricing: F0 (kostenlos) oder S1
-   - Klicken Sie auf "Create"
-
-2. **Bot-Endpunkt konfigurieren**
-
-   In Ihrem Bot Service:
-   - Gehen Sie zu **Configuration**
-   - Setzen Sie **Messaging endpoint**: `https://your-domain.com/webhook/teams/{tenant}/{team}`
-
-3. **App-Zugangsdaten abrufen**
-
-   Unter **Configuration**:
-   - Kopieren Sie die **Microsoft App ID**
-   - Klicken Sie neben der Microsoft App ID auf "Manage"
-   - Erstellen Sie ein neues **Client Secret**
-   - Kopieren Sie den Secret-Wert (wird nur einmal angezeigt!)
-
-4. **Teams-Kanal aktivieren**
-
-   In Ihrem Bot Service:
-   - Gehen Sie zu **Channels**
-   - Klicken Sie auf **Microsoft Teams**
-   - Akzeptieren Sie die Bedingungen und aktivieren Sie den Kanal
-
-5. **Teams-App-Paket erstellen**
-
-   Erstellen Sie ein Manifest für Ihre Teams-App:
-
-   ```json title="manifest.json"
-   {
-     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-     "manifestVersion": "1.16",
-     "version": "1.0.0",
-     "id": "{{BOT_ID}}",
-     "packageName": "com.yourcompany.supportbot",
-     "developer": {
-       "name": "Your Company",
-       "websiteUrl": "https://yourcompany.com",
-       "privacyUrl": "https://yourcompany.com/privacy",
-       "termsOfUseUrl": "https://yourcompany.com/terms"
-     },
-     "name": {
-       "short": "Support Bot",
-       "full": "Support Bot for Customer Service"
-     },
-     "description": {
-       "short": "Customer support assistant",
-       "full": "AI-powered customer support assistant"
-     },
-     "icons": {
-       "outline": "outline.png",
-       "color": "color.png"
-     },
-     "accentColor": "#0078D4",
-     "bots": [
-       {
-         "botId": "{{BOT_ID}}",
-         "scopes": ["personal", "team", "groupchat"],
-         "supportsFiles": true,
-         "isNotificationOnly": false
-       }
-     ],
-     "permissions": ["identity", "messageTeamMembers"],
-     "validDomains": ["your-domain.com"]
-   }
-   ```
-
-6. **Provider konfigurieren**
+   Geben Sie mindestens `client_id` und entweder einen vorhandenen Kanal oder einen gewünschten Kanalnamen an:
 
    ```json title="answers.json"
    {
-     "messaging-teams": {
-       "enabled": true,
-       "public_base_url": "https://your-domain.ngrok-free.app",
-       "app_id": "your-microsoft-app-id",
-       "app_password": "your-client-secret",
-       "tenant_id": "your-azure-tenant-id"
+     "setup_answers": {
+       "messaging-teams": {
+         "client_id": "your-public-entra-app-client-id",
+         "tenant_id": "optional-tenant-id",
+         "team_name": "Support",
+         "desired_channel_name": "digital-worker"
+       }
      }
    }
    ```
 
-7. **Setup ausführen**
+   Wenn Sie bereits eine Azure Bot-App für Bot Framework-Chat haben, geben Sie stattdessen die Bot-Felder an:
+
+   ```json title="answers.json"
+   {
+     "setup_answers": {
+       "messaging-teams": {
+         "ms_bot_app_id": "your-microsoft-app-id",
+         "ms_bot_app_password": "your-client-secret",
+         "bot_display_name": "Support Bot"
+       }
+     }
+   }
+   ```
+
+2. **Setup ausführen**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-8. **App in Teams installieren**
+3. **Bei Microsoft anmelden**
 
-   - Packen Sie `manifest.json` zusammen mit den Icons als ZIP
-   - Gehen Sie zum Teams Admin Center oder laden Sie direkt hoch
-   - Installieren Sie die App für Ihr Team oder Ihre Benutzer
+   Setup startet einen Device-Code-OAuth-Flow. Öffnen Sie die angezeigte URL, geben Sie den Code ein und melden Sie sich mit einem Konto an, das dem Ziel-Tenant und -Team Zugriff gewähren kann.
+
+4. **Team und Kanal auswählen oder verifizieren**
+
+   Wenn `team_id` oder `channel_id` fehlen, versucht Setup sie aus `team_name` oder `channel_name` aufzulösen. Wenn `desired_channel_name` gesetzt ist und der Kanal fehlt, kann Setup ihn erstellen. Die aufgelösten Werte werden in den Setup-Antworten gespeichert, damit spätere Läufe stabil bleiben.
+
+5. **Runtime starten oder neu starten**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+   Der Provider verwendet die gespeicherten Microsoft-Tokens und Kanal-IDs für Graph-basierte Kanalnachrichten. Wenn Bot Framework-Felder konfiguriert sind, validiert die Runtime auch eingehende Bot Framework-Aktivitäten.
+
+6. **In Teams testen**
+
+   Senden Sie eine Nachricht in den konfigurierten Kanal oder installieren Sie die Bot-App in Teams, wenn Sie den Bot Framework-Modus verwenden.
 
 </Steps>
 
@@ -133,11 +97,17 @@ Der Microsoft Teams-Provider integriert Ihren digitalen Worker in Teams-Kanäle 
 
 | Option | Erforderlich | Beschreibung |
 |--------|----------|-------------|
-| `enabled` | Ja | Provider aktivieren/deaktivieren |
-| `public_base_url` | Ja | Öffentliche URL für den Webhook |
-| `app_id` | Ja | Microsoft App ID |
-| `app_password` | Ja | Client Secret |
-| `tenant_id` | Nein | Azure AD Tenant ID (für Single-Tenant-Apps) |
+| `client_id` | Ja für Graph-Modus | Öffentliche Microsoft Entra application client id, die Device-Code-OAuth erlaubt |
+| `tenant_id` | Nein | Microsoft Entra tenant id. Wenn nicht gesetzt, verwendet Setup den Tenant des angemeldeten Kontos. |
+| `team_id` | Bedingt | Teams team id für Kanalversand. Kann aus `team_name` aufgelöst werden. |
+| `team_name` | Bedingt | Anzeigename des Teams, der verwendet wird, wenn `team_id` nicht gesetzt ist. |
+| `channel_id` | Bedingt | Teams channel id für Kanalversand. Kann aus `channel_name` aufgelöst werden. |
+| `channel_name` | Bedingt | Vorhandener Kanalname, der verwendet wird, wenn `channel_id` nicht gesetzt ist. |
+| `desired_channel_name` | Nein | Kanalname, den Setup erstellen oder wiederverwenden soll. |
+| `ms_bot_app_id` | Ja für Bot-Modus | Microsoft App ID der Azure Bot-App |
+| `ms_bot_app_password` | Ja für Bot-Modus | Client secret der Bot-App |
+| `bot_display_name` | Nein | Anzeigename, der beim Erstellen von Bot-Metadaten verwendet wird |
+| `messaging_endpoint` | Generiert | Bot Framework messaging endpoint, den der Provider veröffentlicht |
 
 ## Funktionen
 
@@ -167,7 +137,7 @@ Teams unterstützt einen Teil von Markdown:
 
 ### Adaptive Cards
 
-Teams bietet eine sehr gute Unterstützung für Adaptive Cards:
+Teams unterstützt Adaptive Cards nativ über Bot Framework-Anhänge. Verwenden Sie die Version, die von Ihrem Ziel-Teams-Client und Action-Modell unterstützt wird; Adaptive Cards 1.4-Funktionen wie Universal Actions sind auf unterstützte Bot-Szenarien beschränkt.
 
 ```yaml
 - id: send_card
@@ -255,9 +225,9 @@ nodes:
     config:
       conditions:
         - expression: "data.action == 'help'"
-          next: show_help
+          to: show_help
         - expression: "data.action == 'ticket'"
-          next: create_ticket
+          to: create_ticket
       default: unknown_action
 
   - id: show_help
@@ -340,7 +310,7 @@ Speichern Sie die Conversation Reference, wenn Benutzer zum ersten Mal mit Ihrem
 ## Sicherheit
 
 <Aside type="caution">
-Validieren Sie immer das JWT-Token in eingehenden Anfragen, um sicherzustellen, dass sie von Microsoft stammen.
+Validieren Sie immer die Bot Framework-Authentifizierungstokens eingehender Anfragen, um sicherzustellen, dass sie von Microsoft stammen.
 </Aside>
 
 Greentic validiert automatisch:
@@ -351,5 +321,5 @@ Greentic validiert automatisch:
 ## Nächste Schritte
 
 - [Adaptive Cards Designer](https://adaptivecards.io/designer/) - Karten visuell entwerfen
-- [Slack-Provider](/de/providers/messaging/slack/) - Slack-Integration hinzufügen
-- [WebChat-Provider](/de/providers/messaging/webchat/) - In Websites einbetten
+- [Slack-Provider](/providers/messaging/slack/) - Slack-Integration hinzufügen
+- [WebChat-Provider](/providers/messaging/webchat/) - In Websites einbetten
