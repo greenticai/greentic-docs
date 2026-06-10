@@ -1,0 +1,174 @@
+---
+title: Agentic Workers
+description: Run an LLM agent with tools inside a Greentic flow using the dw.agent node
+---
+
+import { Aside, Steps, Code } from '@astrojs/starlight/components';
+
+An **agentic worker** is an LLM-driven **Plan → Act → Observe** loop with tools, exposed to
+a [flow](/concepts/flows/) as a single node. Instead of hand-wiring every step, you give the
+worker a goal (system prompt) and a set of tools; the model decides which tools to call,
+observes the results, and keeps going until it can answer.
+
+This guide shows how to build one by hand and run it end to end. (Code identifiers use
+`dw_*` / `dw.agent` — the runtime name for what the product calls an "Agentic Worker".)
+
+## The pipeline
+
+```
+ Designer / by hand        Packaging            Runtime (gtc start)
+┌──────────────────┐   ┌───────────────┐   ┌──────────────────────────┐
+│ AgentConfig       │   │ worker → pack │   │ flow .ygtc                │
+│  + tool extension │ → │ tools → .gtxpack │ → │  └ dw.agent node          │
+│  + a flow         │   │               │   │     └ AgentRuntime loop    │
+└──────────────────┘   └───────────────┘   │        LLM ⇄ tools         │
+                                            └──────────────────────────┘
+```
+
+A worker has three pieces:
+
+1. **An `AgentConfig`** — the system prompt, the allowed tools, the LLM provider/model, and
+   limits.
+2. **Its tools** — packaged as a `.gtxpack` **design-extension** (the same format as
+   `component-tavily-ext`), discovered at runtime.
+3. **A flow** with a single `dw.agent` node that hands user messages to the worker.
+
+<Aside type="caution" title="Tools are extensions, not flow-node components">
+A worker's tools are **`.gtxpack` design-extensions**, *not* the
+`greentic:component/component@0.6.0` flow-node components run by `component.exec`. The
+agentic-worker loop only loads design-extensions (from `GREENTIC_EXTENSIONS_DIR`). Adding a
+capability to a flow-node component's `describe()` does **not** make it an agent tool.
+</Aside>
+
+## 1. The agent config
+
+The worker's behaviour is one JSON document (schema: `greentic-aw-runtime`'s `AgentConfig`).
+Save it as `<agent_id>.json` in `GREENTIC_AGENT_MANIFESTS_DIR` (default `~/.greentic/agents`):
+
+```jsonc title="tx-network-assistant.json"
+{
+  "agent_id": "tx-network-assistant",
+  "system_prompt": "You are a read-only network operations assistant. Resolve an entity (prefix, device) before analysing it, then call the matching analysis tool. Never invent data; if a tool returns found=false, ask the user to clarify.",
+  "tools": [
+    { "extension_id": "greentic.telco-x-tools", "tool_name": "tx_resolve_prefix" },
+    { "extension_id": "greentic.telco-x-tools", "tool_name": "tx_analyse_top_source_asns" }
+  ],
+  "llm": { "provider": "openai", "model": "gpt-4o-mini" },
+  "limits": { "max_iter": 8 }
+}
+```
+
+- `tools[]` is the **allow-list**: `extension_id` is a loaded extension's id, `tool_name` is
+  one of its tools. Only listed tools are exposed to the model.
+- `limits.max_iter` bounds the loop (default 8) — enough for multi-step
+  resolve-then-analyse investigations.
+
+<Aside type="tip" title="Spell out tool arguments in the prompt">
+At the current runtime, extension tools reach the model by **name** with an empty argument
+schema, so the model learns each tool's arguments from your **system prompt**. List each
+tool's exact JSON arguments there (e.g. `tx_resolve_prefix: {"query": "<prefix>"}`).
+</Aside>
+
+## 2. The tool extension
+
+Package your tools as a design-extension `.gtxpack`. The quickest start is to copy
+[`component-tavily-ext`](/extensions/writing-extensions/) and replace the tool logic. Each
+tool must declare the `agentic_worker` capability in its `tool_meta`:
+
+```rust
+ToolMeta {
+    name: "tx_resolve_prefix",
+    description: "Resolve a network prefix to its canonical id.",
+    input_schema_json: RESOLVE_PREFIX_INPUT,
+    output_schema_json: RESOLVE_PREFIX_OUTPUT,
+    capabilities: vec!["agentic_worker".into()],   // ← required to be an agent tool
+    agentic_worker_metadata: RESOLVE_PREFIX_AW_META,
+}
+```
+
+Build and stage it where the runtime discovers extensions:
+
+```bash
+bash build.sh    # → greentic.telco-x-tools-1.0.0.gtxpack
+# Stage into the design kind-dir the runtime scans at boot:
+unzip -o greentic.telco-x-tools-1.0.0.gtxpack \
+  -d "$GREENTIC_EXTENSIONS_DIR/design/greentic.telco-x-tools"
+```
+
+<Aside type="note" title="Signing">
+A default runner loads only **signed** extensions. For local development with an unsigned
+extension, set `GREENTIC_EXT_ALLOW_UNSIGNED=1` and use a runner built with the
+`dev-allow-unsigned` feature.
+</Aside>
+
+## 3. The flow
+
+A `dw.agent` node maps the inbound message to `user_text` and routes the reply back. The
+node key is `dw.agent.<agent_id>`:
+
+```yaml title="flows/network_assistant_flow.ygtc"
+id: network_assistant_flow
+title: Network Assistant
+type: messaging
+schema_version: 2
+start: ask_agent
+
+nodes:
+  ask_agent:
+    dw.agent.tx-network-assistant:        # component=dw.agent, operation=agent_id
+      input:
+        mapping: '{"user_text": "{{in.text}}"}'
+    routing: reply
+```
+
+- **Input contract:** the node payload must contain `user_text`.
+- **Output contract:** the worker returns `{ reply, trail, terminated_by }`; `routing: reply`
+  sends `reply` back over the inbound channel.
+
+## 4. Run it
+
+The runtime needs Redis (worker state), an LLM key, and the extension + manifest staged:
+
+```bash
+export GREENTIC_AW_REDIS_URL=redis://127.0.0.1:6379
+export OPENAI_API_KEY=sk-...                 # or GREENTIC_LLM_API_KEY
+export GREENTIC_EXTENSIONS_DIR=~/.greentic/extensions
+export GREENTIC_AGENT_MANIFESTS_DIR=~/.greentic/agents
+
+gtc start ./my-bundle --cloudflared off --nats on
+```
+
+A message arrives → the flow routes it to the `dw.agent` node →
+`AgentRuntime::step(tenant, session, agent_id, text)` runs the loop → the reply goes back to
+the user. A typical two-step investigation:
+
+```
+USER:  What are the top source ASNs for prefix 10.0.0.0/8?
+ turn 1: model calls tx_resolve_prefix{"query":"10.0.0.0/8"}  → {prefix_id: "px-core-10-8"}
+ turn 2: model calls tx_analyse_top_source_asns{"prefix_id":"px-core-10-8"} → ranked ASNs
+ turn 3: model writes the final answer
+WORKER: The top source ASNs for 10.0.0.0/8 are: AS15169 (Google) 4.2 Gbps (38.1%), …
+```
+
+## Worked example
+
+A complete, runnable agentic worker lives in the **Telco-X** solution repo under
+`bundles/agentic-network-assistant/` (worker config, a four-tool extension in
+`extensions/network-tools-ext/`, the flow, and a `run.sh` that stages everything). Its
+`docs/agentic-workers-integration.md` walks through the same pieces with file references.
+
+## Reference
+
+| Variable | Purpose |
+|----------|---------|
+| `GREENTIC_AW_REDIS_URL` | **Required.** Worker conversation state + idempotency. Unset → `dw.agent` nodes disabled. |
+| `GREENTIC_LLM_API_KEY` / `OPENAI_API_KEY` | LLM credential. |
+| `GREENTIC_LLM_PROVIDER` / `GREENTIC_LLM_MODEL` | Override provider/model. |
+| `GREENTIC_EXTENSIONS_DIR` | Tool-extension discovery root (scans `<root>/design/`). |
+| `GREENTIC_AGENT_MANIFESTS_DIR` | `<agent_id>.json` config dir. |
+| `GREENTIC_EXT_ALLOW_UNSIGNED` | Allow unsigned extensions (dev only; needs the dev feature). |
+
+<Aside type="note">
+The runner must be built with the `agentic-worker` feature (on by default). Without it,
+`dw.agent` nodes fail with a clear "compiled without the agentic-worker feature" error.
+</Aside>
