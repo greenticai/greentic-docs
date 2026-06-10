@@ -100,6 +100,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Architecture Overview', slug: 'concepts/architecture' },
 						{ label: 'Flows', slug: 'concepts/flows' },
+						{ label: 'Agentic Workers', slug: 'concepts/agentic-workers' },
 						{ label: 'Packs', slug: 'concepts/packs' },
 						{ label: 'Components', slug: 'concepts/components' },
 						{ label: 'Extensions', slug: 'concepts/extensions' },
