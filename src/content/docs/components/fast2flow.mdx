@@ -48,7 +48,7 @@ Incoming Message
 │                      │                           │
 │  ┌────────────────────────────────────────────┐  │
 │  │  5. LLM Fallback (optional)                │  │
-│  │  OpenAI or Ollama for ambiguous cases      │  │
+│  │  greentic-llm in greentic-start (see below)│  │
 │  └────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────┘
     │
@@ -517,23 +517,41 @@ greentic-fast2flow policy validate --file ./my-policy.json
 
 ## LLM Fallback
 
-When the deterministic BM25 strategy produces low confidence scores, fast2flow can fall back to an LLM for classification.
+When the deterministic BM25 strategy returns a low-confidence `Continue`, the LLM fallback picks the destination card instead of giving up. **It runs inside `greentic-start`**, backed by [greentic-llm](https://github.com/greenticai/greentic-llm) (rig-core, 9 providers) — no external binary, so it works embedded.
 
-| Provider | Environment Variables |
-|----------|---------------------|
-| **OpenAI** | `FAST2FLOW_OPENAI_API_KEY_PATH`, `FAST2FLOW_OPENAI_MODEL_PATH` |
-| **Ollama** | `FAST2FLOW_OLLAMA_ENDPOINT_PATH`, `FAST2FLOW_OLLAMA_MODEL_PATH` |
-| **Disabled** | `FAST2FLOW_LLM_PROVIDER=disabled` (default) |
+<Aside type="note">
+**Opt-in — provide an LLM config first.** There is no LLM fallback until the author supplies an `llm:` config in the bundle that ships their pack. Without it, fast2flow stays deterministic-only and unmatched free text falls through to the default reply. The `llm:` block (below) is the prerequisite, alongside the pack's `greentic.cap.fast2flow.v1` capability and intent index.
+</Aside>
 
-```bash
-# Enable OpenAI fallback
-FAST2FLOW_LLM_PROVIDER=openai \
-FAST2FLOW_OPENAI_API_KEY_PATH=/run/secrets/openai-key \
-greentic-fast2flow-routing-host < request.json
+You declare a **single `llm:` instance** at the top level of `bundle.yaml`. It is not fast2flow-specific — it's the one place the bundle picks an LLM for any greentic-start LLM use — and fast2flow consumes it through the `fast2flow*` fields:
+
+```yaml title="bundle.yaml"
+llm:
+  provider: openai          # openai | anthropic | gemini | ollama | deepseek | groq | cohere | perplexity | xai
+  model: gpt-4o-mini        # optional; per-provider default otherwise
+  api_key_secret: secrets://dev/demo/default/app/openai_api_key   # dev-store ref OR env-var name
+  base_url: ~               # optional (self-hosted / proxy / Ollama endpoint)
+  fast2flow: true           # let the fast2flow fallback use this LLM (default true)
+  fast2flow_llm_min_confidence: 0.5   # abstain below this (default 0.5)
 ```
 
+| Field | Notes |
+|-------|-------|
+| `provider` | Resolved through greentic-llm — any of its 9 backends. |
+| `model` | Optional; a per-provider default is used when omitted. |
+| `api_key_secret` | A `secrets://…` dev-store reference (the operator supplies the value) **or** an env-var name. Falls back to `GREENTIC_LLM_API_KEY`. **Not needed for Ollama.** |
+| `base_url` | Override the provider endpoint (self-hosted / proxy / local Ollama). |
+| `fast2flow` | `false` reserves the LLM for other uses (default `true`). |
+| `fast2flow_llm_min_confidence` | The model must report at least this confidence or the fallback abstains and the message degrades to the default reply (default `0.5`). |
+
+**How it routes:** the fallback shows the model the scope's intent candidates and asks it to pick one **exact** target — or abstain — as strict JSON. Off-catalog or low-confidence picks are rejected, so a `Continue` becomes a `Dispatch` only on a confident, valid choice; otherwise it falls through to the default reply.
+
+<Aside type="note">
+Keep the LLM as a **fallback** — deterministic BM25 is faster and predictable, and the LLM only runs when BM25 returns `Continue`. For local testing, `provider: ollama` is keyless.
+</Aside>
+
 <Aside type="caution">
-LLM providers are only available in the native host binary. WASM component runtime requires `FAST2FLOW_LLM_PROVIDER=disabled`.
+**Retired:** the routing host's own LLM tier (`FAST2FLOW_LLM_PROVIDER` / `FAST2FLOW_OPENAI_*` / `FAST2FLOW_OLLAMA_*`) is superseded by the `llm:` block above. The host now does **deterministic routing only**; the LLM fallback lives in greentic-start. Migrate any `FAST2FLOW_LLM_*` configuration to the bundle `llm:` block.
 </Aside>
 
 ## CLI Reference
@@ -597,12 +615,14 @@ The `FAST2FLOW_*` variables configure the native host binary and CLI. The `GREEN
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FAST2FLOW_LLM_PROVIDER` | `disabled` | LLM provider: `disabled`, `openai`, `ollama` |
 | `FAST2FLOW_POLICY_PATH` | `/mnt/registry/fast2flow-policy.json` | Policy file path |
 | `FAST2FLOW_TRACE_POLICY` | — | Set to `1` to emit policy trace to stderr |
 | `FAST2FLOW_MIN_CONFIDENCE` | `0.5` | Default minimum confidence threshold |
-| `FAST2FLOW_LLM_MIN_CONFIDENCE` | `0.5` | Default LLM minimum confidence |
 | `FAST2FLOW_CANDIDATE_LIMIT` | `20` | Default max candidates |
+
+<Aside type="caution">
+The `FAST2FLOW_LLM_PROVIDER` / `FAST2FLOW_LLM_MIN_CONFIDENCE` / `FAST2FLOW_OPENAI_*` / `FAST2FLOW_OLLAMA_*` variables are **retired** — the host no longer runs an LLM tier. Configure the LLM fallback via the bundle [`llm:` block](#llm-fallback) instead.
+</Aside>
 
 ### Runtime gate (`greentic-start`)
 
