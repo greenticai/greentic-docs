@@ -85,7 +85,7 @@ A `dispatch` directive can also carry an `entities` array of values extracted fr
 
 ## Activation
 
-fast2flow runs **inside the greentic-start runtime** as a `post_ingress` hook — you don't install it into your bundle. A pack turns it on by declaring `greentic.cap.fast2flow.v1` in `pack.yaml`; the runtime's `BundleCapabilityGate` runs the routing pipeline **only for packs that opt in** (see [Opting In From A Pack](#opting-in-from-a-pack)). Packs that don't declare the capability are never intercepted.
+fast2flow runs **inside the greentic-start runtime** — you don't install it into your bundle. After provider ingress parses an incoming message and before it is dispatched to a flow, the runtime routes the free text through fast2flow. A pack turns it on by declaring `greentic.cap.fast2flow.v1` in `pack.yaml`; the runtime's `BundleCapabilityGate` runs the routing pipeline **only for packs that opt in** (see [Opting In From A Pack](#opting-in-from-a-pack)). Packs that don't declare the capability are never intercepted.
 
 ## CLI & Tooling
 
