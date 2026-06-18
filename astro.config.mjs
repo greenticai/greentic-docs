@@ -194,6 +194,13 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Operations',
+					items: [
+						{ label: 'Logs & Telemetry', slug: 'admin/observability' },
+						{ label: 'Admin Access', slug: 'admin/admin-access' },
+					],
+				},
+				{
 					label: 'Reference',
 					items: [
 						{ label: 'Flow YAML Schema', slug: 'reference/flow-schema' },
