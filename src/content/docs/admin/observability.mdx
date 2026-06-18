@@ -1,0 +1,281 @@
+---
+title: Logs & Telemetry
+description: How a Greentic runtime emits logs, traces, and metrics — local file logs that are always on, opt-in OTLP export, and a one-command docker stack that turns any running bundle into Grafana dashboards.
+---
+
+import { Aside, Card, CardGrid, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Every Greentic runtime emits observability data in two layers:
+
+- **Local file logs** — always on. `gtc start` installs a `tracing` subscriber that writes structured logs to files under the bundle's `logs/` directory. No configuration required.
+- **OpenTelemetry (OTLP) export** — opt-in. When a bundle's `telemetry:` block or the `TELEMETRY_EXPORT` / `OTLP_ENDPOINT` environment variables ask for it, the same event stream is also exported as OTLP traces, metrics, and logs to a collector of your choice.
+
+This page covers both layers, plus a one-command **docker stack** (OpenTelemetry Collector + Prometheus + Loki + Grafana) for inspecting whatever a bundle emits. Everything here applies to any bundle — substitute your own bundle directory and `service_name` throughout.
+
+## Local file logs (always on)
+
+At startup `gtc start` resolves a log directory (the bundle's `logs/` folder by default, overridable with `--log-dir`) and writes two files:
+
+| File | Contents |
+|---|---|
+| `logs/system.log` | The runtime's `tracing` event stream — startup, HTTP ingress, flow engine, provider invocations. |
+| `logs/flow.log` | Flow execution log — a focused view of each flow run. |
+
+### Controlling the log level
+
+The base filter for `system.log` (and, when enabled, the OTLP exporter) is resolved in this order:
+
+1. **`RUST_LOG`** environment variable — when set, it always wins.
+2. The bundle's **`telemetry.log_level`** — an [`EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) directive carried in `bundle.yaml`.
+3. **`info`** — the default.
+
+```bash
+# One-off verbose run
+RUST_LOG=debug gtc start ./my-bundle
+
+# Target a single subsystem
+RUST_LOG="info,greentic.fast2flow=trace" gtc start ./my-bundle
+```
+
+<Aside type="tip">
+A handful of chatty dependency crates (`wasmtime`, `h2`, `hyper`, `rustls`, `reqwest`, `tonic`, the OpenTelemetry SDK itself, and others) are **clamped to `warn`** no matter what base level you set, so a `debug`/`trace` run stays focused on Greentic's own events rather than drowning in runtime internals.
+</Aside>
+
+Because the same filter gates the OTLP exporter, raising `telemetry.log_level` to `debug` or `trace` is what lets sub-`info` events reach Loki **without** having to export `RUST_LOG` on every run.
+
+## Declaring telemetry in the pack
+
+There are two independent telemetry decisions, and it helps to keep them apart:
+
+| Decision | Where it lives | What it controls |
+|---|---|---|
+| **Capability** — *may this component emit telemetry, and how broadly?* | the **component manifest** (`host.telemetry.scope`), declared in the pack | grants the WASM guest the right to emit, and the maximum scope of what it emits |
+| **Transport** — *where do the signals go, over which protocol?* | the **bundle `telemetry:` block or env vars** | the exporter (`otlp-grpc` / `otlp-http`), endpoint, and service name |
+
+The first is a static **capability grant**: a component cannot emit telemetry at all unless its pack declares it. Add it to the `host` capabilities of each component's `component.manifest.json`:
+
+```json
+"capabilities": {
+  "host": {
+    "telemetry": {
+      "scope": "node"
+    }
+  }
+}
+```
+
+`scope` is the **maximum** granularity the host will attribute to that component's telemetry:
+
+| Scope | Telemetry is attributed to… |
+|---|---|
+| `tenant` | the tenant only |
+| `pack` | the pack |
+| `node` | the individual flow node invocation (finest-grained) |
+
+<Aside type="note">
+`host.telemetry.scope` does **not** choose gRPC vs HTTP or pick a backend — it only grants emission and its granularity. Whether anything is actually exported, and over which protocol, is the *transport* decision below. A component with `scope: node` still writes nothing to a collector until the bundle or env vars turn on an OTLP exporter.
+</Aside>
+
+## Turning on OTLP export
+
+The transport — the gRPC-or-HTTP export choice — is configured either declaratively in the bundle or via environment variables. Environment variables take precedence, so an operator can flip exporters without re-running setup.
+
+### In the bundle (`bundle.yaml`)
+
+```yaml
+telemetry:
+  enabled: true
+  exporter: otlp-grpc          # otlp-grpc | otlp-http
+  endpoint: http://localhost:4317
+  service_name: my-bundle
+  log_level: info              # EnvFilter directive; gates files + OTLP
+  sampling: 1.0                # 1.0 = export every span
+```
+
+### With environment variables
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `TELEMETRY_EXPORT` | `otlp-grpc` or `otlp-http` (also accepts `otlp`) | off |
+| `OTLP_ENDPOINT` | Collector endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT` also honored) | `http://localhost:4317` (gRPC) / `:4318` (HTTP) |
+| `OTEL_SERVICE_NAME` | Service name attached to all signals | bundle's `telemetry.service_name`, else the bundle directory name |
+
+```bash
+export TELEMETRY_EXPORT=otlp-grpc
+export OTLP_ENDPOINT=http://localhost:4317
+gtc start ./my-bundle
+```
+
+<Aside type="tip">
+You can confirm what a run resolved to in `logs/system.log`, which records a line like `otlp=OtlpGrpc endpoint=http://localhost:4317` at startup.
+</Aside>
+
+<Aside type="caution">
+If neither the bundle's `telemetry:` block nor the env vars opt into OTLP, only the local file logs are written — nothing is exported. This is the default, so a fresh `gtc start` never tries to reach a collector that isn't there.
+</Aside>
+
+## The docker telemetry stack
+
+A reusable local stack lives in the [`docker/`](https://github.com/greenticai/greentic-demo/tree/main/docker) directory of the [`greentic-demo`](https://github.com/greenticai/greentic-demo) repository. It brings up four services already wired to each other with a single `docker compose up`:
+
+| Service | Image | Role |
+|---|---|---|
+| **OTel Collector** | `otel/opentelemetry-collector-contrib` | Receives OTLP, fans signals out to the backends below. |
+| **Prometheus** | `prom/prometheus` | Scrapes the collector's metrics endpoint; 1h retention. |
+| **Loki** | `grafana/loki` | Stores exported logs. |
+| **Grafana** | `grafana/grafana` | Dashboards; Prometheus + Loki pre-wired, anonymous admin. |
+
+### Start the stack
+
+```bash
+docker compose --project-directory ./docker -f ./docker/docker-compose.yml up -d
+```
+
+Tear it down with the same command and `down`.
+
+### Endpoints
+
+| Port | Service | Notes |
+|---|---|---|
+| 4317 | OTel Collector — OTLP gRPC | `gtc start` default for `otlp-grpc` |
+| 4318 | OTel Collector — OTLP HTTP | default for `otlp-http` |
+| 8889 | OTel Collector — Prometheus exporter | scraped by Prometheus |
+| 9090 | Prometheus UI | query browser |
+| 3100 | Loki | log ingest + query |
+| 3000 | Grafana UI | anonymous admin, datasources pre-wired |
+
+### What lands where
+
+| Signal | Path | How to look at it |
+|---|---|---|
+| **Traces** (host spans + provider invocations) | Collector → `debug` exporter | `docker logs -f greentic-demo-otelcol` |
+| **Metrics** (counters, histograms, gauges) | Collector → Prometheus scrape on `:8889` → Prometheus `:9090` | `http://localhost:9090` or Grafana |
+| **Logs** | Collector → Loki `:3100` | Grafana **Explore** → Loki, or `curl http://localhost:3100/loki/api/v1/query_range` |
+| **Dashboards** | Grafana, both datasources pre-wired | `http://localhost:3000` |
+
+## Quickstart
+
+<Steps>
+
+1. **Start the telemetry stack** in one terminal:
+
+   ```bash
+   docker compose --project-directory ./docker -f ./docker/docker-compose.yml up -d
+   ```
+
+2. **Start your bundle with OTLP export** in another:
+
+   ```bash
+   export TELEMETRY_EXPORT=otlp-grpc
+   export OTLP_ENDPOINT=http://localhost:4317
+   gtc start ./my-bundle
+   ```
+
+3. **Drive some traffic** through the bundle (WebChat or any wired messaging provider), then **confirm the collector is receiving data**:
+
+   ```bash
+   docker logs --tail 20 greentic-demo-otelcol | grep -E "ResourceSpans|ResourceMetrics|ResourceLogs"
+   curl -s http://localhost:8889/metrics | head -40
+   ```
+
+4. **Open Grafana** at `http://localhost:3000`, go to **Explore**, and run the queries below.
+
+</Steps>
+
+## Querying metrics (Prometheus)
+
+Open Grafana → **Explore** → Prometheus, or use the Prometheus UI at `http://localhost:9090`.
+
+<Aside type="note">
+Metric names appear with a doubled `greentic_greentic_` prefix because the collector's Prometheus exporter prepends `namespace: greentic` to names that already start with `greentic.`. The queries below use the live names. Drop the `namespace:` line in `otel-collector-config.yaml` if you want flatter names.
+</Aside>
+
+```promql
+# Throughput — HTTP requests/sec per route
+sum by (route) (rate(greentic_greentic_http_requests_total[1m]))
+
+# Throughput — flow executions/sec, by flow
+sum by (flow_id) (rate(greentic_greentic_flow_executions_total[1m]))
+
+# Throughput — new conversations per minute
+60 * rate(greentic_greentic_session_starts_total[5m])
+
+# Concurrency — active conversations, per tenant
+sum by (tenant) (greentic_greentic_conversations_active)
+
+# Latency — p95 HTTP latency, by route
+histogram_quantile(0.95, sum by (le, route) (rate(greentic_greentic_http_request_duration_ms_milliseconds_bucket[5m])))
+
+# Errors — HTTP 5xx rate, by route
+sum by (route) (rate(greentic_greentic_http_requests_total{status_code=~"5.."}[5m]))
+
+# Errors — failed flow ratio
+sum(rate(greentic_greentic_flow_executions_total{status="err"}[5m])) / sum(rate(greentic_greentic_flow_executions_total[5m]))
+```
+
+### Metrics catalog
+
+| Metric | Where it's emitted | Labels |
+|---|---|---|
+| `greentic.http.requests` | HTTP ingress | `method`, `route`, `status_code` |
+| `greentic.http.request_duration_ms` | HTTP ingress (histogram) | same |
+| `greentic.session.starts` | WebSocket session serve | `tenant`, `provider` |
+| `greentic.conversations.active` | session connect/drop (UpDownCounter) | `tenant`, `provider` |
+| `greentic.flow.executions` | flow engine execute | `tenant`, `flow_id`, `status` |
+| `greentic.flow.duration_ms` | flow engine execute (histogram) | `tenant`, `flow_id`, `status` |
+| `greentic.provider.invocations` | provider invoke | `tenant`, `provider`, `op`, `status` |
+| `greentic.provider.op_duration_ms` | provider invoke (histogram) | same |
+
+<Aside type="tip">
+If a metric is missing from Prometheus, nothing has exercised that code path yet. Drive some traffic through the bundle, then re-query.
+</Aside>
+
+## Querying logs (Loki)
+
+Same Grafana **Explore** screen — switch the datasource to **Loki**. Filter by the bundle's `service_name` (defaults to the bundle directory name unless `telemetry.service_name` or `OTEL_SERVICE_NAME` overrides it). Substitute your own value for `my-bundle` below.
+
+```logql
+# All logs from this bundle
+{service_name="my-bundle"}
+
+# Only the flow engine crate
+{service_name="my-bundle", scope_name="greentic_runner_host::runner::engine"}
+
+# Only errors
+{service_name="my-bundle", severity_text="ERROR"}
+
+# Anything mentioning flow.execute
+{service_name="my-bundle"} |= "flow.execute"
+
+# Log volume per scope (rate)
+sum by (scope_name) (rate({service_name="my-bundle"}[1m]))
+```
+
+## Building a dashboard
+
+In **Explore**, use **Add → Add to dashboard** to clone panels. Three rows map cleanly onto the metrics above:
+
+1. **Throughput** — HTTP-rps, flow-rps, and new-conversations-per-minute in one time-series panel.
+2. **Latency** — p50/p95/p99 of HTTP duration via `histogram_quantile`, plus flow duration.
+3. **Health** — a gauge for `greentic_greentic_conversations_active`, a stat for failed-flow ratio, and a Loki logs panel filtered to `severity_text="ERROR"`.
+
+To make a dashboard come up automatically, export its JSON, commit it under `docker/grafana-dashboards/`, and provision it via Grafana's dashboard provisioning.
+
+## Exporting to a production backend
+
+The docker stack is a local convenience. Any OTLP-compatible collector or SaaS backend works the same way — point `OTLP_ENDPOINT` at it and supply credentials with `OTLP_HEADERS`:
+
+```bash
+export TELEMETRY_EXPORT=otlp-http
+export OTLP_ENDPOINT=https://otlp.example-observability.com
+export OTLP_HEADERS="x-api-key=…"
+gtc start ./my-bundle
+```
+
+This sends the same traces, metrics, and logs to managed backends such as Grafana Cloud, Honeycomb, or any vendor that speaks OTLP — no change to the bundle required.
+
+## Caveats
+
+- **No persistence.** The docker stack has no named volumes — restarting it wipes the Prometheus TSDB and Grafana state. Add volumes to `docker-compose.yml` if you need durable data.
+- **Short retention.** Prometheus retention is set to 1h to keep local disk usage tiny. Bump `--storage.tsdb.retention.time` for longer windows.
+- **Trace sampling in the collector.** The `debug` exporter samples (`sampling_initial: 5, sampling_thereafter: 50`) so traces don't flood the terminal. Drop the sampling block in `otel-collector-config.yaml` to see every span.
