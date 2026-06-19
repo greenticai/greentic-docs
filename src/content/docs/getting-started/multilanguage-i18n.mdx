@@ -66,7 +66,32 @@ For WebChat-based workers, enable the WebChat i18n capability when creating the 
 
 When `greentic.cap.webchat.i18n.v1` is enabled, `gtc wizard` and `gtc setup` can scaffold locale-aware WebChat assets under the bundle `./assets/` directory. The bundle can then override extension defaults without modifying the original `.gtpack`.
 
-Example bundle asset layout:
+### Automatic translation and packing at export
+
+When a digital worker is exported with additional languages selected in the designer export wizard, the `greentic-pack` build step automatically translates the Adaptive Card strings and packs the resulting locale files into the application `.gtpack`. No manual translation step or post-build copy is needed.
+
+The process runs during `greentic-pack` build:
+
+1. `greentic-i18n-translator` reads the English source strings from the pack.
+2. It produces `assets/i18n/<lang>.json` for each selected language, plus `assets/i18n/_manifest.json` describing the available locales.
+3. Both the locale files and the manifest are written **inside** the application `.gtpack`.
+4. At runtime, `greentic-start` synthesises the webchat-gui locale-picker manifest from those packed files, so the picker shows exactly the languages the operator selected at export.
+
+Translation is non-fatal. If the translator is unavailable or a specific language fails, `greentic-pack` logs a warning, skips that language, and completes the build with the remaining locales.
+
+Example of the packed locale structure inside a `.gtpack`:
+
+```text
+assets/
+└── i18n/
+    ├── _manifest.json   # lists available locales
+    ├── en.json
+    ├── de.json
+    ├── es.json
+    └── ja.json
+```
+
+Example bundle asset layout (bundle-level overlays):
 
 ```text
 my-bundle/
@@ -81,7 +106,7 @@ my-bundle/
                     └── ja.json
 ```
 
-The WebChat UI can expose a locale picker, remember the selected locale in the session, and resolve labels and messages from the active locale file.
+The WebChat UI exposes a locale picker, remembers the selected locale in the session, and resolves labels and messages from the active locale file. The picker entries are driven by the `_manifest.json` packed inside the `.gtpack`, so it shows only the languages that were actually translated and included at build time.
 
 ## Adaptive Cards and Templates
 
@@ -100,17 +125,17 @@ The usual workflow is:
    }
    ```
 
-2. **Translate the locale files** manually or through your translation tooling.
+2. **Select target languages** in the designer export wizard. The `greentic-pack` build step automatically runs `greentic-i18n-translator` to produce locale files for each selected language. No manual translation command is needed; the translator runs as part of the pack build.
 
-   ```bash
-   greentic-i18n-translator translate --langs de,es,ja --en assets/i18n/en.json
-   ```
-
-3. **Package translations** into an application pack or copy them into bundle assets.
+3. **Locale files are packed automatically.** The translated `assets/i18n/<lang>.json` files and a `_manifest.json` index are written inside the application `.gtpack` by `greentic-pack`. You do not need to copy or manage them separately.
 
 4. **Resolve text at runtime** from the current session, team, tenant, or default locale.
 
 </Steps>
+
+<Aside type="tip">
+If you need to run translation outside of the export wizard — for example, to pre-populate bundle assets — you can invoke `greentic-i18n-translator` directly and then copy the output into `./assets/i18n/`.
+</Aside>
 
 ## How This Works With Tenants
 

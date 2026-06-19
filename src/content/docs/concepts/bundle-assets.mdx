@@ -29,7 +29,7 @@ Each capability unlocks a specific set of assets and behaviors. Capabilities fol
 |---------------|---------|-----------------|
 | `greentic.cap.bundle_assets.read.v1` | Bundle-level asset directory | Creates the `./assets/` directory structure and scaffolds eligible default skin files from extension packs |
 | `greentic.cap.webchat.oauth.v1` | OAuth authentication for WebChat | Adds OAuth auth provider configuration to tenant config files |
-| `greentic.cap.webchat.i18n.v1` | Multi-language WebChat | Enables locale picker and scaffolds locale JSON files under `./assets/` |
+| `greentic.cap.webchat.i18n.v1` | Multi-language WebChat | Enables locale picker and scaffolds locale JSON files under `./assets/`. When a worker is exported with additional languages, `greentic-pack` automatically translates the source strings and packs the locale files inside the application `.gtpack`, so the picker shows exactly the languages selected at export without any manual copy step. |
 | `greentic.cap.webchat.embed.v1` | Embeddable WebChat widget | Generates embed HTML snippets (fullpage link, inline iframe, chat bubble) per tenant |
 
 <Aside>
