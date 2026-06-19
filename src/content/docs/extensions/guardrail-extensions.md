@@ -61,12 +61,14 @@ When a guardrail denies a step, the runtime wraps the verdict in a structured pa
   "guardrail": {
     "blocked":    true,
     "direction":  "inbound",
-    "code":       "GUARDRAIL_DENY",
+    "code":       "permission_denied",
     "message":    "Content blocked by guardrail <extension-id>",
     "details":    "reason text from deny(reason)"
   }
 }
 ```
+
+The `code` value is returned verbatim from the component's `deny(deny-info)` verdict — it is component-supplied, not a fixed platform constant. The reference PII component returns `"permission_denied"` for blocklist matches.
 
 This payload is surfaced as `AgentError::GuardrailDenied` in the Rust API and as an HTTP `403` with the above JSON body on the `/api/agent` and `/api/ai` endpoints.
 
