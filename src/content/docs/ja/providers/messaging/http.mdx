@@ -1,0 +1,124 @@
+---
+title: HTTP
+description: 受信 HTTP リクエストをマッピングし、送信 HTTP 呼び出しを構築する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+`messaging-http` は、`build-answer.json` から生成される answer 所有のメッセージングプロバイダーです。名前付きチャットプラットフォームではなく、通常の HTTP でシステムがデジタルワーカーと通信する場合に役立ちます。
+
+現在サポートしている機能:
+
+- 受信 HTTP `POST` JSON リクエストを正規化されたプロバイダーイベントへマッピング
+- 任意の受信 bearer token または API key header チェック
+- 選択したリクエスト header と query parameter の取得
+- メッセージ payload から送信 HTTP `GET` または `POST` リクエスト記述を構築
+- `{payload.case_id}` などの payload 値を使った URL テンプレート
+
+## セットアップ
+
+<Steps>
+
+1. **プロバイダー pack を追加する**
+
+   `gtc wizard` で `messaging-http` を選択するか、メッセージングプロバイダーカタログから pack を bundle に追加します。
+
+2. **ルーティングと認証を設定する**
+
+   インストール済み pack に対して生成された setup answers を使います。典型的な設定には、route/public URL 情報、任意の認証、取得する header、送信リクエスト設定が含まれます。
+
+3. **setup を実行する**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **runtime を起動する**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## 受信マッピング
+
+受信 HTTP は JSON オブジェクト body を持つ `POST` リクエストを期待します。プロバイダーはそれを次のようなイベントにマッピングします:
+
+```json
+{
+  "provider": "messaging-http",
+  "direction": "inbound",
+  "kind": "http.webhook",
+  "idempotency_key": "req-1",
+  "source": {
+    "method": "POST",
+    "path": "/webhooks/acme",
+    "headers": {
+      "x-request-id": "req-1"
+    },
+    "query": {
+      "source": "test"
+    }
+  },
+  "payload": {
+    "case_id": "C123",
+    "event": "case.created"
+  }
+}
+```
+
+idempotency key は、存在する場合に `Idempotency-Key`、`X-Request-Id`、`payload.idempotency_key`、または `payload.id` から取得されます。
+
+## 送信マッピング
+
+送信メッセージは HTTP リクエスト記述に変換されます。たとえば、次の設定の場合:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/{payload.case_id}",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "timeout_ms": 5000
+}
+```
+
+メッセージ payload `{ "case_id": "C123", "status": "open" }` は次を生成します:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/C123",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"case_id\":\"C123\",\"status\":\"open\"}",
+  "timeout_ms": 5000
+}
+```
+
+## ネットワークアクセス
+
+| 方向 | プロトコルとポート | 目的 |
+|------|--------------------|------|
+| 受信 | Greentic への HTTPS `443` | 外部システムが webhook 形式の JSON リクエストを送信 |
+| 受信、ローカル開発 | ローカル runtime/tester ポートの HTTP | TLS/トンネル終端前のローカルテスト |
+| 送信 | 設定済み endpoint への HTTP または HTTPS | プロバイダーが構築する送信リクエスト |
+
+<Aside type="note">
+`messaging-http` は answer file から生成されます。生成済みの YAML、JSON、CBOR、pack artifact を手作業で編集するのではなく、answer source を更新して pack を再生成してください。
+</Aside>
+
+## テスト
+
+ローカル tester を使います:
+
+```bash
+./scripts/test_http.sh
+```
+
+tester ページには受信マッピングと送信リクエスト生成の個別ボタンがあり、明確な pass/fail ステータスを表示します。

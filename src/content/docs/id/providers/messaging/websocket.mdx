@@ -1,0 +1,101 @@
+---
+title: WebSocket
+description: Memetakan frame WebSocket masuk dan membuat frame keluar
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+`messaging-websocket` adalah provider messaging berbasis jawaban yang dihasilkan dari `build-answer.json`. Ini berguna saat client mempertahankan sesi WebSocket live dengan Greentic dan bertukar frame JSON, bukan menggunakan platform chat bernama.
+
+Saat ini mendukung:
+
+- Validasi koneksi tanpa auth, bearer-token auth, atau query-token auth
+- Memetakan frame teks masuk yang berisi objek JSON menjadi event yang dinormalisasi
+- Membuat frame teks keluar dari payload pesan
+- Menormalisasi event lifecycle untuk `open`, `close`, dan `error`
+
+Frame biner ditunda dalam implementasi provider saat ini.
+
+## Setup
+
+<Steps>
+
+1. **Tambahkan pack provider**
+
+   Pilih `messaging-websocket` dengan `gtc wizard` atau tambahkan pack ke bundle dari katalog provider messaging.
+
+2. **Konfigurasikan kebijakan koneksi**
+
+   Gunakan jawaban setup yang dihasilkan untuk pack yang terpasang. Konfigurasi umum mencakup metadata tenant/team dan auth opsional.
+
+3. **Jalankan setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Mulai runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Frame Masuk
+
+Frame masuk harus berupa frame teks yang berisi objek JSON. Provider memetakannya menjadi event seperti:
+
+```json
+{
+  "provider": "messaging-websocket",
+  "direction": "inbound",
+  "kind": "websocket.frame",
+  "session_id": "session-1",
+  "payload": {
+    "message": "hello"
+  },
+  "metadata": {
+    "tenant_id": "demo",
+    "team_id": "default"
+  }
+}
+```
+
+Event lifecycle dinormalisasi dengan nilai `kind` seperti `websocket.open`, `websocket.close`, dan `websocket.error`.
+
+## Frame Keluar
+
+Pesan keluar memerlukan `session_id` dan payload objek. Pesan tersebut dikonversi menjadi frame teks:
+
+```json
+{
+  "session_id": "session-1",
+  "opcode": "text",
+  "data": "{\"message\":\"hello\"}"
+}
+```
+
+## Akses Jaringan
+
+| Arah | Protokol dan port | Tujuan |
+|------|-------------------|--------|
+| Masuk | WSS `443` ke Greentic | Client WebSocket browser atau service di produksi |
+| Masuk, pengembangan lokal | WS pada port runtime/tester lokal | Pengujian lokal sebelum terminasi TLS/tunnel |
+| Keluar | WS atau WSS ke endpoint yang dikonfigurasi saat digunakan oleh integrasi host/runtime | Frame keluar yang dibuat provider |
+
+<Aside type="note">
+`messaging-websocket` dihasilkan dari file jawabannya. Perbarui sumber jawaban dan regenerasi pack, bukan mengedit YAML, JSON, CBOR, atau artefak packed yang dihasilkan secara manual.
+</Aside>
+
+## Pengujian
+
+Gunakan tester lokal:
+
+```bash
+./scripts/test_ws.sh
+```
+
+Halaman tester memiliki tombol terpisah untuk pemetaan frame masuk, pembuatan frame keluar, dan normalisasi event lifecycle, serta menampilkan status lulus/gagal yang jelas.

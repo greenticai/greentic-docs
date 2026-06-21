@@ -1,6 +1,6 @@
 ---
 title: Correo electrónico
-description: Envía y recibe correos electrónicos como mensajes
+description: Envía correo SMTP y usa Microsoft Graph mail
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -13,6 +13,8 @@ El provider de mensajería Email permite que tu trabajador digital se comunique 
 - Recepción de correos electrónicos (mediante webhooks)
 - Formato HTML
 - Adjuntos
+
+`messaging-email` es un proveedor SMTP saliente. No consulta buzones IMAP o POP3. El correo entrante normalmente se maneja con un proveedor de eventos o un webhook de proveedor, como SendGrid Inbound Parse, Mailgun Routes, AWS SES o suscripciones de Microsoft Graph cuando el pack instalado las admite.
 
 ## Configuración
 

@@ -75,6 +75,19 @@ The Webex provider integrates with Webex messaging. It supports:
 The setup layer also accepts the older `bot_token` alias and stores it as `webex_bot_token`, but new answers files should use the wizard-generated key.
 </Aside>
 
+## إجراء Add to WebEx
+
+بعد نجاح setup، يعرض pack Webex إجراء setup عاما عبر `greentic.setup.actions.v1`:
+
+| الحقل | القيمة |
+|-------|--------|
+| Label | `Add to WebEx` |
+| Kind | `deep_link` |
+| قالب URL | `https://web.webex.com/teams/messages/new?email={bot_email}` |
+| خرج setup المطلوب | `bot_email` |
+
+يمكن لمضيفي setup عرضه كزر، وإظهار URL، وتوفير HTML snippet. يفتح الرابط Webex مع رسالة جديدة موجهة إلى bot.
+
 ## Features
 
 ### Text Messages

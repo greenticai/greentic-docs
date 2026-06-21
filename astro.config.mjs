@@ -156,6 +156,8 @@ export default defineConfig({
 						{ label: 'WebChat Embedding', slug: 'providers/messaging/webchat-embedding' },
 						{ label: 'Webex', slug: 'providers/messaging/webex' },
 						{ label: 'Email', slug: 'providers/messaging/email' },
+						{ label: 'HTTP', slug: 'providers/messaging/http' },
+						{ label: 'WebSocket', slug: 'providers/messaging/websocket' },
 					],
 				},
 				{

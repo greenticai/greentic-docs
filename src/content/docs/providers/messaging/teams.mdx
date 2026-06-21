@@ -7,7 +7,14 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Overview
 
-The Microsoft Teams provider integrates your digital worker with Teams channels and chats. It supports:
+Greentic has two Teams messaging packs:
+
+| Pack | Use this when |
+|------|---------------|
+| `messaging-teams` | You want the current Teams app setup wizard, Bot Framework-compatible ingress, Adaptive Card invokes, and Teams app installation links. |
+| `messaging-teams-graph` | You want Graph-based channel sends and Graph subscription experiments. |
+
+The default Teams setup path is `messaging-teams`. It integrates your digital worker with Microsoft Teams through a Teams app and Bot Framework-compatible activity ingress. It supports:
 
 - Channel messages
 - Personal chats
@@ -19,75 +26,88 @@ The Microsoft Teams provider integrates your digital worker with Teams channels 
 ## Prerequisites
 
 - Microsoft 365 tenant
-- A public Microsoft Entra application client id that supports device-code OAuth
-- Permission to grant or consent to the Graph scopes used by setup
-- Permission to create channels in the selected Team when you want setup to create a missing desired channel
+- Permission to run Microsoft device-code login for Graph setup access
+- Permission to create or update the Microsoft Entra application used by the Teams bot
+- Permission to register or update the Bot Framework/Microsoft Teams bot endpoint
+- Permission to publish and install the Teams app in your tenant app catalog
 
 ## Setup
 
-Teams setup has two supported configuration shapes:
+The `messaging-teams` pack ships a provider-owned setup wizard as a web component plus a backend contract. A generic setup host discovers this metadata from the pack:
 
-| Mode | Use this when | Main fields |
-|------|---------------|-------------|
-| Graph channel mode | You want Graph-based channel sends and subscriptions. This is the default setup mode. | `tenant_id`, `client_id`, `team_id`, `team_name`, `channel_id`, `channel_name`, `desired_channel_name` |
-| Bot Framework mode | You have an Azure Bot and Teams app manifest for inbound Bot Framework messages. | `ms_bot_app_id`, `ms_bot_app_password`, `bot_display_name`, `messaging_endpoint` |
+- `greentic.setup.web-component.v1` for the `<greentic-teams-setup-v4>` UI
+- `greentic.setup.backend-contract.v1` for setup routes and executor steps
+- `greentic.setup.actions.v1` for the final **Add to Teams** action
+
+Setup is intentionally step-based. The wizard advances one managed action at a time, shows Microsoft device-code instructions when needed, and blocks install/open-chat actions until the public runtime endpoint has been registered.
 
 <Steps>
 
-1. **Configure the setup hint**
+1. **Configure the setup answers**
 
-   You can run setup with only the default public client id, or provide your own `client_id`. Add `desired_channel_name` when you want setup to find or create a specific standard channel:
+   Most fields can be collected by the web setup UI. In answers files, provide the public URL and optional naming/tenant hints:
 
    ```json title="answers.json"
    {
      "setup_answers": {
        "messaging-teams": {
-         "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
-         "desired_channel_name": "hr onboarding"
+         "public_base_url": "https://your-domain.com",
+         "bot_display_name": "Greentic Digital Worker",
+         "azure_auth_tenant": "organizations"
        }
      }
    }
    ```
 
-2. **Start Teams setup**
+   The setup contract has defaults for the Microsoft Graph Command Line Tools public client used by device-code login. Admins can override client ids when required by tenant policy.
+
+2. **Run setup and open the wizard**
 
    ```bash
    gtc setup --answers answers.json ./my-bundle
    ```
 
-3. **Complete device-code OAuth**
+   In UI mode, setup mounts the Teams setup component from the pack. The component calls the provider setup routes declared by the backend contract.
 
-   Setup starts a Microsoft device-code flow. Copy the code, open the verification URL, sign in with the Microsoft 365 account that can access the target Team, and approve the requested Graph scopes.
+3. **Authorize Microsoft Graph setup access**
 
-   Return to the terminal and continue when setup asks you to verify Microsoft Teams setup. Greentic then polls Microsoft Graph, stores the delegated tokens as secrets, and runs post-login discovery.
+   The wizard starts Microsoft device-code OAuth. Copy the code, open the verification URL, sign in with the admin account, and approve the requested Graph scopes.
 
-4. **Select or verify the Team and channel**
+   Greentic stores OAuth state server side. Browser-submitted OAuth tokens and device codes are ignored; only the setup-owned `/oauth/{kind}/start` and `/oauth/{kind}/complete` routes mutate the login state.
 
-   Setup calls Microsoft Graph to list joined teams and channels for the signed-in user. Choose the Team and channel when prompted, or let `desired_channel_name` guide the create-if-missing flow.
+4. **Create or reuse the bot app identity**
 
-   Setup persists both the identifiers and labels:
-   - `team_id` and `team_name`
-   - `channel_id` and `channel_name`
+   Setup creates or updates the Microsoft Entra application used by the Teams bot and generates the client secret stored by setup. This produces the bot app id and password used by the runtime.
 
-   The IDs are what runtime sends and subscription setup use. The display names are for operators and setup UIs.
+5. **Authorize Teams bot channel registration**
 
-5. **Check the channel in Teams**
+   A second device-code login grants Azure management access for registering the Greentic Bot Framework endpoint with the Microsoft Teams bot channel registry.
 
-   Open Microsoft Teams and go to the selected Team and channel. If setup created `desired_channel_name`, confirm the channel exists and that the signed-in account has access to it.
+6. **Register the active Greentic endpoint**
 
-   If the selected Team does not already have that channel, setup can create a standard channel and then stores the resulting `channel_id` and `channel_name`. The ID remains authoritative for runtime sends and subscriptions.
+   Setup registers or updates the Bot Framework-compatible messaging endpoint using the current `public_base_url`:
 
-6. **Start or restart the runtime**
+   ```text
+   https://your-domain.com/v1/messaging/ingress/messaging-teams/{tenant}/{team}
+   ```
+
+   If your tunnel or public URL changes, re-run setup so the registered endpoint points at the active runtime URL.
+
+7. **Publish and install the Teams app**
+
+   Setup builds the Teams app package from the pack template, publishes it to the tenant app catalog, and can install it for the setup user. When the app is published, the pack exposes the generic **Add to Teams** link for manual installation fallback.
+
+8. **Start or restart the runtime**
 
    ```bash
    gtc start ./my-bundle
    ```
 
-   The Teams pack declares desired subscription metadata, including the Graph resource template, component config fields, notification URL template, and lifecycle notification URL template. Hosts should use this metadata instead of hard-coding Teams resource paths.
+   Keep the runtime and public tunnel alive while completing setup. Final setup status waits until `greentic-start` receives the first Teams Bot Framework activity and persists that proof.
 
-7. **Test the target channel**
+9. **Open Teams and send the first message**
 
-   Send a message in the selected Teams channel or trigger a flow that sends to Teams. If messages do not appear, re-run setup and check that the persisted `team_id` and `channel_id` still match the channel you opened in Teams.
+   Use the **Add to Teams** link, install the app, open the bot chat, and send a message. That first activity confirms that the app, endpoint, tenant/team binding, and runtime ingress are connected.
 
 </Steps>
 
@@ -95,40 +115,55 @@ Teams setup has two supported configuration shapes:
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `client_id` | Yes for Graph setup | Public Microsoft application client id used for device-code OAuth |
-| `tenant_id` | Generated | Tenant id discovered from Microsoft Graph |
-| `team_id` | Generated or selected | Teams team id used for channel sends and subscriptions |
-| `team_name` | Generated or selected | Display name for the selected Team |
-| `channel_id` | Generated or selected | Channel id used for sends and subscriptions |
-| `channel_name` | Generated or selected | Display name for the selected channel |
-| `desired_channel_name` | No | Default/search hint, and channel creation name when creation is supported |
-| `chat_id` | No | Chat id for chat subscriptions where applicable |
-| `ms_bot_app_id` | Bot Framework mode | Microsoft Bot Framework app id |
-| `ms_bot_app_password` | Bot Framework mode | Bot Framework app password |
-| `bot_display_name` | Bot Framework mode | Display name used in Teams app manifest workflows |
-| `messaging_endpoint` | Bot Framework mode | Public Bot Framework messaging endpoint |
+| `public_base_url` | Yes | Public Greentic runtime URL used for the Bot Framework messaging endpoint |
+| `bot_display_name` | No | Display name used for the Entra app and Teams app package |
+| `azure_auth_tenant` | No | Authority tenant for Microsoft device-code login. Defaults to `organizations` |
+| `graph_setup_client_id` | No | Override for the public client used for Graph setup login |
+| `azure_setup_client_id` | No | Override for the public client used for Azure management login |
+| `azure_subscription_id` | Conditional | Azure subscription used when setup must register/update Bot Framework channel resources |
+| `azure_resource_group` | Conditional | Azure resource group used for Bot Framework channel resources |
+| `azure_resource_group_location` | Conditional | Azure resource group location |
+| `azure_location` | Conditional | Azure bot resource location |
+| `azure_bot_name` | No | Azure bot resource name when setup creates or updates the resource |
+| `bot_app_id` | Generated | Microsoft Entra application id used by the Teams bot |
+| `bot_app_password` | Generated secret | Client secret generated and stored by setup |
+| `teams_app_version` | No | Teams app manifest version override |
 
 <Aside type="note">
-Teams egress and subscription setup use IDs, not display names. Labels are persisted for operators and setup UIs, but `channel_id`, `team_id`, or `chat_id` remain the runtime identifiers.
+The setup wizard owns OAuth/device-code state and generated secrets. Regenerate answers with `gtc setup --dry-run --emit-answers answers.json ./my-bundle` instead of hand-writing hidden or generated fields.
 </Aside>
 
 <Aside type="caution">
-Creating a missing Teams channel requires the delegated `Channel.Create` Graph permission and a signed-in user who is allowed to create channels in the selected Team.
+Manual Teams app installation is not the final setup condition. Setup is complete only after the runtime receives a Teams Bot Framework activity for the configured tenant/team.
 </Aside>
+
+## Add to Teams Action
+
+The Teams pack declares a generic setup action:
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to Teams` |
+| Kind | `deep_link` |
+| URL template | `{add_to_teams_url}` |
+| Required setup output | `add_to_teams_url` |
+
+Setup hosts can render this as a button, show the URL, and provide an HTML snippet after setup returns `setup_status.ok: true`. The setup wizard may show the link earlier as a manual fallback after app publishing, but generic final-screen rendering should still respect the pack action metadata.
 
 ## Network Access
 
-Teams Graph mode uses Microsoft Graph subscriptions for incoming channel or chat messages. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
+The current `messaging-teams` setup path uses a Bot Framework-compatible Teams app endpoint for incoming Teams activity. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.
 
 | Direction | Protocol and port | Purpose |
 |-----------|-------------------|---------|
-| Incoming | HTTPS `443` from Microsoft Graph to Greentic | Change notifications and lifecycle notifications for Teams message subscriptions |
-| Incoming, Bot Framework mode | HTTPS `443` from Microsoft Bot Framework to Greentic | Bot Framework activity callbacks to the configured messaging endpoint |
-| Outgoing | HTTPS `443` from Greentic to `login.microsoftonline.com` | Device-code OAuth and token refresh |
-| Outgoing | HTTPS `443` from Greentic to `graph.microsoft.com` | Team/channel discovery, optional channel creation, message sends, and subscription reconciliation |
-| Outgoing, Bot Framework mode | HTTPS `443` from Greentic to Bot Framework service URLs | Replies and proactive sends through the Bot Framework service URL from incoming activities |
+| Incoming | HTTPS `443` from Microsoft Bot Framework to Greentic | Teams activity callbacks to `/v1/messaging/ingress/messaging-teams/{tenant}/{team}` |
+| Outgoing | HTTPS `443` from setup/runtime to `login.microsoftonline.com` | Device-code OAuth and token refresh |
+| Outgoing | HTTPS `443` from setup/runtime to `graph.microsoft.com` | App registration, app catalog publishing, Teams app install, and Graph-backed setup calls |
+| Outgoing | HTTPS `443` from setup to Azure management endpoints | Bot Framework/Microsoft Teams channel registration when required by the setup contract |
+| Outgoing | HTTPS `443` from runtime to Bot Framework service URLs | Replies and proactive sends through the service URL from incoming Teams activities |
+| Incoming, `messaging-teams-graph` | HTTPS `443` from Microsoft Graph to Greentic | Graph change notifications and lifecycle notifications for Teams message subscriptions |
 
-The Graph subscription `notificationUrl` and `lifecycleNotificationUrl` must both be publicly reachable over HTTPS. The provider pack declares the URL templates; hosts should not hard-code Teams paths.
+The registered Bot Framework messaging endpoint must point at the active public runtime URL. If `gtc start` creates a new Cloudflare Tunnel or ngrok URL, re-run setup so the endpoint registration is reconciled before using **Add to Teams** or testing the bot.
 
 ## Features
 
@@ -305,16 +340,17 @@ Store the conversation reference when users first interact with your bot to enab
 
 ### Bot Not Responding
 
-1. **Check endpoint configuration** in Azure Bot Service
-2. **Verify SSL certificate** is valid
-3. **Check app credentials** are correct
-4. **Review activity logs** in Azure
+1. **Check the public URL** in setup state and confirm it matches the current tunnel/runtime URL
+2. **Re-run setup** so Bot Framework endpoint registration is reconciled
+3. **Verify the Teams app is installed** with the **Add to Teams** link
+4. **Send the first message** to the bot so setup can observe the first Bot Framework POST
+5. **Review runtime logs** with `gtc start ./my-bundle --verbose`
 
 ### "Unauthorized" Error
 
-- Verify App ID and Password
-- Check tenant ID for single-tenant apps
-- Ensure bot is enabled in Teams channel
+- Verify the generated `bot_app_id` and stored bot secret
+- Check the tenant used by Microsoft device-code setup
+- Re-run the setup wizard if admin consent or endpoint registration was incomplete
 
 ### Card Not Rendering
 

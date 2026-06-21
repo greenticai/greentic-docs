@@ -1,6 +1,6 @@
 ---
 title: E-Mail
-description: E-Mails als Nachrichten senden und empfangen
+description: SMTP-E-Mail senden und Microsoft Graph Mail verwenden
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -13,6 +13,8 @@ Der E-Mail-Messaging-Provider ermöglicht Ihrem digitalen Worker die Kommunikati
 - E-Mails empfangen (über Webhooks)
 - HTML-Formatierung
 - Anhänge
+
+`messaging-email` ist ein SMTP-Provider fuer ausgehende E-Mails. Er fragt keine IMAP- oder POP3-Postfaecher ab. Eingehende E-Mails werden normalerweise ueber einen Event-Provider oder Provider-Webhook verarbeitet, zum Beispiel SendGrid Inbound Parse, Mailgun Routes, AWS SES oder Microsoft Graph subscriptions, wenn das installierte Pack sie unterstuetzt.
 
 ## Einrichtung
 

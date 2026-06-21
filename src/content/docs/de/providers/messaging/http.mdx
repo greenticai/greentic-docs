@@ -1,0 +1,124 @@
+---
+title: HTTP
+description: Eingehende HTTP-Anfragen zuordnen und ausgehende HTTP-Aufrufe erstellen
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ueberblick
+
+`messaging-http` ist ein antwortgesteuerter Messaging-Provider, der aus `build-answer.json` generiert wird. Er ist nuetzlich, wenn ein System ueber einfaches HTTP mit einem digitalen Worker spricht, statt eine benannte Chat-Plattform zu verwenden.
+
+Er unterstuetzt derzeit:
+
+- Zuordnung eingehender HTTP-`POST`-JSON-Anfragen zu normalisierten Provider-Ereignissen
+- Optionale eingehende Bearer-Token- oder API-Key-Header-Pruefungen
+- Erfassen ausgewaehlter Request-Header und Query-Parameter
+- Erstellen ausgehender HTTP-`GET`- oder `POST`-Request-Beschreibungen aus Message-Payloads
+- URL-Templates mit Payload-Werten wie `{payload.case_id}`
+
+## Einrichtung
+
+<Steps>
+
+1. **Provider-Pack hinzufuegen**
+
+   Waehle `messaging-http` mit `gtc wizard` aus oder fuege das Pack aus dem Messaging-Provider-Katalog zum Bundle hinzu.
+
+2. **Routing und Auth konfigurieren**
+
+   Verwende die Setup-Antworten, die fuer dein installiertes Pack generiert wurden. Typische Konfiguration enthaelt Route/Public-URL-Informationen, optionale Authentifizierung, erfasste Header und Einstellungen fuer ausgehende Requests.
+
+3. **Setup ausfuehren**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Runtime starten**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Eingehende Zuordnung
+
+Eingehendes HTTP erwartet eine `POST`-Anfrage mit einem JSON-Objekt im Body. Der Provider ordnet sie einem Ereignis dieser Form zu:
+
+```json
+{
+  "provider": "messaging-http",
+  "direction": "inbound",
+  "kind": "http.webhook",
+  "idempotency_key": "req-1",
+  "source": {
+    "method": "POST",
+    "path": "/webhooks/acme",
+    "headers": {
+      "x-request-id": "req-1"
+    },
+    "query": {
+      "source": "test"
+    }
+  },
+  "payload": {
+    "case_id": "C123",
+    "event": "case.created"
+  }
+}
+```
+
+Der Idempotency-Key wird aus `Idempotency-Key`, `X-Request-Id`, `payload.idempotency_key` oder `payload.id` genommen, wenn vorhanden.
+
+## Ausgehende Zuordnung
+
+Ausgehende Nachrichten werden in HTTP-Request-Beschreibungen umgewandelt. Zum Beispiel mit dieser Konfiguration:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/{payload.case_id}",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "timeout_ms": 5000
+}
+```
+
+Ein Message-Payload `{ "case_id": "C123", "status": "open" }` erzeugt:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/C123",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"case_id\":\"C123\",\"status\":\"open\"}",
+  "timeout_ms": 5000
+}
+```
+
+## Netzwerkzugriff
+
+| Richtung | Protokoll und Port | Zweck |
+|----------|--------------------|-------|
+| Eingehend | HTTPS `443` zu Greentic | Externe Systeme, die webhookartige JSON-Anfragen senden |
+| Eingehend, lokale Entwicklung | HTTP auf dem lokalen Runtime-/Tester-Port | Lokale Tests vor TLS-/Tunnel-Terminierung |
+| Ausgehend | HTTP oder HTTPS zu konfigurierten Endpoints | Vom Provider erstellte ausgehende Requests |
+
+<Aside type="note">
+`messaging-http` wird aus seiner Antwortdatei generiert. Aktualisiere die Antwortquelle und generiere das Pack neu, statt generierte YAML-, JSON-, CBOR- oder Pack-Artefakte manuell zu bearbeiten.
+</Aside>
+
+## Tests
+
+Verwende den lokalen Tester:
+
+```bash
+./scripts/test_http.sh
+```
+
+Die Tester-Seite hat separate Buttons fuer eingehende Zuordnung und ausgehende Request-Erzeugung und zeigt einen klaren Pass/Fail-Status.

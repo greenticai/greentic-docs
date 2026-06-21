@@ -1,0 +1,101 @@
+---
+title: WebSocket
+description: ربط frames WebSocket الواردة وبناء frames صادرة
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## نظرة عامة
+
+`messaging-websocket` هو مزود مراسلة تملكه الإجابات ويتم توليده من `build-answer.json`. يكون مفيدا عندما يحافظ العملاء على جلسة WebSocket مباشرة مع Greentic ويتبادلون frames JSON بدلا من استخدام منصة دردشة مسماة.
+
+يدعم حاليا:
+
+- التحقق من الاتصال بلا مصادقة، أو بمصادقة bearer-token، أو بمصادقة query-token
+- ربط frames النص الواردة التي تحتوي على كائنات JSON بأحداث موحدة
+- بناء frames نص صادرة من payload الرسائل
+- توحيد أحداث دورة الحياة لـ `open` و`close` و`error`
+
+frames الثنائية مؤجلة في تنفيذ المزود الحالي.
+
+## الإعداد
+
+<Steps>
+
+1. **أضف pack المزود**
+
+   اختر `messaging-websocket` باستخدام `gtc wizard` أو أضف pack إلى bundle من كتالوج مزودي المراسلة.
+
+2. **اضبط سياسة الاتصال**
+
+   استخدم إجابات الإعداد المولدة للـ pack المثبت. يتضمن الإعداد المعتاد metadata للـ tenant/team ومصادقة اختيارية.
+
+3. **شغل setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **ابدأ runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Frames واردة
+
+يجب أن تكون frames الواردة frames نصية تحتوي على كائن JSON. يربطها المزود بأحداث بالشكل التالي:
+
+```json
+{
+  "provider": "messaging-websocket",
+  "direction": "inbound",
+  "kind": "websocket.frame",
+  "session_id": "session-1",
+  "payload": {
+    "message": "hello"
+  },
+  "metadata": {
+    "tenant_id": "demo",
+    "team_id": "default"
+  }
+}
+```
+
+توحّد أحداث دورة الحياة بقيم `kind` مثل `websocket.open` و`websocket.close` و`websocket.error`.
+
+## Frames صادرة
+
+تتطلب الرسائل الصادرة `session_id` وpayload كائن. يتم تحويلها إلى frames نصية:
+
+```json
+{
+  "session_id": "session-1",
+  "opcode": "text",
+  "data": "{\"message\":\"hello\"}"
+}
+```
+
+## الوصول إلى الشبكة
+
+| الاتجاه | البروتوكول والمنفذ | الغرض |
+|---------|--------------------|-------|
+| وارد | WSS `443` إلى Greentic | عملاء WebSocket في المتصفح أو الخدمات في الإنتاج |
+| وارد، تطوير محلي | WS على منفذ runtime/tester المحلي | اختبار محلي قبل إنهاء TLS/النفق |
+| صادر | WS أو WSS إلى endpoints مضبوطة عند استخدامها بواسطة تكامل host/runtime | frames صادرة يبنيها المزود |
+
+<Aside type="note">
+يتم توليد `messaging-websocket` من ملف إجاباته. حدّث مصدر الإجابات وأعد توليد pack بدلا من تعديل YAML أو JSON أو CBOR أو artifacts المعبأة المولدة يدويا.
+</Aside>
+
+## الاختبار
+
+استخدم tester المحلي:
+
+```bash
+./scripts/test_ws.sh
+```
+
+تحتوي صفحة tester على أزرار منفصلة لربط frames الواردة، وتوليد frames الصادرة، وتوحيد أحداث دورة الحياة، وتعرض حالة نجاح/فشل واضحة.

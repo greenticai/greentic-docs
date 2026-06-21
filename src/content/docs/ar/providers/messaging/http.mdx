@@ -1,0 +1,124 @@
+---
+title: HTTP
+description: ربط طلبات HTTP الواردة وبناء استدعاءات HTTP الصادرة
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## نظرة عامة
+
+`messaging-http` هو مزود مراسلة تملكه الإجابات ويتم توليده من `build-answer.json`. يكون مفيدا عندما يتحدث نظام مع عامل رقمي عبر HTTP عادي بدلا من منصة دردشة مسماة.
+
+يدعم حاليا:
+
+- ربط طلبات HTTP `POST` بصيغة JSON الواردة بأحداث مزود موحدة
+- فحوصات اختيارية لرمز bearer الوارد أو ترويسة API key
+- التقاط ترويسات طلب ومعاملات query محددة
+- بناء أوصاف طلبات HTTP `GET` أو `POST` صادرة من payload الرسائل
+- قوالب URL باستخدام قيم payload مثل `{payload.case_id}`
+
+## الإعداد
+
+<Steps>
+
+1. **أضف pack المزود**
+
+   اختر `messaging-http` باستخدام `gtc wizard` أو أضف pack إلى bundle من كتالوج مزودي المراسلة.
+
+2. **اضبط التوجيه والمصادقة**
+
+   استخدم إجابات الإعداد المولدة للـ pack المثبت. يتضمن الإعداد المعتاد معلومات route/public URL، ومصادقة اختيارية، وترويسات ملتقطة، وإعدادات الطلبات الصادرة.
+
+3. **شغل setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **ابدأ runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## الربط الوارد
+
+يتوقع HTTP الوارد طلب `POST` مع جسم كائن JSON. يربطه المزود بحدث بالشكل التالي:
+
+```json
+{
+  "provider": "messaging-http",
+  "direction": "inbound",
+  "kind": "http.webhook",
+  "idempotency_key": "req-1",
+  "source": {
+    "method": "POST",
+    "path": "/webhooks/acme",
+    "headers": {
+      "x-request-id": "req-1"
+    },
+    "query": {
+      "source": "test"
+    }
+  },
+  "payload": {
+    "case_id": "C123",
+    "event": "case.created"
+  }
+}
+```
+
+يؤخذ مفتاح idempotency من `Idempotency-Key` أو `X-Request-Id` أو `payload.idempotency_key` أو `payload.id` عند وجودها.
+
+## الربط الصادر
+
+تحول الرسائل الصادرة إلى أوصاف طلبات HTTP. مثلا، مع هذا الإعداد:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/{payload.case_id}",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "timeout_ms": 5000
+}
+```
+
+ينتج payload الرسالة `{ "case_id": "C123", "status": "open" }` ما يلي:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/C123",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"case_id\":\"C123\",\"status\":\"open\"}",
+  "timeout_ms": 5000
+}
+```
+
+## الوصول إلى الشبكة
+
+| الاتجاه | البروتوكول والمنفذ | الغرض |
+|---------|--------------------|-------|
+| وارد | HTTPS `443` إلى Greentic | أنظمة خارجية ترسل طلبات JSON بأسلوب webhook |
+| وارد، تطوير محلي | HTTP على منفذ runtime/tester المحلي | اختبار محلي قبل إنهاء TLS/النفق |
+| صادر | HTTP أو HTTPS إلى endpoints مضبوطة | طلبات صادرة يبنيها المزود |
+
+<Aside type="note">
+يتم توليد `messaging-http` من ملف إجاباته. حدّث مصدر الإجابات وأعد توليد pack بدلا من تعديل YAML أو JSON أو CBOR أو artifacts المعبأة المولدة يدويا.
+</Aside>
+
+## الاختبار
+
+استخدم tester المحلي:
+
+```bash
+./scripts/test_http.sh
+```
+
+تحتوي صفحة tester على أزرار منفصلة للربط الوارد وتوليد الطلبات الصادرة، وتعرض حالة نجاح/فشل واضحة.

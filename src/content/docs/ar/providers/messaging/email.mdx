@@ -1,24 +1,26 @@
 ---
 title: Email
-description: Send and receive emails as messages
+description: إرسال بريد SMTP واستخدام Microsoft Graph mail
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Overview
+## نظرة عامة
 
-The Email messaging provider allows your digital worker to communicate via email. The current demo setup uses Microsoft Graph credentials for outbound mail, while inbound email is normally handled through an event provider or an email provider webhook. It supports:
+يسمح مزود مراسلة Email للعامل الرقمي بالتواصل عبر البريد الإلكتروني. يستخدم إعداد العرض الحالي بيانات اعتماد Microsoft Graph للبريد الصادر، بينما يعالج البريد الوارد عادة عبر مزود أحداث أو webhook لمزود البريد. يدعم:
 
-- Sending emails
-- Receiving emails (via webhooks)
-- HTML formatting
-- Attachments
+- إرسال البريد الإلكتروني
+- استقبال البريد الإلكتروني (عبر webhooks)
+- تنسيق HTML
+- المرفقات
 
-## Setup
+`messaging-email` هو مزود SMTP صادر. لا يستطلع صناديق بريد IMAP أو POP3. عادة يعالج البريد الوارد عبر مزود أحداث أو webhook مزود، مثل SendGrid Inbound Parse أو Mailgun Routes أو AWS SES أو Microsoft Graph subscriptions عندما يدعمها pack المثبت.
+
+## الإعداد
 
 <Steps>
 
-1. **Configure Email Settings**
+1. **اضبط إعدادات البريد الإلكتروني**
 
    ```json title="answers.json"
    {

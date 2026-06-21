@@ -43,6 +43,8 @@ The CLI prompts for:
 - Platform setup, such as static route policy, public base URL, deployment target, and local tunnel mode
 - Extension credentials, such as API keys, tokens, and OAuth client IDs
 - Provider-specific setup actions, such as OAuth install buttons and device-code login
+- Provider-owned setup widgets, such as the Teams setup wizard
+- Generic post-setup actions, such as Add to Slack, Add to Teams, Add to WebEx, and Add to Telegram links
 - Optional configuration options when `--advanced` is enabled
 
 ## Non-Interactive Setup
@@ -112,8 +114,9 @@ gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
       "slack_configuration_refresh_token": "xoxe-1-xxx"
     },
     "messaging-teams": {
-      "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
-      "desired_channel_name": "hr onboarding"
+      "public_base_url": "https://xxx.trycloudflare.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
     },
     "messaging-webex": {
       "webex_bot_token": "your-webex-bot-access-token"
@@ -130,6 +133,16 @@ gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 Generated answers files are structured documents. Provider answers live under `setup_answers`, keyed by extension id. `platform_setup` stores bundle-level setup choices such as public static routes, deployment targets, and tunnel mode. Older flat files keyed directly by provider id still load, but new docs and generated templates use the structured format.
 
 Generated secrets are not prompted when the provider can create them itself. For example, Webex generates its webhook signing secret and WebChat GUI generates its JWT signing key during setup.
+
+### Final Add To Provider Actions
+
+Some messaging packs declare generic post-setup actions with `greentic.setup.actions.v1`. After setup has enough provider output, setup tools can show a final screen with one or more Add to X actions. Each action should show:
+
+- The button label from the pack, for example **Add to Slack**, **Add to Teams**, **Add to WebEx**, or **Add to Telegram**
+- The resolved URL
+- A copyable HTML snippet that embeds the link or button
+
+This is intentionally separate from provider-specific setup actions. For example, Slack's setup action is **Setup Slack App** because it creates or updates the Slack app configuration; **Add to Slack** is the generic post-setup deep link users can open after the app setup exists.
 
 ### Apply Answers
 
@@ -176,14 +189,15 @@ Slack setup uses the provider's setup action to register or update the Slack app
 {
   "setup_answers": {
     "messaging-teams": {
-      "client_id": "6c115a7a-f656-49c4-975a-5e831efae833",
-      "desired_channel_name": "hr onboarding"
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
     }
   }
 }
 ```
 
-Teams setup is Graph-first by default. It uses device-code OAuth, discovers joined teams and channels, stores both IDs and display names, and can create the desired channel when it is missing and the signed-in user has `Channel.Create` permission.
+The current `messaging-teams` setup path uses the provider-owned Teams setup wizard. It guides Microsoft device-code sign-in, creates or reuses the Bot Framework app identity, registers the active Greentic endpoint, publishes the Teams app, installs it for the setup user, and exposes a generic **Add to Teams** action. Keep `public_base_url` aligned with the active tunnel or production URL; re-run setup when that URL changes.
 
 ### WhatsApp (via Meta)
 

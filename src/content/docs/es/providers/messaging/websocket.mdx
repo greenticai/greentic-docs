@@ -1,0 +1,101 @@
+---
+title: WebSocket
+description: Mapea frames WebSocket entrantes y construye frames salientes
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Resumen
+
+`messaging-websocket` es un proveedor de mensajería controlado por respuestas y generado desde `build-answer.json`. Es útil cuando los clientes mantienen una sesión WebSocket activa con Greentic e intercambian frames JSON en lugar de usar una plataforma de chat con nombre.
+
+Actualmente admite:
+
+- Validación de conexión sin autenticación, con token bearer o con token en la query
+- Mapear frames de texto entrantes con objetos JSON a eventos normalizados
+- Construir frames de texto salientes a partir de payloads de mensaje
+- Normalizar eventos de ciclo de vida para `open`, `close` y `error`
+
+Los frames binarios quedan diferidos en la implementación actual del proveedor.
+
+## Configuración
+
+<Steps>
+
+1. **Agrega el pack del proveedor**
+
+   Selecciona `messaging-websocket` con `gtc wizard` o agrega el pack al bundle desde el catálogo de proveedores de mensajería.
+
+2. **Configura la política de conexión**
+
+   Usa las respuestas de configuración generadas para tu pack instalado. La configuración típica incluye metadatos de tenant/team y autenticación opcional.
+
+3. **Ejecuta setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Inicia el runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Frames entrantes
+
+Los frames entrantes deben ser frames de texto que contengan un objeto JSON. El proveedor los mapea a eventos con esta forma:
+
+```json
+{
+  "provider": "messaging-websocket",
+  "direction": "inbound",
+  "kind": "websocket.frame",
+  "session_id": "session-1",
+  "payload": {
+    "message": "hello"
+  },
+  "metadata": {
+    "tenant_id": "demo",
+    "team_id": "default"
+  }
+}
+```
+
+Los eventos de ciclo de vida se normalizan con valores de `kind` como `websocket.open`, `websocket.close` y `websocket.error`.
+
+## Frames salientes
+
+Los mensajes salientes requieren un `session_id` y un payload de objeto. Se convierten en frames de texto:
+
+```json
+{
+  "session_id": "session-1",
+  "opcode": "text",
+  "data": "{\"message\":\"hello\"}"
+}
+```
+
+## Acceso de red
+
+| Dirección | Protocolo y puerto | Propósito |
+|-----------|--------------------|-----------|
+| Entrante | WSS `443` hacia Greentic | Clientes WebSocket de navegador o servicio en producción |
+| Entrante, desarrollo local | WS en el puerto local del runtime/tester | Pruebas locales antes de la terminación TLS/túnel |
+| Saliente | WS o WSS hacia endpoints configurados cuando lo usa la integración host/runtime | Frames salientes construidos por el proveedor |
+
+<Aside type="note">
+`messaging-websocket` se genera desde su archivo de respuestas. Actualiza la fuente de respuestas y regenera el pack en lugar de editar manualmente YAML, JSON, CBOR o artefactos empaquetados generados.
+</Aside>
+
+## Pruebas
+
+Usa el tester local:
+
+```bash
+./scripts/test_ws.sh
+```
+
+La página de pruebas tiene botones separados para mapeo de frames entrantes, generación de frames salientes y normalización de eventos de ciclo de vida, y muestra un estado claro de aprobado/error.

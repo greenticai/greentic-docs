@@ -1,0 +1,124 @@
+---
+title: HTTP
+description: Map inbound HTTP requests and build outbound HTTP calls
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+`messaging-http` is an answer-owned messaging provider generated from `build-answer.json`. It is useful when a system talks to a digital worker through plain HTTP rather than a named chat platform.
+
+It currently supports:
+
+- Mapping inbound HTTP `POST` JSON requests into normalized provider events
+- Optional inbound bearer-token or API-key-header checks
+- Capturing selected request headers and query parameters
+- Building outbound `GET` or `POST` HTTP request descriptions from message payloads
+- URL templating with payload values such as `{payload.case_id}`
+
+## Setup
+
+<Steps>
+
+1. **Add the provider pack**
+
+   Select `messaging-http` with `gtc wizard` or add the pack to the bundle from the messaging provider catalog.
+
+2. **Configure routing and auth**
+
+   Use the setup answers generated for your installed pack. Typical config includes route/public URL information, optional auth, captured headers, and outbound request settings.
+
+3. **Run setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Start the runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Inbound Mapping
+
+Inbound HTTP expects a `POST` request with a JSON object body. The provider maps it to an event shaped like:
+
+```json
+{
+  "provider": "messaging-http",
+  "direction": "inbound",
+  "kind": "http.webhook",
+  "idempotency_key": "req-1",
+  "source": {
+    "method": "POST",
+    "path": "/webhooks/acme",
+    "headers": {
+      "x-request-id": "req-1"
+    },
+    "query": {
+      "source": "test"
+    }
+  },
+  "payload": {
+    "case_id": "C123",
+    "event": "case.created"
+  }
+}
+```
+
+The idempotency key is taken from `Idempotency-Key`, `X-Request-Id`, `payload.idempotency_key`, or `payload.id` when present.
+
+## Outbound Mapping
+
+Outbound messages are converted into HTTP request descriptions. For example, with config:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/{payload.case_id}",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "timeout_ms": 5000
+}
+```
+
+A message payload of `{ "case_id": "C123", "status": "open" }` produces:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/C123",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"case_id\":\"C123\",\"status\":\"open\"}",
+  "timeout_ms": 5000
+}
+```
+
+## Network Access
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | HTTPS `443` to Greentic | External systems posting webhook-style JSON requests |
+| Incoming, local development | HTTP on the local runtime/tester port | Local testing before TLS/tunnel termination |
+| Outgoing | HTTP or HTTPS to configured endpoints | Provider-built outbound requests |
+
+<Aside type="note">
+`messaging-http` is generated from its answer file. Update the answer source and regenerate the pack rather than manually editing generated YAML, JSON, CBOR, or packed artifacts.
+</Aside>
+
+## Testing
+
+Use the local tester:
+
+```bash
+./scripts/test_http.sh
+```
+
+The tester page has separate buttons for inbound mapping and outbound request generation, and shows a clear pass/fail status.

@@ -89,6 +89,19 @@ Der Slack-Provider integriert Ihren digitalen Worker in Slack-Workspaces. Er unt
 Neue Setup-Flows erfordern keine manuelle Eingabe von `slack_bot_token`. Die Setup-Aktion und der OAuth-Installationsflow speichern die Runtime-Anmeldedaten. Wenn Sie ein älteres Bundle aktualisieren, erzeugen Sie answers mit `gtc setup --dry-run --emit-answers answers.json ./my-bundle` neu und führen Sie Setup erneut aus.
 </Aside>
 
+## Add to Slack Aktion
+
+Das Slack-Pack deklariert eine generische Setup-Aktion:
+
+| Feld | Wert |
+|------|------|
+| Label | `Add to Slack` |
+| Art | `deep_link` |
+| URL-Template | `{slack_add_url}` |
+| Erforderliche Setup-Ausgabe | `slack_add_url` |
+
+Setup-Hosts koennen dies als Button rendern, die URL anzeigen und ein HTML-Snippet bereitstellen, nachdem setup `setup_status.ok: true` zurueckgibt. Halte diese Post-Setup-Aktion getrennt von **Setup Slack App**, der providerspezifischen Aktion, die die App-Konfiguration erstellt oder aktualisiert.
+
 <Aside type="caution">
 Slack configuration access tokens laufen ab. Bewahren Sie das passende refresh token im Setup-Secretspeicher auf, damit der Provider das Paar während Manifest-Aktualisierungen rotieren kann.
 </Aside>

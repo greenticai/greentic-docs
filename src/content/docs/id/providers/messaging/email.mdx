@@ -1,6 +1,6 @@
 ---
 title: Email
-description: Kirim dan terima email sebagai pesan
+description: Kirim email SMTP dan gunakan Microsoft Graph mail
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -13,6 +13,8 @@ Provider messaging Email memungkinkan digital worker Anda berkomunikasi melalui 
 - Menerima email (melalui webhook)
 - Pemformatan HTML
 - Lampiran
+
+`messaging-email` adalah provider SMTP keluar. Provider ini tidak melakukan polling mailbox IMAP atau POP3. Email masuk biasanya ditangani melalui event provider atau webhook provider, seperti SendGrid Inbound Parse, Mailgun Routes, AWS SES, atau Microsoft Graph subscriptions jika didukung oleh pack yang terpasang.
 
 ## Penyiapan
 

@@ -65,6 +65,19 @@ El provider Webex se integra con Cisco Webex Teams. Soporta:
 | `public_base_url` | Sí | URL pública para el webhook |
 | `access_token` | Sí | Access token del bot |
 
+## Acción Add to WebEx
+
+Después de que setup se completa correctamente, el pack de Webex expone una acción de setup genérica mediante `greentic.setup.actions.v1`:
+
+| Campo | Valor |
+|-------|-------|
+| Etiqueta | `Add to WebEx` |
+| Tipo | `deep_link` |
+| Plantilla de URL | `https://web.webex.com/teams/messages/new?email={bot_email}` |
+| Salida de setup requerida | `bot_email` |
+
+Los hosts de setup pueden renderizarla como botón, mostrar la URL y proporcionar un fragmento HTML. El enlace abre Webex con un mensaje nuevo dirigido al bot.
+
 ## Funcionalidades
 
 ### Mensajes de texto

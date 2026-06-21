@@ -11,7 +11,9 @@ Greentic mendukung beberapa platform messaging melalui **Messaging Providers**. 
 
 - **Ingress** - Menerima pesan dari platform
 - **Egress** - Mengirim pesan ke platform
-- **Operations** - Fitur spesifik platform (tombol, card, thread)
+- **Operations** - Fitur spesifik platform seperti tombol, card, thread, penanganan file, dan setup webhook
+
+Katalog saat ini mencakup pack messaging untuk Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, SMTP Email, Microsoft Graph Email, HTTP, dan WebSocket.
 
 ## Provider yang Tersedia
 
@@ -49,7 +51,17 @@ Greentic mendukung beberapa platform messaging melalui **Messaging Providers**. 
   <LinkCard
     title="Email"
     href="/id/providers/messaging/email/"
-    description="Kirim dan terima email sebagai pesan"
+    description="Kirim email SMTP dan gunakan Microsoft Graph mail"
+  />
+  <LinkCard
+    title="HTTP"
+    href="/id/providers/messaging/http/"
+    description="Memetakan permintaan HTTP masuk dan membuat panggilan HTTP keluar"
+  />
+  <LinkCard
+    title="WebSocket"
+    href="/id/providers/messaging/websocket/"
+    description="Memetakan frame WebSocket masuk dan membuat frame keluar"
   />
 </CardGrid>
 

@@ -116,6 +116,37 @@ Teams egress 和 subscription setup 使用 ID，而不是 display names。labels
 创建缺失的 Teams channel 需要 delegated Graph permission `Channel.Create`，以及允许在所选 Team 中创建 channel 的已登录 user。
 </Aside>
 
+## 当前 Teams setup 模型
+
+当前 `messaging-teams` setup 路径使用 provider-owned setup wizard 和 backend contract。它会引导 Microsoft device-code sign-in，创建或复用 Bot Framework app identity，注册当前 Greentic endpoint，发布 Teams app，为 setup user 安装，并暴露通用 **Add to Teams** 操作。请保持 `public_base_url` 与当前 tunnel 或生产 URL 一致；当该 URL 改变时重新运行 setup。
+
+在 answers 文件中，提供公共 URL 和可选的命名/tenant 提示：
+
+```json title="answers.json"
+{
+  "setup_answers": {
+    "messaging-teams": {
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
+    }
+  }
+}
+```
+
+已注册的 Bot Framework messaging endpoint 必须指向当前公共 runtime URL。如果 `gtc start` 创建了新的 Cloudflare Tunnel 或 ngrok URL，请在使用 **Add to Teams** 或测试 bot 之前重新运行 setup。
+
+## Add to Teams 操作
+
+| 字段 | 值 |
+|------|----|
+| Label | `Add to Teams` |
+| Kind | `deep_link` |
+| URL template | `{add_to_teams_url}` |
+| 必需 setup output | `add_to_teams_url` |
+
+setup host 可以在 setup 返回 `setup_status.ok: true` 后，将其渲染为按钮、显示 URL，并提供 HTML 片段。
+
 ## 功能
 
 ### 文本消息

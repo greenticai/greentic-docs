@@ -1,24 +1,26 @@
 ---
 title: Email
-description: Send and receive emails as messages
+description: Envoyer des e-mails SMTP et utiliser Microsoft Graph mail
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Overview
+## Vue d'ensemble
 
-The Email messaging provider allows your digital worker to communicate via email. The current demo setup uses Microsoft Graph credentials for outbound mail, while inbound email is normally handled through an event provider or an email provider webhook. It supports:
+Le fournisseur de messagerie Email permet à votre travailleur numérique de communiquer par e-mail. La configuration de démonstration actuelle utilise des identifiants Microsoft Graph pour le courrier sortant, tandis que le courrier entrant est normalement traité par un fournisseur d'événements ou un webhook de fournisseur e-mail. Il prend en charge :
 
-- Sending emails
-- Receiving emails (via webhooks)
-- HTML formatting
-- Attachments
+- L'envoi d'e-mails
+- La réception d'e-mails (via webhooks)
+- Le formatage HTML
+- Les pièces jointes
 
-## Setup
+`messaging-email` est un fournisseur SMTP sortant. Il ne sonde pas les boîtes IMAP ou POP3. Les e-mails entrants sont normalement traités par un fournisseur d'événements ou un webhook fournisseur, comme SendGrid Inbound Parse, Mailgun Routes, AWS SES ou les subscriptions Microsoft Graph lorsque le pack installé les prend en charge.
+
+## Configuration
 
 <Steps>
 
-1. **Configure Email Settings**
+1. **Configurer les paramètres e-mail**
 
    ```json title="answers.json"
    {

@@ -87,6 +87,19 @@ The Telegram provider allows your digital worker to communicate via Telegram bot
 The setup layer also accepts the older `bot_token` alias and stores it as `telegram_bot_token`, but new answers files should use the wizard-generated key.
 </Aside>
 
+## Action Add to Telegram
+
+Une fois setup reussi, le pack Telegram expose une action de setup generique via `greentic.setup.actions.v1` :
+
+| Champ | Valeur |
+|-------|--------|
+| Label | `Add to Telegram` |
+| Kind | `deep_link` |
+| Modele d URL | `https://t.me/{bot_username}` |
+| Sortie setup requise | `bot_username` |
+
+Les hosts de setup peuvent l afficher comme bouton, montrer l URL et fournir un snippet HTML. Le lien ouvre le bot dans Telegram pour que les utilisateurs puissent demarrer la conversation.
+
 ## Features
 
 ### Text Messages

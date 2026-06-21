@@ -42,6 +42,8 @@ gtc setup ./my-bundle
 The CLI will prompt for:
 - Extension credentials (API keys, tokens)
 - Public URL for webhooks
+- Provider-owned setup widgets, such as the Teams setup wizard
+- Generic post-setup actions, such as Add to Slack, Add to Teams, Add to WebEx, and Add to Telegram links
 - Optional configuration options
 
 ## Non-Interactive Setup
@@ -102,6 +104,16 @@ gtc setup --dry-run --emit-answers answers.json --advanced ./my-bundle
 ```
 
 Setup answers are JSON. Use `gtc setup --dry-run --emit-answers answers.json ./my-bundle` to generate the current schema-backed file instead of hand-writing one from memory.
+
+### Final Add To Provider Actions
+
+Some messaging packs declare generic post-setup actions with `greentic.setup.actions.v1`. After setup has enough provider output, setup tools can show a final screen with one or more Add to X actions. Each action should show:
+
+- The button label from the pack, for example **Add to Slack**, **Add to Teams**, **Add to WebEx**, or **Add to Telegram**
+- The resolved URL
+- A copyable HTML snippet that embeds the link or button
+
+This is intentionally separate from provider-specific setup actions. For example, Slack setup action is **Setup Slack App** because it creates or updates the Slack app configuration; **Add to Slack** is the generic post-setup deep link users can open after the app setup exists.
 
 ### Apply Answers
 

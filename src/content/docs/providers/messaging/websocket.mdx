@@ -1,0 +1,101 @@
+---
+title: WebSocket
+description: Map inbound WebSocket frames and build outbound frames
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Overview
+
+`messaging-websocket` is an answer-owned messaging provider generated from `build-answer.json`. It is useful when clients keep a live WebSocket session with Greentic and exchange JSON frames rather than using a named chat platform.
+
+It currently supports:
+
+- Connection validation with no auth, bearer-token auth, or query-token auth
+- Mapping inbound text frames containing JSON objects into normalized events
+- Building outbound text frames from message payloads
+- Normalizing lifecycle events for `open`, `close`, and `error`
+
+Binary frames are deferred in the current provider implementation.
+
+## Setup
+
+<Steps>
+
+1. **Add the provider pack**
+
+   Select `messaging-websocket` with `gtc wizard` or add the pack to the bundle from the messaging provider catalog.
+
+2. **Configure connection policy**
+
+   Use the setup answers generated for your installed pack. Typical config includes tenant/team metadata and optional auth.
+
+3. **Run setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Start the runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Inbound Frames
+
+Inbound frames must be text frames containing a JSON object. The provider maps them to events shaped like:
+
+```json
+{
+  "provider": "messaging-websocket",
+  "direction": "inbound",
+  "kind": "websocket.frame",
+  "session_id": "session-1",
+  "payload": {
+    "message": "hello"
+  },
+  "metadata": {
+    "tenant_id": "demo",
+    "team_id": "default"
+  }
+}
+```
+
+Lifecycle events are normalized with `kind` values such as `websocket.open`, `websocket.close`, and `websocket.error`.
+
+## Outbound Frames
+
+Outbound messages require a `session_id` and object payload. They are converted into text frames:
+
+```json
+{
+  "session_id": "session-1",
+  "opcode": "text",
+  "data": "{\"message\":\"hello\"}"
+}
+```
+
+## Network Access
+
+| Direction | Protocol and port | Purpose |
+|-----------|-------------------|---------|
+| Incoming | WSS `443` to Greentic | Browser or service WebSocket clients in production |
+| Incoming, local development | WS on the local runtime/tester port | Local testing before TLS/tunnel termination |
+| Outgoing | WS or WSS to configured endpoints when used by host/runtime integration | Provider-built outbound frames |
+
+<Aside type="note">
+`messaging-websocket` is generated from its answer file. Update the answer source and regenerate the pack rather than manually editing generated YAML, JSON, CBOR, or packed artifacts.
+</Aside>
+
+## Testing
+
+Use the local tester:
+
+```bash
+./scripts/test_ws.sh
+```
+
+The tester page has separate buttons for inbound frame mapping, outbound frame generation, and lifecycle event normalization, and shows a clear pass/fail status.

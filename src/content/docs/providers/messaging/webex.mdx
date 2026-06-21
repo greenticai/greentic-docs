@@ -89,6 +89,19 @@ The provider learns direct-message room and person context from inbound Webex ev
 Webex API acceptance does not guarantee every Adaptive Card shape renders in every Webex client. The provider normalizes common compatibility issues, including Adaptive Card version capping, boolean string coercion, and stripping unsupported Webex-hosted content image URLs.
 </Aside>
 
+## Add to WebEx Action
+
+After setup succeeds, the Webex pack exposes a generic setup action through `greentic.setup.actions.v1`:
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to WebEx` |
+| Kind | `deep_link` |
+| URL template | `https://web.webex.com/teams/messages/new?email={bot_email}` |
+| Required setup output | `bot_email` |
+
+Setup hosts can render this as a button, show the URL, and provide an HTML snippet. The link opens Webex with a new message addressed to the bot.
+
 ## Network Access
 
 Webex uses Greentic's public HTTPS endpoint for incoming bot webhooks and the Webex REST API for outgoing sends. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.

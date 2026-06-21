@@ -116,6 +116,37 @@ La salida de Teams y la configuración de suscripciones usan IDs, no nombres vis
 Crear un canal de Teams que falta requiere el permiso delegado `Channel.Create` de Graph y un usuario con sesión iniciada que tenga permiso para crear canales en el Team seleccionado.
 </Aside>
 
+## Modelo actual de setup de Teams
+
+La ruta actual de `messaging-teams` usa un asistente de setup propiedad del proveedor y un contrato backend. Guía el inicio de sesión de Microsoft con código de dispositivo, crea o reutiliza la identidad de app de Bot Framework, registra el endpoint activo de Greentic, publica la app de Teams, la instala para el usuario de setup y expone una acción genérica **Add to Teams**. Mantén `public_base_url` alineado con el túnel activo o la URL de producción; vuelve a ejecutar setup cuando esa URL cambie.
+
+En los archivos de respuestas, proporciona la URL pública y pistas opcionales de nombre/tenant:
+
+```json title="answers.json"
+{
+  "setup_answers": {
+    "messaging-teams": {
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
+    }
+  }
+}
+```
+
+El endpoint registrado de Bot Framework debe apuntar a la URL pública activa del runtime. Si `gtc start` crea un nuevo Cloudflare Tunnel o una nueva URL de ngrok, vuelve a ejecutar setup antes de usar **Add to Teams** o probar el bot.
+
+## Acción Add to Teams
+
+| Campo | Valor |
+|-------|-------|
+| Etiqueta | `Add to Teams` |
+| Tipo | `deep_link` |
+| Plantilla de URL | `{add_to_teams_url}` |
+| Salida de setup requerida | `add_to_teams_url` |
+
+Los hosts de setup pueden renderizarla como botón, mostrar la URL y proporcionar un fragmento HTML después de que setup devuelva `setup_status.ok: true`.
+
 ## Funcionalidades
 
 ### Mensajes de texto

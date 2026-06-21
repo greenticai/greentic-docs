@@ -1,6 +1,6 @@
 ---
 title: Email
-description: Send and receive emails as messages
+description: Send SMTP email and use Microsoft Graph mail
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -14,7 +14,7 @@ Greentic has two email messaging packs:
 | `messaging-email` | You want SMTP outbound email. |
 | `messaging-microsoft-email` | You want Microsoft Graph mail with delegated OAuth credentials. |
 
-Inbound email is normally handled through an event provider or a provider webhook, such as SendGrid Inbound Parse, Mailgun Routes, AWS SES, or Microsoft Graph subscriptions when supported by the installed pack.
+`messaging-email` is an SMTP outbound provider. It does not poll IMAP or POP3 mailboxes. Inbound email is normally handled through an event provider or a provider webhook, such as SendGrid Inbound Parse, Mailgun Routes, AWS SES, or Microsoft Graph subscriptions when supported by the installed pack.
 
 ## SMTP Setup (`messaging-email`)
 
@@ -193,6 +193,8 @@ triggers:
   - type: email
     target: process
 ```
+
+This flow shape applies when an installed inbound provider or webhook service emits email events into Greentic. For `messaging-email` alone, there is no IMAP or POP3 polling loop to receive mailbox messages.
 
 ## Next Steps
 

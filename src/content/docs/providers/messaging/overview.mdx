@@ -13,7 +13,7 @@ Greentic supports multiple messaging platforms through **messaging extension pac
 - **Egress** - Sending messages to the platform
 - **Operations** - Platform-specific features such as buttons, cards, threads, file handling, and webhook setup
 
-The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, SMTP Email, and Microsoft Graph Email messaging packs.
+The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, SMTP Email, Microsoft Graph Email, HTTP, and WebSocket messaging packs.
 
 ## Available Providers
 
@@ -51,7 +51,17 @@ The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat
   <LinkCard
     title="Email"
     href="/providers/messaging/email/"
-    description="Send and receive emails as messages"
+    description="Send SMTP email and use Microsoft Graph mail"
+  />
+  <LinkCard
+    title="HTTP"
+    href="/providers/messaging/http/"
+    description="Map inbound HTTP requests and build outbound HTTP calls"
+  />
+  <LinkCard
+    title="WebSocket"
+    href="/providers/messaging/websocket/"
+    description="Map inbound WebSocket frames and build outbound frames"
   />
 </CardGrid>
 
@@ -128,6 +138,8 @@ oci://ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:latest
 oci://ghcr.io/greenticai/packs/messaging/messaging-webex:latest
 oci://ghcr.io/greenticai/packs/messaging/messaging-email:latest
 oci://ghcr.io/greenticai/packs/messaging/messaging-microsoft-email:latest
+oci://ghcr.io/greenticai/packs/messaging/messaging-http:latest
+oci://ghcr.io/greenticai/packs/messaging/messaging-websocket:latest
 ```
 
 ### Setup Answers
@@ -172,18 +184,38 @@ Run `gtc setup ./my-bundle` interactively, or provide an answers file generated 
 
 Provider setup is pack-owned. Hosts should use the installed pack's setup schema and metadata instead of inferring provider-specific fields. New answers files keep provider fields under `setup_answers`; the top-level `platform_setup` block carries static routes, deployment targets, and tunnel preferences. Several providers generate internal secrets during setup, including the Webex webhook secret and WebChat GUI JWT signing key.
 
+### Setup Actions And Add To X Links
+
+Provider setup has two separate action types:
+
+- Provider-specific setup actions run during setup. For example, Slack's setup action is **Setup Slack App** because it creates or updates the Slack app configuration.
+- Generic post-setup actions are declared by the pack with `greentic.setup.actions.v1`. Setup hosts can render these after provider setup completes, without hard-coding Slack, Teams, Telegram, or Webex behavior.
+
+The current messaging packs expose these generic actions:
+
+| Provider | Label | URL source |
+|----------|-------|------------|
+| Slack | Add to Slack | `slack_add_url` returned by Slack setup |
+| Microsoft Teams | Add to Teams | `add_to_teams_url` returned by Teams setup |
+| Telegram | Add to Telegram | `https://t.me/{bot_username}` |
+| Webex | Add to WebEx | `https://web.webex.com/teams/messages/new?email={bot_email}` |
+
+Each action can be displayed as a button, copied as a URL, or rendered as an HTML snippet by setup tools. If a bundle includes more than one provider with setup actions, the final setup screen should show all available actions.
+
 ### Current Setup Model
 
 | Provider | Setup model |
 |----------|-------------|
-| Slack | App registration and OAuth install flow. Setup stores `slack_app_id` plus Slack configuration access/refresh tokens for manifest updates. |
-| Microsoft Teams | Graph-first device-code setup. It discovers teams/channels, stores IDs and labels, and can create a missing desired channel with `Channel.Create`. Bot Framework ingest remains supported as a separate config shape. |
+| Slack | App registration and OAuth install flow. The setup step is labeled **Setup Slack App**. Setup stores `slack_app_id` plus Slack configuration access/refresh tokens for manifest updates, then exposes a generic **Add to Slack** post-setup action. |
+| Microsoft Teams | `messaging-teams` uses a provider-owned setup wizard and backend contract. It guides Microsoft device-code sign-in, creates or reuses the Bot Framework app identity, registers the active Greentic endpoint, publishes the Teams app, installs it for the setup user, and exposes **Add to Teams**. `messaging-teams-graph` remains available for Graph channel sends/subscriptions. |
 | Telegram | Bot token, Telegram API base URL, optional default chat ID, and public webhook URL. |
 | WhatsApp | Meta Cloud API phone number, business account, Graph API base URL/version, access token, verify token, and public webhook URL. |
 | WebChat GUI | Hosted browser UI. Defaults to `websocket`; setup generates the JWT signing key and supports optional OAuth/branding fields. |
 | WebChat | Direct Line-compatible provider. Requires public base URL, mode, and JWT signing key when used without the GUI pack. |
 | Webex | Bot access token only. Setup generates the webhook secret and reconciles direct-message, mention, and card-action webhooks. |
 | Email | `messaging-email` is SMTP. `messaging-microsoft-email` is Microsoft Graph mail with delegated OAuth credentials. |
+| HTTP | Answer-owned provider generated from `build-answer.json`. It maps inbound HTTP requests into normalized messages and builds outbound HTTP request payloads. |
+| WebSocket | Answer-owned provider generated from `build-answer.json`. It maps inbound WebSocket frames into normalized events and builds outbound WebSocket frames. |
 
 ## Network Access
 
@@ -192,12 +224,14 @@ Messaging packs do not require provider-specific local listening ports. They use
 | Provider | Incoming to Greentic | Outgoing from Greentic |
 |----------|----------------------|------------------------|
 | Slack | HTTPS `443` from Slack Events API, interactive components, slash commands, and OAuth redirects to the public ingress URL | HTTPS `443` to `slack.com` and `api.slack.com` for OAuth, Web API calls, app registration, and manifest updates |
-| Microsoft Teams | HTTPS `443` from Microsoft Graph change notifications and lifecycle notifications. Bot Framework mode also receives HTTPS `443` Bot Framework callbacks | HTTPS `443` to `login.microsoftonline.com`, `graph.microsoft.com`, and Bot Framework service URLs when Bot Framework mode is used |
+| Microsoft Teams | HTTPS `443` from Microsoft Bot Framework to the runtime ingress endpoint. Graph mode also uses HTTPS `443` Graph change and lifecycle notifications | HTTPS `443` to `login.microsoftonline.com`, `graph.microsoft.com`, Azure management endpoints used by setup, and Bot Framework service URLs |
 | Telegram | HTTPS `443` from Telegram webhook delivery to the public ingress URL | HTTPS `443` to `api.telegram.org` or the configured Telegram API base URL |
 | WhatsApp | HTTPS `443` from Meta webhook verification and message callbacks | HTTPS `443` to `graph.facebook.com` or the configured Meta Graph API base URL |
 | Webex | HTTPS `443` from Webex `messages.created` and `attachmentActions.created` webhooks | HTTPS `443` to `webexapis.com` |
 | WebChat / WebChat GUI | Browser HTTPS `443` and WSS `443` to the public WebChat route. Local development may use an unencrypted localhost port behind a tunnel | Usually no third-party messaging egress. OAuth/OIDC login uses HTTPS `443` to the configured identity provider |
 | Email | SMTP has no Greentic inbound port. Microsoft Graph mail subscriptions, when enabled by the installed pack, use HTTPS `443` callbacks | SMTP over TCP `587` with STARTTLS or TCP `465` with implicit TLS. Microsoft Graph mail uses HTTPS `443` to Microsoft identity and Graph endpoints |
+| HTTP | HTTPS `443` to the public runtime route when external systems call Greentic; local test harnesses can use the local runtime port | Configured outbound HTTP or HTTPS endpoints |
+| WebSocket | WSS `443` to the public runtime route when clients connect through TLS; local test harnesses can use WS on the local runtime port | Configured outbound WS or WSS endpoints |
 
 ## Common Features
 
@@ -289,15 +323,15 @@ triggers:
 
 ## Provider Comparison
 
-| Feature | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Email |
-|---------|-------|-------|----------|----------|---------|-------|-------|
-| Text | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Native rich layout | Block Kit | Adaptive Cards | Inline/reply keyboards | Interactive messages/templates | Adaptive Cards | Adaptive Cards | HTML |
-| Adaptive Card handling | Transformed | Native | Transformed | Transformed | Native | Native subset | Transformed to HTML |
-| Buttons | Yes | Yes | Yes | Yes | Yes | Yes | Links/forms |
-| Files | Yes | Yes | Yes | Yes | Yes | Yes | Attachments |
-| Threads/replies | Threads | Conversations/replies | Reply-to/topics only | No | Conversation history | Threads/spaces | Email headers |
-| Reactions | Platform-dependent | Platform-dependent | No | No | No | No | No |
+| Feature | Slack | Teams | Telegram | WhatsApp | WebChat | Webex | Email | HTTP | WebSocket |
+|---------|-------|-------|----------|----------|---------|-------|-------|------|-----------|
+| Text | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Payload mapped to text | Frame mapped to text |
+| Native rich layout | Block Kit | Adaptive Cards | Inline/reply keyboards | Interactive messages/templates | Adaptive Cards | Adaptive Cards | HTML | JSON payloads | JSON frames |
+| Adaptive Card handling | Transformed | Native | Transformed | Transformed | Native | Native subset | Transformed to HTML | Caller-defined | Caller-defined |
+| Buttons | Yes | Yes | Yes | Yes | Yes | Yes | Links/forms | Caller-defined | Caller-defined |
+| Files | Yes | Yes | Yes | Yes | Yes | Yes | Attachments | URLs or payload metadata | URLs or frame metadata |
+| Threads/replies | Threads | Conversations/replies | Reply-to/topics only | No | Conversation history | Threads/spaces | Email headers | Request correlation | Connection/session correlation |
+| Reactions | Platform-dependent | Platform-dependent | No | No | No | No | No | No | No |
 
 ## Next Steps
 

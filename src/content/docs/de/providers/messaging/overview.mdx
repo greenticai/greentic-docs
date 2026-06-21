@@ -11,7 +11,9 @@ Greentic unterstützt mehrere Messaging-Plattformen über **Messaging-Provider**
 
 - **Ingress** - Nachrichten von der Plattform empfangen
 - **Egress** - Nachrichten an die Plattform senden
-- **Operationen** - Plattformspezifische Funktionen (Buttons, Karten, Threads)
+- **Operationen** - Plattformspezifische Funktionen wie Buttons, Karten, Threads, Dateiverarbeitung und Webhook-Einrichtung
+
+Der aktuelle Katalog enthält Messaging-Packs für Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, SMTP Email, Microsoft Graph Email, HTTP und WebSocket.
 
 ## Verfügbare Provider
 
@@ -49,7 +51,17 @@ Greentic unterstützt mehrere Messaging-Plattformen über **Messaging-Provider**
   <LinkCard
     title="Email"
     href="/de/providers/messaging/email/"
-    description="E-Mails als Nachrichten senden und empfangen"
+    description="SMTP-E-Mail senden und Microsoft Graph Mail verwenden"
+  />
+  <LinkCard
+    title="HTTP"
+    href="/de/providers/messaging/http/"
+    description="Eingehende HTTP-Anfragen zuordnen und ausgehende HTTP-Aufrufe erstellen"
+  />
+  <LinkCard
+    title="WebSocket"
+    href="/de/providers/messaging/websocket/"
+    description="Eingehende WebSocket-Frames zuordnen und ausgehende Frames erstellen"
   />
 </CardGrid>
 

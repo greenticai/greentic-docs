@@ -1,0 +1,101 @@
+---
+title: WebSocket
+description: 受信 WebSocket frame をマッピングし、送信 frame を構築する
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概要
+
+`messaging-websocket` は、`build-answer.json` から生成される answer 所有のメッセージングプロバイダーです。クライアントが Greentic とライブ WebSocket セッションを維持し、名前付きチャットプラットフォームではなく JSON frame を交換する場合に役立ちます。
+
+現在サポートしている機能:
+
+- 認証なし、bearer-token auth、query-token auth による接続検証
+- JSON オブジェクトを含む受信 text frame を正規化イベントへマッピング
+- メッセージ payload から送信 text frame を構築
+- `open`、`close`、`error` の lifecycle event を正規化
+
+binary frame は現在のプロバイダー実装では保留されています。
+
+## セットアップ
+
+<Steps>
+
+1. **プロバイダー pack を追加する**
+
+   `gtc wizard` で `messaging-websocket` を選択するか、メッセージングプロバイダーカタログから pack を bundle に追加します。
+
+2. **接続ポリシーを設定する**
+
+   インストール済み pack に対して生成された setup answers を使います。典型的な設定には tenant/team metadata と任意の認証が含まれます。
+
+3. **setup を実行する**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **runtime を起動する**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## 受信 Frame
+
+受信 frame は JSON オブジェクトを含む text frame である必要があります。プロバイダーはそれを次のようなイベントにマッピングします:
+
+```json
+{
+  "provider": "messaging-websocket",
+  "direction": "inbound",
+  "kind": "websocket.frame",
+  "session_id": "session-1",
+  "payload": {
+    "message": "hello"
+  },
+  "metadata": {
+    "tenant_id": "demo",
+    "team_id": "default"
+  }
+}
+```
+
+lifecycle event は `websocket.open`、`websocket.close`、`websocket.error` などの `kind` 値で正規化されます。
+
+## 送信 Frame
+
+送信メッセージには `session_id` とオブジェクト payload が必要です。これらは text frame に変換されます:
+
+```json
+{
+  "session_id": "session-1",
+  "opcode": "text",
+  "data": "{\"message\":\"hello\"}"
+}
+```
+
+## ネットワークアクセス
+
+| 方向 | プロトコルとポート | 目的 |
+|------|--------------------|------|
+| 受信 | Greentic への WSS `443` | 本番環境のブラウザーまたはサービス WebSocket クライアント |
+| 受信、ローカル開発 | ローカル runtime/tester ポートの WS | TLS/トンネル終端前のローカルテスト |
+| 送信 | host/runtime integration が使う場合の設定済み endpoint への WS または WSS | プロバイダーが構築する送信 frame |
+
+<Aside type="note">
+`messaging-websocket` は answer file から生成されます。生成済みの YAML、JSON、CBOR、pack artifact を手作業で編集するのではなく、answer source を更新して pack を再生成してください。
+</Aside>
+
+## テスト
+
+ローカル tester を使います:
+
+```bash
+./scripts/test_ws.sh
+```
+
+tester ページには受信 frame マッピング、送信 frame 生成、lifecycle event 正規化の個別ボタンがあり、明確な pass/fail ステータスを表示します。

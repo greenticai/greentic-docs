@@ -11,7 +11,9 @@ Greentic 通过 **Messaging Providers** 支持多个消息平台。每个 provid
 
 - **Ingress** - 从平台接收消息
 - **Egress** - 向平台发送消息
-- **Operations** - 平台特定功能（按钮、卡片、线程）
+- **Operations** - 平台特定功能，例如按钮、卡片、线程、文件处理和 webhook 设置
+
+当前目录包含 Slack、Microsoft Teams、Telegram、WhatsApp、WebChat、WebChat GUI、Webex、SMTP Email、Microsoft Graph Email、HTTP 和 WebSocket 消息 pack。
 
 ## 可用 Providers
 
@@ -49,7 +51,17 @@ Greentic 通过 **Messaging Providers** 支持多个消息平台。每个 provid
   <LinkCard
     title="Email"
     href="/zh/providers/messaging/email/"
-    description="以消息形式发送和接收邮件"
+    description="发送 SMTP 邮件并使用 Microsoft Graph mail"
+  />
+  <LinkCard
+    title="HTTP"
+    href="/zh/providers/messaging/http/"
+    description="映射入站 HTTP 请求并构建出站 HTTP 调用"
+  />
+  <LinkCard
+    title="WebSocket"
+    href="/zh/providers/messaging/websocket/"
+    description="映射入站 WebSocket frame 并构建出站 frame"
   />
 </CardGrid>
 

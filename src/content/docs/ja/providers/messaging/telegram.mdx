@@ -83,6 +83,19 @@ Telegram provider を使うと、digital worker は Telegram bot 経由でやり
 | `bot_token` | Yes | @BotFather から取得する bot token |
 | `api_base_url` | No | Telegram API URL（デフォルト: `https://api.telegram.org`） |
 
+## Add to Telegram アクション
+
+setup が成功すると、Telegram pack は `greentic.setup.actions.v1` を通じて汎用 setup action を公開します:
+
+| フィールド | 値 |
+|------------|----|
+| Label | `Add to Telegram` |
+| Kind | `deep_link` |
+| URL template | `https://t.me/{bot_username}` |
+| 必須 setup output | `bot_username` |
+
+Setup host はこれを button として表示し、URL を見せ、HTML snippet を提供できます。この link は Telegram で bot を開き、ユーザーが会話を開始できるようにします。
+
 ## 機能
 
 ### テキストメッセージ
