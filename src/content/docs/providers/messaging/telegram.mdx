@@ -89,6 +89,19 @@ The Telegram provider allows your digital worker to communicate via Telegram bot
 The setup layer also accepts the older `bot_token` alias and stores it as `telegram_bot_token`, but new answers files should use the wizard-generated key.
 </Aside>
 
+## Add to Telegram Action
+
+After setup succeeds, the Telegram pack exposes a generic setup action through `greentic.setup.actions.v1`:
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to Telegram` |
+| Kind | `deep_link` |
+| URL template | `https://t.me/{bot_username}` |
+| Required setup output | `bot_username` |
+
+Setup hosts can render this as a button, show the URL, and provide an HTML snippet. The link opens the bot in Telegram so users can start the conversation.
+
 ## Network Access
 
 Telegram uses webhooks for incoming updates and the Telegram Bot API for outgoing sends. Expose the Greentic runtime through HTTPS on port `443`; local development can use a tunnel that forwards the public URL to the local runtime port.

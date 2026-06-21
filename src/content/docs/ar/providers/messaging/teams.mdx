@@ -116,6 +116,37 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 يتطلب إنشاء قناة Teams مفقودة صلاحية Graph المفوضة `Channel.Create` ومستخدما مسجل الدخول يسمح له بإنشاء قنوات في الفريق المحدد.
 </Aside>
 
+## نموذج setup الحالي في Teams
+
+يستخدم مسار `messaging-teams` الحالي معالج setup مملوكا للمزود وعقد backend. يرشد تسجيل الدخول إلى Microsoft عبر device-code، وينشئ أو يعيد استخدام هوية app في Bot Framework، ويسجل endpoint النشط في Greentic، وينشر app Teams، ويثبته لمستخدم setup، ويعرض إجراء عاما **Add to Teams**. أبق `public_base_url` متوافقا مع النفق النشط أو URL الإنتاج؛ أعد تشغيل setup عندما يتغير ذلك URL.
+
+في ملفات الإجابات، وفر URL العام وتلميحات اختيارية للاسم/tenant:
+
+```json title="answers.json"
+{
+  "setup_answers": {
+    "messaging-teams": {
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
+    }
+  }
+}
+```
+
+يجب أن يشير endpoint مراسلة Bot Framework المسجل إلى URL runtime العام النشط. إذا أنشأ `gtc start` Cloudflare Tunnel جديدا أو URL ngrok جديدا، فأعد تشغيل setup قبل استخدام **Add to Teams** أو اختبار bot.
+
+## إجراء Add to Teams
+
+| الحقل | القيمة |
+|-------|--------|
+| Label | `Add to Teams` |
+| Kind | `deep_link` |
+| قالب URL | `{add_to_teams_url}` |
+| خرج setup المطلوب | `add_to_teams_url` |
+
+يمكن لمضيفي setup عرضه كزر، وإظهار URL، وتوفير HTML snippet بعد أن يعيد setup القيمة `setup_status.ok: true`.
+
 ## Features
 
 ### Text Messages

@@ -65,6 +65,19 @@ Webex provider 与 Cisco Webex Teams 集成。它支持：
 | `public_base_url` | 是 | webhook 的公网 URL |
 | `access_token` | 是 | Bot access token |
 
+## Add to WebEx 操作
+
+setup 成功后，Webex pack 会通过 `greentic.setup.actions.v1` 暴露一个通用 setup 操作：
+
+| 字段 | 值 |
+|------|----|
+| Label | `Add to WebEx` |
+| Kind | `deep_link` |
+| URL template | `https://web.webex.com/teams/messages/new?email={bot_email}` |
+| 必需 setup output | `bot_email` |
+
+setup host 可以将其渲染为按钮、显示 URL，并提供 HTML 片段。该链接会打开 Webex，并创建一条发送给 bot 的新消息。
+
 ## 功能
 
 ### 文本消息

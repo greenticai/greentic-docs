@@ -1,6 +1,6 @@
 ---
 title: Email
-description: メッセージとして email を送受信する
+description: SMTP email を送信し、Microsoft Graph mail を使用する
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -13,6 +13,8 @@ Email messaging provider を使うと、digital worker は email 経由でやり
 - email の受信（webhook 経由）
 - HTML formatting
 - 添付ファイル
+
+`messaging-email` は SMTP 送信プロバイダーです。IMAP または POP3 mailbox の polling は行いません。受信 email は通常、SendGrid Inbound Parse、Mailgun Routes、AWS SES、またはインストール済み pack が対応する Microsoft Graph subscriptions などの event provider または provider webhook で処理します。
 
 ## セットアップ
 

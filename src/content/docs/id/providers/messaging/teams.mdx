@@ -116,6 +116,37 @@ Egress Teams dan setup subscription menggunakan ID, bukan display name. Label di
 Membuat channel Teams yang belum ada memerlukan delegated Graph permission `Channel.Create` dan user yang masuk yang diizinkan membuat channel di Team yang dipilih.
 </Aside>
 
+## Model setup Teams saat ini
+
+Jalur `messaging-teams` saat ini menggunakan wizard setup milik provider dan kontrak backend. Wizard ini memandu sign-in Microsoft device-code, membuat atau menggunakan ulang identitas app Bot Framework, mendaftarkan endpoint Greentic aktif, menerbitkan app Teams, menginstalnya untuk user setup, dan mengekspos aksi generik **Add to Teams**. Jaga `public_base_url` tetap sesuai dengan tunnel aktif atau URL produksi; jalankan ulang setup saat URL berubah.
+
+Dalam file jawaban, berikan URL publik dan petunjuk nama/tenant opsional:
+
+```json title="answers.json"
+{
+  "setup_answers": {
+    "messaging-teams": {
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
+    }
+  }
+}
+```
+
+Endpoint messaging Bot Framework yang terdaftar harus menunjuk ke URL runtime publik yang aktif. Jika `gtc start` membuat Cloudflare Tunnel atau URL ngrok baru, jalankan ulang setup sebelum menggunakan **Add to Teams** atau menguji bot.
+
+## Aksi Add to Teams
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to Teams` |
+| Kind | `deep_link` |
+| URL template | `{add_to_teams_url}` |
+| Output setup wajib | `add_to_teams_url` |
+
+Host setup dapat merender ini sebagai tombol, menampilkan URL, dan menyediakan snippet HTML setelah setup mengembalikan `setup_status.ok: true`.
+
 ## Fitur
 
 ### Pesan Teks

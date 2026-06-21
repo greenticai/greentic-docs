@@ -13,7 +13,7 @@ Greentic supports multiple messaging platforms through **messaging extension pac
 - **Egress** - Sending messages to the platform
 - **Operations** - Platform-specific features such as buttons, cards, threads, file handling, and webhook setup
 
-The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat, WebChat GUI, Webex, and Email messaging packs.
+يتضمن الكتالوج الحالي packs مراسلة لـ Slack وMicrosoft Teams وTelegram وWhatsApp وWebChat وWebChat GUI وWebex وSMTP Email وMicrosoft Graph Email وHTTP وWebSocket.
 
 ## Available Providers
 
@@ -51,7 +51,17 @@ The current catalog includes Slack, Microsoft Teams, Telegram, WhatsApp, WebChat
   <LinkCard
     title="Email"
     href="/providers/messaging/email/"
-    description="Send and receive emails as messages"
+    description="إرسال بريد SMTP واستخدام Microsoft Graph mail"
+  />
+  <LinkCard
+    title="HTTP"
+    href="/ar/providers/messaging/http/"
+    description="ربط طلبات HTTP الواردة وبناء استدعاءات HTTP الصادرة"
+  />
+  <LinkCard
+    title="WebSocket"
+    href="/ar/providers/messaging/websocket/"
+    description="ربط frames WebSocket الواردة وبناء frames صادرة"
   />
 </CardGrid>
 

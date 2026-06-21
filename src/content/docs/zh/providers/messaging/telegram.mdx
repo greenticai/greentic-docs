@@ -83,6 +83,19 @@ Telegram provider 让你的数字员工通过 Telegram bot 进行通信。它支
 | `bot_token` | 是 | 来自 @BotFather 的 bot token |
 | `api_base_url` | 否 | Telegram API URL（默认：`https://api.telegram.org`） |
 
+## Add to Telegram 操作
+
+setup 成功后，Telegram pack 会通过 `greentic.setup.actions.v1` 暴露一个通用 setup 操作：
+
+| 字段 | 值 |
+|------|----|
+| Label | `Add to Telegram` |
+| Kind | `deep_link` |
+| URL template | `https://t.me/{bot_username}` |
+| 必需 setup output | `bot_username` |
+
+setup host 可以将其渲染为按钮、显示 URL，并提供 HTML 片段。该链接会在 Telegram 中打开 bot，让用户开始对话。
+
 ## 功能
 
 ### 文本消息

@@ -61,6 +61,7 @@ This starts:
 - The runtime services for the bundle
 - Any enabled tunnel you select with flags
 - Gateway, egress, and subscription processes as required by the bundle
+- Public web and provider routes declared by installed packs, including WebChat assets, provider ingress paths, and provider setup routes when available
 
 ### Start for Development
 
@@ -100,6 +101,8 @@ gtc start ./my-bundle --cloudflared on
 Cloudflared URLs change on each restart unless you configure a persistent tunnel.
 </Aside>
 
+When a tunnel URL changes, re-run `gtc setup` for providers that register external callbacks or app endpoints. Teams, Slack, Telegram, Webex, WhatsApp, Microsoft Graph subscriptions, and WebChat links may all contain the previous public URL in provider-side configuration or generated setup output.
+
 ### ngrok
 
 Use ngrok for a stable URL during development:
@@ -132,6 +135,8 @@ gtc setup ./my-bundle --answers answers.json
 gtc start ./my-bundle
 ```
 
+For the current Teams provider, setup also registers the Bot Framework-compatible endpoint for the active public URL. If you restart with a different Cloudflare Tunnel or ngrok URL, run setup again before using the **Add to Teams** link or testing the bot.
+
 ## Runtime Endpoints
 
 When running, the server exposes:
@@ -141,6 +146,9 @@ When running, the server exposes:
 | `GET /health` | Health check |
 | `GET /ready` | Readiness probe |
 | `POST /webhook/{provider}/{tenant}/{team}` | Provider webhooks |
+| `POST /v1/messaging/ingress/{provider}/{tenant}/{team}` | Current provider ingress route used by messaging packs |
+| `GET /v1/web/{pack}/{tenant}/...` | Pack-declared public web assets such as WebChat GUI and provider setup modules |
+| `GET/POST /v1/messaging/setup/{provider}/{tenant}/...` | Provider setup routes when declared by the pack, such as Teams setup state and actions |
 | `GET /api/v1/sessions` | Session management |
 | `POST /api/v1/messages` | Send messages |
 | `GET /auth/config` | OAuth configuration endpoint |

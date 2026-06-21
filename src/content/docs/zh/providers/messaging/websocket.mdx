@@ -1,0 +1,101 @@
+---
+title: WebSocket
+description: 映射入站 WebSocket frame 并构建出站 frame
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## 概述
+
+`messaging-websocket` 是一个由答案文件驱动、从 `build-answer.json` 生成的消息提供商。当客户端与 Greentic 保持实时 WebSocket 会话并交换 JSON frame，而不是使用具名聊天平台时，它很有用。
+
+当前支持：
+
+- 无认证、bearer-token 认证或 query-token 认证的连接校验
+- 将包含 JSON 对象的入站文本 frame 映射为规范化事件
+- 从消息 payload 构建出站文本 frame
+- 为 `open`、`close` 和 `error` 规范化生命周期事件
+
+当前提供商实现暂不处理二进制 frame。
+
+## 设置
+
+<Steps>
+
+1. **添加提供商 pack**
+
+   使用 `gtc wizard` 选择 `messaging-websocket`，或从消息提供商目录将该 pack 添加到 bundle。
+
+2. **配置连接策略**
+
+   使用已安装 pack 生成的 setup answers。典型配置包括 tenant/team 元数据和可选认证。
+
+3. **运行 setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **启动 runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## 入站 Frame
+
+入站 frame 必须是包含 JSON 对象的文本 frame。提供商会将其映射为如下事件：
+
+```json
+{
+  "provider": "messaging-websocket",
+  "direction": "inbound",
+  "kind": "websocket.frame",
+  "session_id": "session-1",
+  "payload": {
+    "message": "hello"
+  },
+  "metadata": {
+    "tenant_id": "demo",
+    "team_id": "default"
+  }
+}
+```
+
+生命周期事件会被规范化为 `websocket.open`、`websocket.close` 和 `websocket.error` 等 `kind` 值。
+
+## 出站 Frame
+
+出站消息需要 `session_id` 和对象 payload。它们会转换为文本 frame：
+
+```json
+{
+  "session_id": "session-1",
+  "opcode": "text",
+  "data": "{\"message\":\"hello\"}"
+}
+```
+
+## 网络访问
+
+| 方向 | 协议和端口 | 用途 |
+|------|------------|------|
+| 入站 | WSS `443` 到 Greentic | 生产环境中的浏览器或服务 WebSocket 客户端 |
+| 入站，本地开发 | 本地 runtime/tester 端口上的 WS | TLS/隧道终止前的本地测试 |
+| 出站 | 当 host/runtime 集成使用时，到已配置 endpoint 的 WS 或 WSS | 提供商构建的出站 frame |
+
+<Aside type="note">
+`messaging-websocket` 从其答案文件生成。请更新答案源并重新生成 pack，而不是手动编辑生成的 YAML、JSON、CBOR 或打包产物。
+</Aside>
+
+## 测试
+
+使用本地 tester：
+
+```bash
+./scripts/test_ws.sh
+```
+
+tester 页面为入站 frame 映射、出站 frame 生成和生命周期事件规范化提供独立按钮，并显示清晰的通过/失败状态。

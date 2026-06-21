@@ -109,6 +109,37 @@ Das Teams-Setup unterstützt zwei Konfigurationsformen:
 | `bot_display_name` | Nein | Anzeigename, der beim Erstellen von Bot-Metadaten verwendet wird |
 | `messaging_endpoint` | Generiert | Bot Framework messaging endpoint, den der Provider veröffentlicht |
 
+## Aktuelles Teams-Setup-Modell
+
+Der aktuelle `messaging-teams`-Pfad verwendet einen provider-eigenen Setup-Wizard und einen Backend-Vertrag. Er fuehrt durch Microsoft Device-Code-Anmeldung, erstellt oder verwendet die Bot-Framework-App-Identitaet wieder, registriert den aktiven Greentic-Endpoint, veroeffentlicht die Teams-App, installiert sie fuer den Setup-Benutzer und stellt eine generische **Add to Teams** Aktion bereit. Halte `public_base_url` mit dem aktiven Tunnel oder der Produktions-URL synchron; fuehre setup erneut aus, wenn sich diese URL aendert.
+
+In Antwortdateien gib die oeffentliche URL und optionale Namens-/Tenant-Hinweise an:
+
+```json title="answers.json"
+{
+  "setup_answers": {
+    "messaging-teams": {
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
+    }
+  }
+}
+```
+
+Der registrierte Bot-Framework-Messaging-Endpoint muss auf die aktive oeffentliche Runtime-URL zeigen. Wenn `gtc start` einen neuen Cloudflare Tunnel oder eine neue ngrok-URL erzeugt, fuehre setup erneut aus, bevor du **Add to Teams** verwendest oder den Bot testest.
+
+## Add to Teams Aktion
+
+| Feld | Wert |
+|------|------|
+| Label | `Add to Teams` |
+| Art | `deep_link` |
+| URL-Template | `{add_to_teams_url}` |
+| Erforderliche Setup-Ausgabe | `add_to_teams_url` |
+
+Setup-Hosts koennen dies als Button rendern, die URL anzeigen und ein HTML-Snippet bereitstellen, nachdem setup `setup_status.ok: true` zurueckgibt.
+
 ## Funktionen
 
 ### Textnachrichten

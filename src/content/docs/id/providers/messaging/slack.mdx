@@ -89,6 +89,19 @@ Provider Slack mengintegrasikan digital worker Anda dengan workspace Slack. Prov
 Flow setup baru tidak mengharuskan Anda memasukkan `slack_bot_token` secara manual. Aksi setup dan flow instal OAuth menyimpan kredensial runtime. Jika Anda meng-upgrade bundle lama, buat ulang jawaban dengan `gtc setup --dry-run --emit-answers answers.json ./my-bundle` lalu jalankan setup lagi.
 </Aside>
 
+## Aksi Add to Slack
+
+Pack Slack mendeklarasikan aksi setup generik:
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to Slack` |
+| Kind | `deep_link` |
+| URL template | `{slack_add_url}` |
+| Output setup wajib | `slack_add_url` |
+
+Host setup dapat merender ini sebagai tombol, menampilkan URL, dan menyediakan snippet HTML setelah setup mengembalikan `setup_status.ok: true`. Pisahkan aksi pasca-setup ini dari **Setup Slack App**, yaitu aksi khusus provider yang membuat atau memperbarui konfigurasi app.
+
 <Aside type="caution">
 Token akses konfigurasi Slack akan kedaluwarsa. Simpan token refresh pasangannya di penyimpanan secret setup agar provider dapat merotasi pasangan tersebut saat pembaruan manifest.
 </Aside>

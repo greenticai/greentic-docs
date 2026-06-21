@@ -89,6 +89,19 @@ Le fournisseur Slack intègre votre travailleur numérique aux espaces de travai
 Les nouveaux flux de configuration ne demandent pas de saisir manuellement `slack_bot_token`. L'action de configuration et le flux d'installation OAuth enregistrent les identifiants d'exécution. Si vous mettez à niveau un bundle plus ancien, régénérez les réponses avec `gtc setup --dry-run --emit-answers answers.json ./my-bundle`, puis relancez la configuration.
 </Aside>
 
+## Action Add to Slack
+
+Le pack Slack declare une action de setup generique :
+
+| Champ | Valeur |
+|-------|--------|
+| Label | `Add to Slack` |
+| Kind | `deep_link` |
+| Modele d URL | `{slack_add_url}` |
+| Sortie setup requise | `slack_add_url` |
+
+Les hosts de setup peuvent l afficher comme bouton, montrer l URL et fournir un snippet HTML apres que setup renvoie `setup_status.ok: true`. Gardez cette action post-setup separee de **Setup Slack App**, l action specifique au fournisseur qui cree ou met a jour la configuration de l app.
+
 <Aside type="caution">
 Les Slack configuration access tokens expirent. Conservez le refresh token correspondant dans le magasin de secrets de configuration afin que le fournisseur puisse renouveler la paire pendant les mises à jour du manifeste.
 </Aside>

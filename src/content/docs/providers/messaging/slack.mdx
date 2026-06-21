@@ -51,9 +51,11 @@ The Slack provider integrates your digital worker with Slack workspaces. It supp
    gtc setup --answers answers.json ./my-bundle
    ```
 
-4. **Click Add to Slack**
+4. **Run Setup Slack App**
 
-   Setup registers or updates the Slack app and exposes an **Add to Slack** action. Open the generated Slack authorization URL, choose the workspace, review the requested scopes, and approve the install.
+   Setup registers or updates the Slack app. The setup action is labeled **Setup Slack App** because it configures the Slack app and manifest; it is not the same thing as adding the installed app to a workspace.
+
+   When app setup succeeds, the pack exposes a generic **Add to Slack** post-setup action through `greentic.setup.actions.v1`. Open that generated Slack authorization URL, choose the workspace, review the requested scopes, and approve the install.
 
    When the OAuth redirect returns to setup, Greentic persists the Slack app id, client id, client secret, and runtime OAuth answers for the tenant. If the callback was not handled automatically, run `gtc setup --answers answers.json ./my-bundle` again after approving the install.
 
@@ -88,6 +90,19 @@ The Slack provider integrates your digital worker with Slack workspaces. It supp
 <Aside type="note">
 New setup flows do not require hand-entering `slack_bot_token`. The setup action and OAuth install flow persist the runtime credentials. If you are upgrading an older bundle, regenerate answers with `gtc setup --dry-run --emit-answers answers.json ./my-bundle` and re-run setup.
 </Aside>
+
+## Add to Slack Action
+
+The Slack pack declares a generic setup action:
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to Slack` |
+| Kind | `deep_link` |
+| URL template | `{slack_add_url}` |
+| Required setup output | `slack_add_url` |
+
+Setup hosts can render this as a button, show the URL, and provide an HTML snippet after setup returns `setup_status.ok: true`. Keep this post-setup action separate from **Setup Slack App**, which is the provider-specific action that creates or updates the app configuration.
 
 <Aside type="caution">
 Slack configuration access tokens expire. Keep the matching refresh token in the setup secrets store so the provider can rotate the pair during manifest updates.

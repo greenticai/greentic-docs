@@ -1,0 +1,124 @@
+---
+title: HTTP
+description: Mapper les requêtes HTTP entrantes et construire des appels HTTP sortants
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Vue d'ensemble
+
+`messaging-http` est un fournisseur de messagerie piloté par les réponses et généré depuis `build-answer.json`. Il est utile lorsqu'un système communique avec un travailleur numérique via HTTP simple plutôt que via une plateforme de chat nommée.
+
+Il prend actuellement en charge :
+
+- Le mapping des requêtes JSON HTTP `POST` entrantes en événements fournisseur normalisés
+- Des contrôles optionnels par bearer token entrant ou en-tête API key
+- La capture de certains en-têtes et paramètres de requête
+- La construction de descriptions de requêtes HTTP `GET` ou `POST` sortantes à partir des payloads de message
+- Les modèles d'URL avec des valeurs du payload comme `{payload.case_id}`
+
+## Configuration
+
+<Steps>
+
+1. **Ajouter le pack fournisseur**
+
+   Sélectionnez `messaging-http` avec `gtc wizard` ou ajoutez le pack au bundle depuis le catalogue des fournisseurs de messagerie.
+
+2. **Configurer le routage et l'authentification**
+
+   Utilisez les réponses de configuration générées pour votre pack installé. La configuration typique inclut les informations de route/URL publique, l'authentification optionnelle, les en-têtes capturés et les paramètres de requêtes sortantes.
+
+3. **Exécuter setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Démarrer le runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Mapping entrant
+
+HTTP entrant attend une requête `POST` avec un corps objet JSON. Le fournisseur la mappe vers un événement de cette forme :
+
+```json
+{
+  "provider": "messaging-http",
+  "direction": "inbound",
+  "kind": "http.webhook",
+  "idempotency_key": "req-1",
+  "source": {
+    "method": "POST",
+    "path": "/webhooks/acme",
+    "headers": {
+      "x-request-id": "req-1"
+    },
+    "query": {
+      "source": "test"
+    }
+  },
+  "payload": {
+    "case_id": "C123",
+    "event": "case.created"
+  }
+}
+```
+
+La clé d'idempotence est prise depuis `Idempotency-Key`, `X-Request-Id`, `payload.idempotency_key` ou `payload.id` lorsqu'ils sont présents.
+
+## Mapping sortant
+
+Les messages sortants sont convertis en descriptions de requêtes HTTP. Par exemple, avec cette configuration :
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/{payload.case_id}",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "timeout_ms": 5000
+}
+```
+
+Un payload de message `{ "case_id": "C123", "status": "open" }` produit :
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/C123",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"case_id\":\"C123\",\"status\":\"open\"}",
+  "timeout_ms": 5000
+}
+```
+
+## Acces reseau
+
+| Direction | Protocole et port | Objectif |
+|-----------|-------------------|----------|
+| Entrant | HTTPS `443` vers Greentic | Systemes externes envoyant des requetes JSON de type webhook |
+| Entrant, developpement local | HTTP sur le port local du runtime/tester | Tests locaux avant terminaison TLS/tunnel |
+| Sortant | HTTP ou HTTPS vers les endpoints configures | Requetes sortantes construites par le fournisseur |
+
+<Aside type="note">
+`messaging-http` est genere depuis son fichier de reponses. Mettez a jour la source des reponses et regenerez le pack plutot que de modifier manuellement les YAML, JSON, CBOR ou artefacts empaquetes generes.
+</Aside>
+
+## Tests
+
+Utilisez le tester local :
+
+```bash
+./scripts/test_http.sh
+```
+
+La page de test propose des boutons separes pour le mapping entrant et la generation de requetes sortantes, et affiche un statut reussite/echec clair.

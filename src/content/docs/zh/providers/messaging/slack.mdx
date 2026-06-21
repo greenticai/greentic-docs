@@ -89,6 +89,19 @@ Slack provider 将你的数字员工集成到 Slack 工作区中。它支持：
 新的 setup flows 不需要手动输入 `slack_bot_token`。setup action 和 OAuth install flow 会保存 runtime credentials。如果你正在升级旧 bundle，请使用 `gtc setup --dry-run --emit-answers answers.json ./my-bundle` 重新生成 answers，然后重新运行 setup。
 </Aside>
 
+## Add to Slack 操作
+
+Slack pack 声明了一个通用 setup 操作：
+
+| 字段 | 值 |
+|------|----|
+| Label | `Add to Slack` |
+| Kind | `deep_link` |
+| URL template | `{slack_add_url}` |
+| 必需 setup output | `slack_add_url` |
+
+setup host 可以在 setup 返回 `setup_status.ok: true` 后，将其渲染为按钮、显示 URL，并提供 HTML 片段。请将这个 post-setup 操作与 **Setup Slack App** 分开；后者是创建或更新 app 配置的 provider-specific 操作。
+
 <Aside type="caution">
 Slack configuration access tokens 会过期。请将匹配的 refresh token 保存在 setup secrets store 中，以便 provider 在 manifest 更新期间轮换这对令牌。
 </Aside>

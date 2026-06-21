@@ -89,6 +89,19 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 لا تتطلب تدفقات الإعداد الجديدة إدخال `slack_bot_token` يدويا. يحفظ إجراء الإعداد وتدفق تثبيت OAuth بيانات اعتماد وقت التشغيل. إذا كنت ترقي حزمة أقدم، فأعد إنشاء الإجابات باستخدام `gtc setup --dry-run --emit-answers answers.json ./my-bundle` ثم شغل الإعداد مرة أخرى.
 </Aside>
 
+## إجراء Add to Slack
+
+يعلن pack Slack إجراء setup عاما:
+
+| الحقل | القيمة |
+|-------|--------|
+| Label | `Add to Slack` |
+| Kind | `deep_link` |
+| قالب URL | `{slack_add_url}` |
+| خرج setup المطلوب | `slack_add_url` |
+
+يمكن لمضيفي setup عرضه كزر، وإظهار URL، وتوفير HTML snippet بعد أن يعيد setup القيمة `setup_status.ok: true`. أبق هذا الإجراء اللاحق للإعداد منفصلا عن **Setup Slack App**، وهو الإجراء الخاص بالمزود الذي ينشئ إعداد app أو يحدثه.
+
 <Aside type="caution">
 تنتهي صلاحية Slack configuration access tokens. احتفظ برمز refresh token المطابق في مخزن أسرار الإعداد حتى يتمكن الموفر من تدوير الزوج أثناء تحديثات البيان.
 </Aside>

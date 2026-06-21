@@ -1,0 +1,124 @@
+---
+title: HTTP
+description: Memetakan permintaan HTTP masuk dan membuat panggilan HTTP keluar
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Ringkasan
+
+`messaging-http` adalah provider messaging berbasis jawaban yang dihasilkan dari `build-answer.json`. Ini berguna saat sebuah sistem berbicara dengan digital worker melalui HTTP biasa, bukan melalui platform chat bernama.
+
+Saat ini mendukung:
+
+- Memetakan permintaan JSON HTTP `POST` masuk menjadi event provider yang dinormalisasi
+- Pemeriksaan bearer token masuk atau header API key opsional
+- Menangkap header permintaan dan parameter query yang dipilih
+- Membuat deskripsi permintaan HTTP `GET` atau `POST` keluar dari payload pesan
+- Templating URL dengan nilai payload seperti `{payload.case_id}`
+
+## Setup
+
+<Steps>
+
+1. **Tambahkan pack provider**
+
+   Pilih `messaging-http` dengan `gtc wizard` atau tambahkan pack ke bundle dari katalog provider messaging.
+
+2. **Konfigurasikan routing dan auth**
+
+   Gunakan jawaban setup yang dihasilkan untuk pack yang terpasang. Konfigurasi umum mencakup informasi route/public URL, auth opsional, header yang ditangkap, dan pengaturan permintaan keluar.
+
+3. **Jalankan setup**
+
+   ```bash
+   gtc setup ./my-bundle
+   ```
+
+4. **Mulai runtime**
+
+   ```bash
+   gtc start ./my-bundle
+   ```
+
+</Steps>
+
+## Pemetaan Masuk
+
+HTTP masuk mengharapkan permintaan `POST` dengan body objek JSON. Provider memetakannya menjadi event seperti:
+
+```json
+{
+  "provider": "messaging-http",
+  "direction": "inbound",
+  "kind": "http.webhook",
+  "idempotency_key": "req-1",
+  "source": {
+    "method": "POST",
+    "path": "/webhooks/acme",
+    "headers": {
+      "x-request-id": "req-1"
+    },
+    "query": {
+      "source": "test"
+    }
+  },
+  "payload": {
+    "case_id": "C123",
+    "event": "case.created"
+  }
+}
+```
+
+Idempotency key diambil dari `Idempotency-Key`, `X-Request-Id`, `payload.idempotency_key`, atau `payload.id` jika ada.
+
+## Pemetaan Keluar
+
+Pesan keluar dikonversi menjadi deskripsi permintaan HTTP. Misalnya, dengan konfigurasi:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/{payload.case_id}",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "timeout_ms": 5000
+}
+```
+
+Payload pesan `{ "case_id": "C123", "status": "open" }` menghasilkan:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.test/cases/C123",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"case_id\":\"C123\",\"status\":\"open\"}",
+  "timeout_ms": 5000
+}
+```
+
+## Akses Jaringan
+
+| Arah | Protokol dan port | Tujuan |
+|------|-------------------|--------|
+| Masuk | HTTPS `443` ke Greentic | Sistem eksternal yang mengirim permintaan JSON bergaya webhook |
+| Masuk, pengembangan lokal | HTTP pada port runtime/tester lokal | Pengujian lokal sebelum terminasi TLS/tunnel |
+| Keluar | HTTP atau HTTPS ke endpoint yang dikonfigurasi | Permintaan keluar yang dibuat provider |
+
+<Aside type="note">
+`messaging-http` dihasilkan dari file jawabannya. Perbarui sumber jawaban dan regenerasi pack, bukan mengedit YAML, JSON, CBOR, atau artefak packed yang dihasilkan secara manual.
+</Aside>
+
+## Pengujian
+
+Gunakan tester lokal:
+
+```bash
+./scripts/test_http.sh
+```
+
+Halaman tester memiliki tombol terpisah untuk pemetaan masuk dan pembuatan permintaan keluar, serta menampilkan status lulus/gagal yang jelas.

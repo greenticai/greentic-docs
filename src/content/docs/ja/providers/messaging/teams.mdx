@@ -116,6 +116,37 @@ Teams egress と subscription setup は display names ではなく IDs を使用
 存在しない Teams channel を作成するには、delegated Graph permission `Channel.Create` と、選択した Team で channel を作成できるサインイン済み user が必要です。
 </Aside>
 
+## 現在の Teams setup model
+
+現在の `messaging-teams` setup path は、provider-owned setup wizard と backend contract を使用します。Microsoft device-code sign-in を案内し、Bot Framework app identity を作成または再利用し、active Greentic endpoint を登録し、Teams app を公開し、setup user にインストールし、汎用 **Add to Teams** action を公開します。`public_base_url` は active tunnel または production URL と一致させてください。その URL が変わった場合は setup を再実行します。
+
+answers file では public URL と任意の naming/tenant hint を指定します:
+
+```json title="answers.json"
+{
+  "setup_answers": {
+    "messaging-teams": {
+      "public_base_url": "https://your-domain.com",
+      "bot_display_name": "Greentic Digital Worker",
+      "azure_auth_tenant": "organizations"
+    }
+  }
+}
+```
+
+登録済み Bot Framework messaging endpoint は active public runtime URL を指す必要があります。`gtc start` が新しい Cloudflare Tunnel または ngrok URL を作成した場合は、**Add to Teams** を使う前、または bot をテストする前に setup を再実行してください。
+
+## Add to Teams アクション
+
+| フィールド | 値 |
+|------------|----|
+| Label | `Add to Teams` |
+| Kind | `deep_link` |
+| URL template | `{add_to_teams_url}` |
+| 必須 setup output | `add_to_teams_url` |
+
+Setup host は、setup が `setup_status.ok: true` を返した後に、これを button として表示し、URL を見せ、HTML snippet を提供できます。
+
 ## 機能
 
 ### テキストメッセージ

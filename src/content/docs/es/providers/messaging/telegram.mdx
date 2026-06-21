@@ -83,6 +83,19 @@ El provider Telegram permite que tu trabajador digital se comunique mediante bot
 | `bot_token` | Sí | Bot token de @BotFather |
 | `api_base_url` | No | URL de la API de Telegram (por defecto: `https://api.telegram.org`) |
 
+## Acción Add to Telegram
+
+Después de que setup se completa correctamente, el pack de Telegram expone una acción de setup genérica mediante `greentic.setup.actions.v1`:
+
+| Campo | Valor |
+|-------|-------|
+| Etiqueta | `Add to Telegram` |
+| Tipo | `deep_link` |
+| Plantilla de URL | `https://t.me/{bot_username}` |
+| Salida de setup requerida | `bot_username` |
+
+Los hosts de setup pueden renderizarla como botón, mostrar la URL y proporcionar un fragmento HTML. El enlace abre el bot en Telegram para que los usuarios puedan iniciar la conversación.
+
 ## Funcionalidades
 
 ### Mensajes de texto

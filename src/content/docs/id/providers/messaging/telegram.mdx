@@ -83,6 +83,19 @@ Provider Telegram memungkinkan digital worker Anda berkomunikasi melalui bot Tel
 | `bot_token` | Ya | Bot token dari @BotFather |
 | `api_base_url` | Tidak | URL API Telegram (default: `https://api.telegram.org`) |
 
+## Aksi Add to Telegram
+
+Setelah setup berhasil, pack Telegram mengekspos aksi setup generik melalui `greentic.setup.actions.v1`:
+
+| Field | Value |
+|-------|-------|
+| Label | `Add to Telegram` |
+| Kind | `deep_link` |
+| URL template | `https://t.me/{bot_username}` |
+| Output setup wajib | `bot_username` |
+
+Host setup dapat merender ini sebagai tombol, menampilkan URL, dan menyediakan snippet HTML. Link ini membuka bot di Telegram agar pengguna dapat memulai percakapan.
+
 ## Fitur
 
 ### Pesan Teks
