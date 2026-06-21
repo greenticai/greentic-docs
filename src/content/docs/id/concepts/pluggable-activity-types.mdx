@@ -1,0 +1,71 @@
+---
+title: Tipe Aktivitas yang Dapat Dicolokkan
+description: Bagaimana flow Greentic mendispatch pekerjaan ke runtime terpisah melalui node aktivitas native seperti sorla.call dan operala.call, dan bagaimana tipe aktivitas baru ditambahkan.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Tipe Aktivitas yang Dapat Dicolokkan
+
+Sebuah flow adalah graf node. Sebagian besar node menjalankan komponen WASM in-process, tetapi beberapa
+node menyerahkan pekerjaan ke sebuah **runtime terpisah** — SoRLa, OperaLa, dan (di
+masa depan) lainnya — dan menunggu hasilnya. Ini adalah **tipe aktivitas**:
+node flow native yang tugasnya mendispatch ke runtime eksternal melalui
+messaging bus.
+
+Saat ini platform menyertakan tipe aktivitas dispatch ini:
+
+| Node | Mendispatch ke | Status |
+| --- | --- | --- |
+| `sorla.call` | runtime SoRLa | Live |
+| `operala.call` | runtime OperaLa | Live |
+| `telco-x.call` | runtime telco-x | Sudah terhubung, inert hingga sebuah runtime ada |
+
+## Bagaimana dispatch bekerja
+
+Sebuah node dispatch tidak menjalankan logika bisnis itu sendiri. Ia mengemas
+input node, mempublikasikan sebuah request ke runtime melalui NATS, dan salah satu:
+
+- **menunggu** respons (flow berhenti sejenak dan melanjutkan ketika hasil
+  tiba), atau
+- **fire and forget** (flow segera melanjutkan).
+
+Semua node dispatch berbagi satu mekanisme — kontrak request/response yang sama dan
+penanganan korelasi yang sama — sehingga mereka berperilaku konsisten terlepas dari runtime mana
+yang mereka tuju.
+
+<Aside type="note">
+Sebuah node dispatch bersifat *inert* hingga runtime targetnya benar-benar di-deploy dan
+dapat dijangkau di bus. `telco-x.call`, misalnya, sepenuhnya terhubung ke baik
+runner maupun Designer, tetapi tidak melakukan apa pun hingga sebuah runtime telco-x
+berjalan — yang persis seperti itulah arti "wire-ready".
+</Aside>
+
+## Mengapa ini penting bagi Designer
+
+Flow builder Designer mendasarkan paletnya pada sebuah **katalog kapabilitas**.
+Setiap tipe aktivitas muncul di katalog itu sebagai kapabilitas yang dapat didispatch, yang
+berarti AI flow builder dapat menempatkan node `sorla.call` atau `operala.call` ketika
+pengguna mendeskripsikan pekerjaan yang termasuk dalam salah satu runtime tersebut — dengan cara yang sama seperti
+menempatkan node lainnya.
+
+## Menambahkan tipe aktivitas baru
+
+Tujuan desainnya adalah agar tipe aktivitas yang benar-benar baru membutuhkan biaya hampir nol untuk ditambahkan:
+
+1. **Satu entri katalog** di katalog kapabilitas baseline Designer, ditandai
+   sebagai kapabilitas dispatch. Ini membuat node dapat ditemukan oleh AI flow
+   builder.
+2. **Satu baris** di runner yang mengenali node sebagai operasi dispatch native
+   .
+
+Runner sudah tahu cara mengeksekusi node dispatch apa pun secara generik, sehingga tidak ada
+kode eksekusi baru yang dibutuhkan — node sederhananya menargetkan nama runtime yang berbeda
+. Ketika runtime itu kemudian di-deploy, node yang sebelumnya inert menjadi
+live tanpa perubahan lebih lanjut.
+
+<Aside type="tip">
+Ini adalah pola yang sama yang digunakan untuk `sorla.call` dan `operala.call`, dan inilah
+bagaimana `telco-x.call` ditambahkan mendahului runtime-nya. Menambahkan runtime kemudian
+"menyalakan" node tanpa menyentuh editor flow atau runner lagi.
+</Aside>

@@ -1,0 +1,117 @@
+---
+title: Environnements de déploiement cloud
+description: Configurez des environnements de déploiement cloud par tenant (et par équipe) dans la console d'administration, contrôlez quelles cibles de déploiement un tenant peut utiliser, et déployez un pack vers un environnement géré depuis le Designer.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Environnements de déploiement cloud
+
+Un **environnement de déploiement** est une destination cloud nommée — Greentic
+Cloud, AWS, Azure ou GCP — qu'un opérateur de plateforme configure pour un
+tenant. Une fois qu'un environnement existe, un administrateur de tenant peut
+déployer un pack publié vers celui-ci directement depuis le Designer, sans
+jamais toucher aux identifiants cloud ni à la CLI du déployeur.
+
+Cette page couvre les trois éléments qui rendent cela possible :
+
+1. **Environnements** — les destinations nommées qu'un opérateur configure par tenant (et éventuellement par équipe).
+2. **Plugins de déploiement** — quelles cibles de déploiement un tenant est autorisé à utiliser.
+3. **Déploiement cloud depuis le Designer** — le flux en libre-service pour l'administrateur de tenant.
+
+## Aperçu des rôles
+
+| Action | Qui |
+| --- | --- |
+| Créer / modifier / supprimer un environnement | Opérateur de plateforme uniquement |
+| Configurer les identifiants bring-your-own-cloud | Opérateur de plateforme uniquement |
+| Activer / désactiver les cibles de déploiement pour un tenant | Opérateur de plateforme uniquement |
+| Lister les environnements et y déployer un pack | Administrateur de tenant (dans le Designer) |
+
+Cette répartition est délibérée : les opérateurs possèdent les comptes cloud et
+les identifiants, les tenants possèdent la décision de *ce qu'il faut* livrer et
+*quand*.
+
+## Environnements
+
+Dans la console d'administration, ouvrez un tenant et accédez à l'onglet
+**Environments**. Chaque environnement possède :
+
+- un **nom** (unique au sein du tenant),
+- une **cible** — `greentic_cloud`, `aws`, `azure` ou `gcp`,
+- une **région** optionnelle,
+- une **portée** optionnelle — à l'échelle du tenant (visible par toutes les équipes) ou épinglée à une seule équipe,
+- un **statut** — `idle`, `provisioning`, `live` ou `error`.
+
+### Greentic Cloud vs bring-your-own-cloud
+
+- **Greentic Cloud** (`greentic_cloud`) déploie avec le rôle géré propre à la
+  plateforme. Aucun identifiant par tenant n'est nécessaire — cela fonctionne
+  dès que l'environnement est créé.
+- **AWS / Azure / GCP** sont des cibles *bring-your-own-cloud* (BYOC). Avant
+  qu'un tenant puisse déployer vers l'une d'elles, un opérateur doit attacher
+  les identifiants cloud de cet environnement. Jusque-là, une tentative de
+  déploiement est rejetée avec un message clair « configurez d'abord les
+  identifiants ».
+
+<Aside type="note">
+Les identifiants BYOC sont stockés sous forme de référence de secret sur
+l'environnement et ne sont jamais renvoyés au Designer ni affichés aux
+utilisateurs du tenant. Le Designer apprend uniquement si des identifiants sont
+présents, jamais leur valeur.
+</Aside>
+
+### Environnements par équipe
+
+Un environnement peut être limité à une seule équipe plutôt qu'à l'ensemble du
+tenant. Les environnements limités à une équipe ne sont visibles que par les
+membres de cette équipe, et leurs identifiants BYOC sont isolés dans la portée
+de secret de l'équipe propriétaire. Laissez la portée à *à l'échelle du tenant*
+pour partager un environnement entre toutes les équipes.
+
+## Plugins de déploiement
+
+Tous les tenants ne devraient pas pouvoir livrer vers tous les clouds. Les
+**plugins de déploiement** permettent à un opérateur d'activer ou de désactiver
+des cibles de déploiement individuelles, par tenant et par équipe.
+
+Dans l'onglet **Environments**, les bascules de cibles de déploiement
+contrôlent quelles cibles apparaissent lors de la création d'un environnement.
+Le catalogue des cibles disponibles provient du déployeur lui-même (seules les
+cibles qui peuvent réellement s'exécuter sont proposées — `greentic_cloud`,
+`aws`, `azure`, `gcp`), de sorte que la liste correspond toujours à ce que la
+plateforme peut déployer.
+
+La résolution est **équipe → tenant → activé par défaut** : un paramètre au
+niveau de l'équipe l'emporte sur celui du niveau du tenant, et tout ce qui reste
+non défini est activé par défaut. La création d'un environnement pour une cible
+désactivée est bloquée.
+
+## Déploiement cloud depuis le Designer
+
+Une fois qu'un opérateur a configuré au moins un environnement, un
+administrateur de tenant peut déployer depuis le Designer :
+
+1. Ouvrez **Settings → Credentials**.
+2. Cliquez sur **Cloud deploy**.
+3. Saisissez la **référence du pack** à livrer (par exemple `my-pack@1.0.0`).
+4. Choisissez un environnement cible et cliquez sur **Deploy**.
+
+Le déploiement est mis en file d'attente et l'environnement passe à
+`provisioning`. Si l'environnement choisi est une cible BYOC dont les
+identifiants n'ont pas encore été configurés, le déploiement est rejeté avec la
+raison destinée à l'opérateur au lieu d'échouer silencieusement.
+
+<Aside type="tip">
+Le bouton **Cloud deploy** n'apparaît que pour les administrateurs de tenant.
+Les membres ordinaires ne le voient pas, et l'API sous-jacente rejette leurs
+appels.
+</Aside>
+
+### Designer autonome
+
+Lorsque le Designer s'exécute sans serveur d'administration (mode autonome), le
+déploiement cloud n'est tout simplement pas proposé : la liste des
+environnements est vide et le panneau explique qu'aucun serveur d'administration
+n'est configuré. Les déploiements locaux et basés sur des bundles via
+l'assistant de déploiement ne sont pas affectés.
