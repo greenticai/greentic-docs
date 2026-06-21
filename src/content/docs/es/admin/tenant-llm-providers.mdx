@@ -1,0 +1,75 @@
+---
+title: Proveedores de LLM por Inquilino
+description: Permite que los inquilinos usen sus propias claves de API de LLM para las funciones de IA del Designer, mientras los operadores mantienen el control sobre qué roles de composer se gestionan de forma centralizada.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Proveedores de LLM por Inquilino
+
+Las funciones de IA del Designer — el constructor de flujos, el composer del Agentic Worker,
+los composers de SoRLa y OperaLa — todas funcionan a través de un Large Language Model. Por
+defecto, un operador de la plataforma configura esos proveedores de forma centralizada. Con
+los **proveedores de LLM por inquilino**, un inquilino también puede usar su propia clave de API y hacer que
+el Designer la utilice.
+
+## Dos orígenes, una regla
+
+Una fila de proveedor tiene un **origen**:
+
+- **operator** — establecido por el operador de la plataforma, de solo lectura para el inquilino.
+- **tenant** — creado y propiedad del administrador de inquilino.
+
+La regla de resolución es simple y predecible: **la clave del operador siempre
+gana**. Una clave de inquilino solo puede ocupar un rol de composer que el operador *no* haya
+asignado ya. Un inquilino nunca puede apoderarse (o "robar") un rol que el
+operador gestiona.
+
+<Aside type="note">
+Esto mantiene intacta la gobernanza central. Si tu plataforma exige un proveedor específico
+para, digamos, el composer del Agentic Worker, asignarlo como un rol de operador
+garantiza que todos los inquilinos lo usen — la clave propia de un inquilino aún puede servir a los
+roles que dejaste abiertos.
+</Aside>
+
+## Roles de composer
+
+Cada proveedor de LLM puede asignarse a uno o más **roles de composer**, que se asignan
+a las superficies del Designer que los usan:
+
+| Rol | Potencia |
+| --- | --- |
+| `flow_editor_composer` | El constructor de flujos (BUILD / EDIT) y el chat de IA |
+| `agentic_worker_composer` | El composer del Agentic Worker / DW |
+| `sorla_composer` | El estudio de autoría de SoRLa |
+| `operala_composer` | El panel de operaciones de OperaLa |
+| `telco_playbook_composer` | Autoría de playbooks de telco |
+
+Un rol es propiedad de exactamente un proveedor. Asignar un rol que un operador
+ya posee se rechaza, de modo que nunca hay una pregunta ambigua de "qué clave sirve a esta
+superficie".
+
+## Flujo del administrador de inquilino
+
+En el Designer, un administrador de inquilino abre **Settings → Credentials → My LLM
+providers**. Desde allí puede:
+
+- añadir un proveedor (OpenAI, Anthropic, Azure OpenAI, Google y más) con su
+  propia clave de API, URL base opcional y modelo,
+- probar la clave antes de guardar,
+- asignarla a cualquier rol de composer que el operador no haya reservado,
+- eliminar un proveedor que posea.
+
+Los roles reservados por el operador se muestran pero deshabilitados — una señal clara de lo que
+se gestiona de forma centralizada frente a lo que controla el inquilino.
+
+## Cómo se manejan las claves
+
+- Las claves de inquilino se cifran en reposo y se descifran solo en memoria cuando una solicitud
+  las necesita.
+- El Designer resuelve sus pilas de LLM desde la administración y las actualiza en
+  unos 30 segundos tras un cambio, de modo que añadir o rotar una clave surte efecto sin
+  un reinicio.
+- Un rol sin asignar recurre a la configuración de arranque local del Designer
+  cuando se proporcionó una; sin una clave para un rol, esa superficie informa de que no hay
+  ningún proveedor configurado en lugar de usar silenciosamente el incorrecto.

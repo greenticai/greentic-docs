@@ -1,0 +1,45 @@
+---
+title: Plantillas de Inicio
+description: Selecciona plantillas de inicio por inquilino (y por equipo) en la consola de administración para que los usuarios puedan comenzar un nuevo proyecto desde un punto de partida verificado en lugar de un lienzo en blanco.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Plantillas de Inicio
+
+Una **plantilla de inicio** es un punto de partida verificado que un usuario puede elegir al crear
+un nuevo proyecto en el Designer. En lugar de un lienzo en blanco, comienzan desde un
+flujo que ya refleja las convenciones de tu organización.
+
+Los operadores seleccionan qué plantillas ve un inquilino — o un equipo específico —, de modo que la
+galería que un usuario abre siempre es relevante para él.
+
+## Selección de plantillas (operador)
+
+En la consola de administración, un operador de la plataforma elige qué plantillas se muestran
+para un inquilino. La selección se resuelve por usuario: la galería que ve un usuario es la
+unión de las plantillas a nivel de inquilino y las plantillas seleccionadas para los equipos a los que
+pertenece.
+
+<Aside type="note">
+Como el conjunto resuelto depende de las membresías de equipo de un usuario, dos usuarios en el
+mismo inquilino pueden ver galerías de inicio diferentes — cada uno ve exactamente las
+plantillas seleccionadas para sus equipos más las de nivel de inquilino.
+</Aside>
+
+## Comenzar desde una plantilla (usuario)
+
+En el Designer, un usuario abre el diálogo **New project** y elige **Start
+from a template**. El selector lista los inicios seleccionados; al elegir uno se
+rellena previamente el nuevo proyecto con el flujo de esa plantilla, listo para editar.
+
+Elegir la opción en blanco sigue funcionando exactamente como antes — las plantillas son una
+ventaja inicial opcional, nunca un requisito.
+
+## Qué hace a un buen inicio
+
+- Un nombre y un resumen claros y descriptivos, para que un usuario pueda elegir el correcto
+  sin abrirlo.
+- Un flujo lo bastante completo para ejecutarse, pero lo bastante genérico para adaptarse.
+- Las convenciones que tus equipos deberían seguir — nombres, estructura de nodos, cableado de canales
+  — integradas, de modo que la plantilla enseñe además de acelerar.

@@ -1,0 +1,78 @@
+---
+title: Fournisseurs LLM par tenant
+description: Permettez aux tenants d'apporter leurs propres clés API LLM pour les fonctionnalités d'IA du Designer, tout en laissant les opérateurs garder le contrôle des rôles de composer gérés de manière centralisée.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Fournisseurs LLM par tenant
+
+Les fonctionnalités d'IA du Designer — le générateur de flux, le composer
+Agentic Worker, les composers SoRLa et OperaLa — passent toutes par un Large
+Language Model. Par défaut, un opérateur de plateforme configure ces
+fournisseurs de manière centralisée. Avec les **fournisseurs LLM par tenant**,
+un tenant peut également apporter sa propre clé API et faire en sorte que le
+Designer l'utilise.
+
+## Deux sources, une seule règle
+
+Une ligne de fournisseur possède une **source** :
+
+- **operator** — définie par l'opérateur de plateforme, en lecture seule pour le tenant.
+- **tenant** — créée et possédée par l'administrateur de tenant.
+
+La règle de résolution est simple et prévisible : **la clé de l'opérateur
+l'emporte toujours**. Une clé de tenant ne peut remplir qu'un rôle de composer
+que l'opérateur n'a *pas* déjà attribué. Un tenant ne peut jamais prendre le
+contrôle (ou « voler ») d'un rôle géré par l'opérateur.
+
+<Aside type="note">
+Cela préserve la gouvernance centrale. Si votre plateforme impose un fournisseur
+spécifique pour, disons, le composer Agentic Worker, l'attribuer comme rôle
+d'opérateur garantit que chaque tenant l'utilise — la propre clé d'un tenant
+peut toujours servir les rôles que vous avez laissés ouverts.
+</Aside>
+
+## Rôles de composer
+
+Chaque fournisseur LLM peut être attribué à un ou plusieurs **rôles de
+composer**, qui correspondent aux surfaces du Designer qui les utilisent :
+
+| Rôle | Alimente |
+| --- | --- |
+| `flow_editor_composer` | Le générateur de flux (BUILD / EDIT) et le chat IA |
+| `agentic_worker_composer` | Le composer Agentic Worker / DW |
+| `sorla_composer` | Le studio de création SoRLa |
+| `operala_composer` | Le panneau d'opérations OperaLa |
+| `telco_playbook_composer` | La création de playbook telco |
+
+Un rôle est possédé par exactement un fournisseur. L'attribution d'un rôle déjà
+possédé par un opérateur est rejetée, de sorte qu'il n'y a jamais de question
+ambiguë du type « quelle clé sert cette surface ».
+
+## Flux pour l'administrateur de tenant
+
+Dans le Designer, un administrateur de tenant ouvre **Settings → Credentials →
+My LLM providers**. De là, il peut :
+
+- ajouter un fournisseur (OpenAI, Anthropic, Azure OpenAI, Google et d'autres)
+  avec sa propre clé API, une URL de base optionnelle et un modèle,
+- tester la clé avant de l'enregistrer,
+- l'attribuer à n'importe quel rôle de composer que l'opérateur n'a pas réservé,
+- supprimer un fournisseur qu'il possède.
+
+Les rôles réservés par l'opérateur sont affichés mais désactivés — un signal
+clair de ce qui est géré de manière centralisée par rapport à ce que le tenant
+contrôle.
+
+## Comment les clés sont gérées
+
+- Les clés de tenant sont chiffrées au repos et déchiffrées uniquement en
+  mémoire lorsqu'une requête en a besoin.
+- Le Designer résout ses piles LLM depuis l'administration et les actualise dans
+  un délai d'environ 30 secondes après un changement, de sorte que l'ajout ou la
+  rotation d'une clé prend effet sans redémarrage.
+- Un rôle non attribué revient à la configuration de démarrage locale du Designer
+  lorsqu'elle a été fournie ; sans clé pour un rôle, cette surface signale
+  qu'aucun fournisseur n'est configuré au lieu d'en utiliser un mauvais
+  silencieusement.

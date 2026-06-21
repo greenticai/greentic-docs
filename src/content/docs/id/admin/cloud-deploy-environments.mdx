@@ -1,0 +1,108 @@
+---
+title: Environment Cloud Deploy
+description: Konfigurasikan environment cloud deploy per-tenant (dan per-team) di konsol admin, kontrol target deploy mana yang boleh digunakan tenant, dan deploy sebuah pack ke environment terkelola dari Designer.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Environment Cloud Deploy
+
+Sebuah **environment deploy** adalah tujuan cloud bernama — Greentic Cloud, AWS,
+Azure, atau GCP — yang dikonfigurasi oleh operator platform untuk sebuah tenant. Begitu sebuah
+environment ada, administrator tenant dapat men-deploy pack yang sudah dipublikasikan ke environment itu
+langsung dari Designer, tanpa pernah menyentuh kredensial cloud atau
+deployer CLI.
+
+Halaman ini membahas tiga bagian yang membuat itu berjalan:
+
+1. **Environment** — tujuan bernama yang dikonfigurasi operator per tenant (dan opsional per team).
+2. **Plugin deploy** — target deploy mana yang boleh digunakan sebuah tenant.
+3. **Cloud deploy dari Designer** — alur swalayan tenant-admin.
+
+## Peran sekilas
+
+| Tindakan | Siapa |
+| --- | --- |
+| Membuat / mengedit / menghapus sebuah environment | Hanya operator platform |
+| Mengonfigurasi kredensial bring-your-own-cloud | Hanya operator platform |
+| Mengaktifkan / menonaktifkan target deploy untuk sebuah tenant | Hanya operator platform |
+| Mendaftar environment dan men-deploy sebuah pack ke salah satunya | Administrator tenant (di Designer) |
+
+Pembagian ini disengaja: operator memiliki akun cloud dan kredensial,
+tenant memiliki keputusan tentang *apa* yang dikirim dan *kapan*.
+
+## Environment
+
+Di konsol admin, buka sebuah tenant dan pergi ke tab **Environments**. Setiap
+environment memiliki:
+
+- sebuah **name** (unik dalam tenant),
+- sebuah **target** — `greentic_cloud`, `aws`, `azure`, atau `gcp`,
+- sebuah **region** opsional,
+- sebuah **scope** opsional — seluruh tenant (terlihat oleh setiap team) atau dipasangkan ke satu team,
+- sebuah **status** — `idle`, `provisioning`, `live`, atau `error`.
+
+### Greentic Cloud vs bring-your-own-cloud
+
+- **Greentic Cloud** (`greentic_cloud`) men-deploy dengan role terkelola
+  milik platform sendiri. Tidak diperlukan kredensial per-tenant — ini berfungsi segera setelah
+  environment dibuat.
+- **AWS / Azure / GCP** adalah *bring-your-own-cloud* (BYOC). Sebelum sebuah tenant dapat
+  men-deploy ke salah satunya, operator harus melampirkan kredensial cloud environment tersebut.
+  Sampai saat itu, percobaan deploy ditolak dengan pesan "configure credentials
+  first" yang jelas.
+
+<Aside type="note">
+Kredensial BYOC disimpan sebagai referensi secret pada environment dan
+tidak pernah dikembalikan ke Designer atau ditampilkan kepada pengguna tenant. Designer hanya
+pernah mengetahui apakah kredensial ada, bukan nilainya.
+</Aside>
+
+### Environment per-team
+
+Sebuah environment dapat di-scope ke satu team alih-alih seluruh tenant.
+Environment yang di-scope ke team hanya terlihat oleh anggota team tersebut, dan
+kredensial BYOC-nya terisolasi ke scope secret team pemilik. Biarkan
+scope sebagai *seluruh tenant* untuk berbagi satu environment di setiap team.
+
+## Plugin deploy
+
+Tidak setiap tenant seharusnya bisa mengirim ke setiap cloud. **Plugin deploy** memungkinkan
+operator mengaktifkan atau menonaktifkan target deploy individual, per tenant dan per team.
+
+Di tab **Environments**, toggle target-deploy mengontrol target mana yang
+muncul saat membuat environment. Katalog target yang tersedia
+bersumber dari deployer itu sendiri (hanya target yang benar-benar dapat berjalan yang
+ditawarkan — `greentic_cloud`, `aws`, `azure`, `gcp`), sehingga daftarnya selalu cocok
+dengan apa yang dapat di-deploy platform.
+
+Resolusi bersifat **team → tenant → default-enabled**: pengaturan tingkat-team menang
+atas pengaturan tingkat-tenant, dan apa pun yang dibiarkan tidak diatur diaktifkan secara default.
+Membuat environment untuk target yang dinonaktifkan akan diblokir.
+
+## Cloud deploy dari Designer
+
+Begitu operator telah mengonfigurasi setidaknya satu environment, sebuah
+administrator tenant dapat men-deploy dari Designer:
+
+1. Buka **Settings → Credentials**.
+2. Klik **Cloud deploy**.
+3. Masukkan **referensi pack** yang akan dikirim (misalnya `my-pack@1.0.0`).
+4. Pilih environment target dan klik **Deploy**.
+
+Deploy dimasukkan ke antrean dan environment berpindah ke `provisioning`. Jika
+environment yang dipilih adalah target BYOC yang kredensialnya belum dikonfigurasi
+, deploy ditolak dengan alasan yang ditujukan untuk operator alih-alih
+gagal secara diam-diam.
+
+<Aside type="tip">
+Tombol **Cloud deploy** hanya muncul untuk administrator tenant. Anggota
+biasa tidak melihatnya, dan API yang mendasarinya menolak panggilan mereka.
+</Aside>
+
+### Designer Standalone
+
+Ketika Designer berjalan tanpa server admin (mode standalone), cloud deploy
+sederhananya tidak ditawarkan: daftar environment kosong dan panel menjelaskan
+bahwa tidak ada server admin yang dikonfigurasi. Deploy lokal dan berbasis-bundle melalui
+wizard deploy tidak terpengaruh.

@@ -1,0 +1,71 @@
+---
+title: Pluggable Activity Types
+description: How Greentic flows dispatch work to separate runtimes through native activity nodes like sorla.call and operala.call, and how a new activity type is added.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Pluggable Activity Types
+
+A flow is a graph of nodes. Most nodes run a WASM component in-process, but some
+nodes hand work off to a **separate runtime** — SoRLa, OperaLa, and (in
+future) others — and wait for the result. These are **activity types**:
+native flow nodes whose job is to dispatch to an external runtime over the
+messaging bus.
+
+Today the platform ships these dispatch activity types:
+
+| Node | Dispatches to | Status |
+| --- | --- | --- |
+| `sorla.call` | the SoRLa runtime | Live |
+| `operala.call` | the OperaLa runtime | Live |
+| `telco-x.call` | a telco-x runtime | Wired, inert until a runtime exists |
+
+## How dispatch works
+
+A dispatch node does not run business logic itself. It packages the node's
+input, publishes a request to the runtime over NATS, and either:
+
+- **awaits** the response (the flow pauses and resumes when the result
+  arrives), or
+- **fires and forgets** (the flow continues immediately).
+
+All dispatch nodes share one mechanism — the same request/response contract and
+the same correlation handling — so they behave consistently regardless of which
+runtime they target.
+
+<Aside type="note">
+A dispatch node is *inert* until its target runtime is actually deployed and
+reachable on the bus. `telco-x.call`, for example, is fully wired into both the
+runner and the Designer, but it does nothing until a telco-x runtime is
+running — which is exactly what "wire-ready" means.
+</Aside>
+
+## Why this matters for the Designer
+
+The Designer's flow builder grounds its palette in a **capability catalog**.
+Each activity type appears in that catalog as a dispatchable capability, which
+means the AI flow builder can place a `sorla.call` or `operala.call` node when a
+user describes work that belongs to one of those runtimes — the same way it
+places any other node.
+
+## Adding a new activity type
+
+The design goal is that a brand-new activity type costs almost nothing to add:
+
+1. **One catalog entry** in the Designer's baseline capability catalog, marked
+   as a dispatch capability. This makes the node discoverable by the AI flow
+   builder.
+2. **One line** in the runner that recognises the node as a native dispatch
+   operation.
+
+The runner already knows how to execute any dispatch node generically, so no
+new execution code is needed — the node simply targets a different runtime
+name. When that runtime is later deployed, the previously inert node becomes
+live with no further changes.
+
+<Aside type="tip">
+This is the same pattern used for `sorla.call` and `operala.call`, and it is
+how `telco-x.call` was added ahead of its runtime. Adding the runtime later
+"lights up" the node without touching the flow editor or the runner again.
+</Aside>

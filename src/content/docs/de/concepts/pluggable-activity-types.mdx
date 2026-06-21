@@ -1,0 +1,76 @@
+---
+title: Pluggable Activity Types
+description: Wie Greentic-Flows Arbeit über native Activity-Knoten wie sorla.call und operala.call an separate Runtimes verteilen und wie ein neuer Activity-Typ hinzugefügt wird.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Pluggable Activity Types
+
+Ein Flow ist ein Graph aus Knoten. Die meisten Knoten führen eine
+WASM-Komponente in-process aus, aber einige Knoten geben die Arbeit an eine
+**separate Runtime** ab — SoRLa, OperaLa und (in Zukunft) andere — und warten
+auf das Ergebnis. Dies sind **Activity Types**: native Flow-Knoten, deren Aufgabe
+es ist, an eine externe Runtime über den Messaging-Bus zu verteilen.
+
+Heute liefert die Plattform diese Dispatch-Activity-Typen aus:
+
+| Knoten | Verteilt an | Status |
+| --- | --- | --- |
+| `sorla.call` | die SoRLa-Runtime | Live |
+| `operala.call` | die OperaLa-Runtime | Live |
+| `telco-x.call` | eine telco-x-Runtime | Verdrahtet, inaktiv bis eine Runtime existiert |
+
+## Wie das Dispatching funktioniert
+
+Ein Dispatch-Knoten führt selbst keine Geschäftslogik aus. Er verpackt die
+Eingabe des Knotens, veröffentlicht eine Anfrage an die Runtime über NATS und
+entweder:
+
+- **wartet** auf die Antwort (der Flow pausiert und wird fortgesetzt, wenn das
+  Ergebnis eintrifft), oder
+- **feuert und vergisst** (der Flow läuft sofort weiter).
+
+Alle Dispatch-Knoten teilen sich einen Mechanismus — denselben
+Request/Response-Vertrag und dieselbe Korrelationsbehandlung —, sodass sie sich
+konsistent verhalten, unabhängig davon, auf welche Runtime sie abzielen.
+
+<Aside type="note">
+Ein Dispatch-Knoten ist *inaktiv*, bis seine Ziel-Runtime tatsächlich
+bereitgestellt und auf dem Bus erreichbar ist. `telco-x.call` ist zum Beispiel
+vollständig sowohl in den Runner als auch in den Designer verdrahtet, aber er tut
+nichts, bis eine telco-x-Runtime läuft — was genau das bedeutet, was mit
+„wire-ready" gemeint ist.
+</Aside>
+
+## Warum das für den Designer wichtig ist
+
+Der Flow-Builder des Designers verankert seine Palette in einem
+**Capability-Katalog**. Jeder Activity-Typ erscheint in diesem Katalog als
+verteilbare Capability, was bedeutet, dass der KI-Flow-Builder einen
+`sorla.call`- oder `operala.call`-Knoten platzieren kann, wenn ein Benutzer
+Arbeit beschreibt, die zu einer dieser Runtimes gehört — genauso, wie er jeden
+anderen Knoten platziert.
+
+## Einen neuen Activity-Typ hinzufügen
+
+Das Designziel ist, dass ein brandneuer Activity-Typ fast nichts kostet, um ihn
+hinzuzufügen:
+
+1. **Ein Katalogeintrag** im Basis-Capability-Katalog des Designers, markiert als
+   Dispatch-Capability. Dies macht den Knoten für den KI-Flow-Builder
+   auffindbar.
+2. **Eine Zeile** im Runner, die den Knoten als native Dispatch-Operation
+   erkennt.
+
+Der Runner weiß bereits, wie er jeden Dispatch-Knoten generisch ausführt, sodass
+kein neuer Ausführungscode benötigt wird — der Knoten zielt einfach auf einen
+anderen Runtime-Namen ab. Wenn diese Runtime später bereitgestellt wird, wird der
+zuvor inaktive Knoten ohne weitere Änderungen aktiv.
+
+<Aside type="tip">
+Dies ist dasselbe Muster, das für `sorla.call` und `operala.call` verwendet wird,
+und genau so wurde `telco-x.call` vor seiner Runtime hinzugefügt. Das spätere
+Hinzufügen der Runtime „erweckt" den Knoten, ohne den Flow-Editor oder den Runner
+erneut anzufassen.
+</Aside>

@@ -1,0 +1,74 @@
+---
+title: Types d'activité enfichables
+description: Comment les flux Greentic répartissent le travail vers des runtimes séparés au moyen de nœuds d'activité natifs tels que sorla.call et operala.call, et comment ajouter un nouveau type d'activité.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Types d'activité enfichables
+
+Un flux est un graphe de nœuds. La plupart des nœuds exécutent un composant WASM
+en cours de processus, mais certains nœuds transfèrent le travail à un **runtime
+séparé** — SoRLa, OperaLa et (à l'avenir) d'autres — et attendent le résultat.
+Ce sont des **types d'activité** : des nœuds de flux natifs dont le rôle est de
+répartir vers un runtime externe via le bus de messagerie.
+
+Aujourd'hui, la plateforme livre ces types d'activité de répartition :
+
+| Nœud | Répartit vers | Statut |
+| --- | --- | --- |
+| `sorla.call` | le runtime SoRLa | Actif |
+| `operala.call` | le runtime OperaLa | Actif |
+| `telco-x.call` | un runtime telco-x | Câblé, inerte jusqu'à ce qu'un runtime existe |
+
+## Comment fonctionne la répartition
+
+Un nœud de répartition n'exécute pas lui-même la logique métier. Il empaquette
+l'entrée du nœud, publie une requête vers le runtime via NATS, et soit :
+
+- **attend** la réponse (le flux est mis en pause et reprend lorsque le résultat
+  arrive), soit
+- **lance et oublie** (le flux continue immédiatement).
+
+Tous les nœuds de répartition partagent un seul mécanisme — le même contrat
+requête/réponse et la même gestion de corrélation — de sorte qu'ils se comportent
+de manière cohérente quel que soit le runtime qu'ils ciblent.
+
+<Aside type="note">
+Un nœud de répartition est *inerte* jusqu'à ce que son runtime cible soit
+réellement déployé et accessible sur le bus. `telco-x.call`, par exemple, est
+entièrement câblé à la fois dans le runner et dans le Designer, mais il ne fait
+rien tant qu'un runtime telco-x n'est pas en cours d'exécution — ce qui est
+exactement ce que signifie « prêt à câbler ».
+</Aside>
+
+## Pourquoi cela compte pour le Designer
+
+Le générateur de flux du Designer ancre sa palette dans un **catalogue de
+capacités**. Chaque type d'activité apparaît dans ce catalogue comme une
+capacité répartissable, ce qui signifie que le générateur de flux par IA peut
+placer un nœud `sorla.call` ou `operala.call` lorsqu'un utilisateur décrit un
+travail qui relève de l'un de ces runtimes — de la même manière qu'il place tout
+autre nœud.
+
+## Ajouter un nouveau type d'activité
+
+L'objectif de conception est qu'un tout nouveau type d'activité ne coûte presque
+rien à ajouter :
+
+1. **Une entrée de catalogue** dans le catalogue de capacités de référence du
+   Designer, marquée comme capacité de répartition. Cela rend le nœud
+   découvrable par le générateur de flux par IA.
+2. **Une ligne** dans le runner qui reconnaît le nœud comme une opération de
+   répartition native.
+
+Le runner sait déjà exécuter n'importe quel nœud de répartition de manière
+générique, donc aucun nouveau code d'exécution n'est nécessaire — le nœud cible
+simplement un nom de runtime différent. Lorsque ce runtime est déployé plus
+tard, le nœud auparavant inerte devient actif sans aucune autre modification.
+
+<Aside type="tip">
+C'est le même modèle utilisé pour `sorla.call` et `operala.call`, et c'est ainsi
+que `telco-x.call` a été ajouté avant son runtime. Ajouter le runtime plus tard
+« allume » le nœud sans toucher à nouveau à l'éditeur de flux ni au runner.
+</Aside>

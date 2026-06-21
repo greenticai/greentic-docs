@@ -1,0 +1,77 @@
+---
+title: LLM-Provider pro Tenant
+description: Lassen Sie Tenants ihre eigenen LLM-API-Schlüssel für die KI-Funktionen des Designers mitbringen, während Operatoren die Kontrolle darüber behalten, welche Composer-Rollen zentral verwaltet werden.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# LLM-Provider pro Tenant
+
+Die KI-Funktionen des Designers — der Flow-Builder, der Agentic-Worker-Composer,
+die SoRLa- und OperaLa-Composer — laufen alle über ein Large Language Model.
+Standardmäßig konfiguriert ein Plattform-Operator diese Provider zentral. Mit
+**LLM-Providern pro Tenant** kann ein Tenant auch seinen eigenen API-Schlüssel
+mitbringen und den Designer damit nutzen lassen.
+
+## Zwei Quellen, eine Regel
+
+Eine Provider-Zeile hat eine **Quelle**:
+
+- **operator** — vom Plattform-Operator gesetzt, für den Tenant schreibgeschützt.
+- **tenant** — vom Tenant-Administrator erstellt und besessen.
+
+Die Auflösungsregel ist einfach und vorhersehbar: **der Schlüssel des Operators
+gewinnt immer**. Ein Tenant-Schlüssel kann nur eine Composer-Rolle belegen, die
+der Operator *nicht* bereits zugewiesen hat. Ein Tenant kann niemals eine Rolle
+übernehmen (oder „stehlen"), die der Operator verwaltet.
+
+<Aside type="note">
+Dadurch bleibt die zentrale Governance erhalten. Wenn Ihre Plattform einen
+bestimmten Provider vorschreibt, etwa für den Agentic-Worker-Composer, garantiert
+die Zuweisung als Operator-Rolle, dass jeder Tenant ihn verwendet — der eigene
+Schlüssel eines Tenants kann weiterhin die Rollen bedienen, die Sie offen
+gelassen haben.
+</Aside>
+
+## Composer-Rollen
+
+Jeder LLM-Provider kann einer oder mehreren **Composer-Rollen** zugewiesen
+werden, die den Designer-Oberflächen entsprechen, die sie verwenden:
+
+| Rolle | Versorgt |
+| --- | --- |
+| `flow_editor_composer` | Den Flow-Builder (BUILD / EDIT) und den KI-Chat |
+| `agentic_worker_composer` | Den Agentic-Worker- / DW-Composer |
+| `sorla_composer` | Das SoRLa-Authoring-Studio |
+| `operala_composer` | Das OperaLa-Operations-Panel |
+| `telco_playbook_composer` | Telco-Playbook-Authoring |
+
+Eine Rolle gehört genau einem Provider. Das Zuweisen einer Rolle, die ein
+Operator bereits besitzt, wird abgelehnt, sodass es nie eine mehrdeutige Frage
+„welcher Schlüssel bedient diese Oberfläche" gibt.
+
+## Ablauf für Tenant-Administratoren
+
+Im Designer öffnet ein Tenant-Administrator **Settings → Credentials → My LLM
+providers**. Von dort aus können sie:
+
+- einen Provider hinzufügen (OpenAI, Anthropic, Azure OpenAI, Google und weitere)
+  mit ihrem eigenen API-Schlüssel, optionaler Basis-URL und Modell,
+- den Schlüssel vor dem Speichern testen,
+- ihn jeder Composer-Rolle zuweisen, die der Operator nicht reserviert hat,
+- einen Provider entfernen, den sie besitzen.
+
+Vom Operator reservierte Rollen werden angezeigt, aber deaktiviert — ein klares
+Signal dafür, was zentral verwaltet wird und was der Tenant steuert.
+
+## Wie Schlüssel gehandhabt werden
+
+- Tenant-Schlüssel werden im Ruhezustand verschlüsselt und nur im Arbeitsspeicher
+  entschlüsselt, wenn eine Anfrage sie benötigt.
+- Der Designer löst seine LLM-Stacks aus dem Admin auf und aktualisiert sie
+  innerhalb von etwa 30 Sekunden nach einer Änderung, sodass das Hinzufügen oder
+  Rotieren eines Schlüssels ohne Neustart wirksam wird.
+- Eine nicht zugewiesene Rolle greift auf die lokale Startkonfiguration des
+  Designers zurück, sofern eine bereitgestellt wurde; ohne Schlüssel für eine
+  Rolle meldet diese Oberfläche, dass kein Provider konfiguriert ist, anstatt
+  stillschweigend den falschen zu verwenden.

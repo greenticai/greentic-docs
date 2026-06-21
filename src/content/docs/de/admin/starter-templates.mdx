@@ -1,0 +1,49 @@
+---
+title: Starter-Vorlagen
+description: Kuratieren Sie Starter-Vorlagen pro Tenant (und pro Team) in der Admin-Konsole, damit Benutzer ein neues Projekt von einem geprüften Ausgangspunkt aus beginnen können statt von einer leeren Leinwand.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Starter-Vorlagen
+
+Eine **Starter-Vorlage** ist ein geprüfter Ausgangspunkt, den ein Benutzer beim
+Erstellen eines neuen Projekts im Designer auswählen kann. Statt einer leeren
+Leinwand beginnen sie mit einem Flow, der bereits die Konventionen Ihrer
+Organisation widerspiegelt.
+
+Operatoren kuratieren, welche Vorlagen ein Tenant — oder ein bestimmtes Team —
+sieht, sodass die Galerie, die ein Benutzer öffnet, immer für ihn relevant ist.
+
+## Vorlagen kuratieren (Operator)
+
+In der Admin-Konsole wählt ein Plattform-Operator aus, welche Vorlagen für einen
+Tenant angezeigt werden. Die Kuratierung wird pro Benutzer aufgelöst: die
+Galerie, die ein Benutzer sieht, ist die Vereinigung der tenantweiten Vorlagen
+und der Vorlagen, die für die Teams kuratiert wurden, denen er angehört.
+
+<Aside type="note">
+Da die aufgelöste Menge von den Team-Mitgliedschaften eines Benutzers abhängt,
+können zwei Benutzer im selben Tenant unterschiedliche Starter-Galerien sehen —
+jeder sieht genau die für seine Teams kuratierten Vorlagen plus die tenantweiten.
+</Aside>
+
+## Von einer Vorlage ausgehen (Benutzer)
+
+Im Designer öffnet ein Benutzer den Dialog **New project** und wählt **Start
+from a template**. Die Auswahl listet die kuratierten Starter auf; das Auswählen
+eines davon füllt das neue Projekt mit dem Flow dieser Vorlage vor, bereit zum
+Bearbeiten.
+
+Die Auswahl der leeren Option funktioniert weiterhin genau wie zuvor — Vorlagen
+sind ein optionaler Vorsprung, niemals eine Voraussetzung.
+
+## Was einen guten Starter ausmacht
+
+- Ein klarer, beschreibender Name und eine Zusammenfassung, damit ein Benutzer
+  die richtige auswählen kann, ohne sie zu öffnen.
+- Ein Flow, der vollständig genug ist, um zu laufen, aber generisch genug, um
+  ihn anzupassen.
+- Konventionen, die Ihre Teams befolgen sollten — Benennung, Knotenstruktur,
+  Kanal-Verdrahtung — fest eingebaut, sodass die Vorlage ebenso lehrt wie sie
+  beschleunigt.

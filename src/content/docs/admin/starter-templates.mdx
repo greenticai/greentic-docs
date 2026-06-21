@@ -1,0 +1,45 @@
+---
+title: Starter Templates
+description: Curate starter templates per tenant (and per team) in the admin console so users can begin a new project from a vetted starting point instead of a blank canvas.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Starter Templates
+
+A **starter template** is a vetted starting point a user can pick when creating
+a new project in the Designer. Instead of a blank canvas, they begin from a
+flow that already reflects your organisation's conventions.
+
+Operators curate which templates a tenant — or a specific team — sees, so the
+gallery a user opens is always relevant to them.
+
+## Curating templates (operator)
+
+In the admin console, a platform operator chooses which templates are surfaced
+for a tenant. Curation is resolved per user: the gallery a user sees is the
+union of the tenant-wide templates and the templates curated for the teams they
+belong to.
+
+<Aside type="note">
+Because the resolved set depends on a user's team memberships, two users in the
+same tenant can see different starter galleries — each sees exactly the
+templates curated for their teams plus the tenant-wide ones.
+</Aside>
+
+## Starting from a template (user)
+
+In the Designer, a user opens the **New project** dialog and chooses **Start
+from a template**. The picker lists the curated starters; selecting one
+pre-fills the new project with that template's flow, ready to edit.
+
+Choosing the blank option still works exactly as before — templates are an
+optional head start, never a requirement.
+
+## What makes a good starter
+
+- A clear, descriptive name and summary, so a user can pick the right one
+  without opening it.
+- A flow that is complete enough to run, but generic enough to adapt.
+- Conventions your teams should follow — naming, node structure, channel wiring
+  — baked in, so the template teaches as well as accelerates.

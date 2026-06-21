@@ -1,0 +1,114 @@
+---
+title: Cloud-Deploy-Umgebungen
+description: Konfigurieren Sie pro Tenant (und pro Team) Cloud-Deploy-Umgebungen in der Admin-Konsole, steuern Sie, welche Deploy-Ziele ein Tenant verwenden darf, und stellen Sie ein Pack aus dem Designer in eine verwaltete Umgebung bereit.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Cloud-Deploy-Umgebungen
+
+Eine **Deploy-Umgebung** ist ein benanntes Cloud-Ziel — Greentic Cloud, AWS,
+Azure oder GCP — das ein Plattform-Operator für einen Tenant konfiguriert.
+Sobald eine Umgebung existiert, kann ein Tenant-Administrator ein
+veröffentlichtes Pack direkt aus dem Designer dorthin bereitstellen, ohne jemals
+Cloud-Anmeldedaten oder die Deployer-CLI zu berühren.
+
+Diese Seite behandelt die drei Bausteine, die das ermöglichen:
+
+1. **Umgebungen** — die benannten Ziele, die ein Operator pro Tenant (und optional pro Team) konfiguriert.
+2. **Deploy-Plugins** — welche Deploy-Ziele ein Tenant verwenden darf.
+3. **Cloud-Deploy aus dem Designer** — der Self-Service-Ablauf für Tenant-Administratoren.
+
+## Rollen auf einen Blick
+
+| Aktion | Wer |
+| --- | --- |
+| Umgebung erstellen / bearbeiten / löschen | Nur Plattform-Operator |
+| Bring-your-own-Cloud-Anmeldedaten konfigurieren | Nur Plattform-Operator |
+| Deploy-Ziele für einen Tenant aktivieren / deaktivieren | Nur Plattform-Operator |
+| Umgebungen auflisten und ein Pack dorthin bereitstellen | Tenant-Administrator (im Designer) |
+
+Die Aufteilung ist bewusst gewählt: Operatoren besitzen die Cloud-Konten und
+Anmeldedaten, Tenants besitzen die Entscheidung darüber, *was* ausgeliefert wird
+und *wann*.
+
+## Umgebungen
+
+Öffnen Sie in der Admin-Konsole einen Tenant und wechseln Sie zum Tab
+**Environments**. Jede Umgebung hat:
+
+- einen **Namen** (eindeutig innerhalb des Tenants),
+- ein **Ziel** — `greentic_cloud`, `aws`, `azure` oder `gcp`,
+- eine optionale **Region**,
+- einen optionalen **Geltungsbereich** — tenantweit (für jedes Team sichtbar) oder an ein einzelnes Team gebunden,
+- einen **Status** — `idle`, `provisioning`, `live` oder `error`.
+
+### Greentic Cloud vs. Bring-your-own-Cloud
+
+- **Greentic Cloud** (`greentic_cloud`) stellt mit der eigenen verwalteten Rolle
+  der Plattform bereit. Es werden keine tenantspezifischen Anmeldedaten benötigt
+  — es funktioniert, sobald die Umgebung erstellt wurde.
+- **AWS / Azure / GCP** sind *Bring-your-own-Cloud* (BYOC). Bevor ein Tenant in
+  eine davon bereitstellen kann, muss ein Operator die Cloud-Anmeldedaten dieser
+  Umgebung hinterlegen. Bis dahin wird ein Deploy-Versuch mit einer klaren
+  Meldung „configure credentials first" abgelehnt.
+
+<Aside type="note">
+BYOC-Anmeldedaten werden als Secret-Referenz auf der Umgebung gespeichert und
+niemals an den Designer zurückgegeben oder Tenant-Benutzern angezeigt. Der
+Designer erfährt nur, ob Anmeldedaten vorhanden sind, nicht deren Wert.
+</Aside>
+
+### Umgebungen pro Team
+
+Eine Umgebung kann auf ein einzelnes Team statt auf den gesamten Tenant
+beschränkt werden. Team-gebundene Umgebungen sind nur für Mitglieder dieses
+Teams sichtbar, und ihre BYOC-Anmeldedaten sind auf den Secret-Geltungsbereich
+des besitzenden Teams isoliert. Belassen Sie den Geltungsbereich auf
+*tenantweit*, um eine Umgebung über alle Teams hinweg zu teilen.
+
+## Deploy-Plugins
+
+Nicht jeder Tenant sollte in jede Cloud ausliefern können. **Deploy-Plugins**
+ermöglichen es einem Operator, einzelne Deploy-Ziele pro Tenant und pro Team ein-
+oder auszuschalten.
+
+Im Tab **Environments** steuern die Deploy-Ziel-Schalter, welche Ziele beim
+Erstellen einer Umgebung erscheinen. Der Katalog der verfügbaren Ziele stammt
+vom Deployer selbst (nur Ziele, die tatsächlich ausgeführt werden können, werden
+angeboten — `greentic_cloud`, `aws`, `azure`, `gcp`), sodass die Liste immer dem
+entspricht, was die Plattform bereitstellen kann.
+
+Die Auflösung erfolgt **Team → Tenant → standardmäßig aktiviert**: eine
+Einstellung auf Team-Ebene hat Vorrang vor der auf Tenant-Ebene, und alles, was
+nicht gesetzt ist, ist standardmäßig aktiviert. Das Erstellen einer Umgebung für
+ein deaktiviertes Ziel ist blockiert.
+
+## Cloud-Deploy aus dem Designer
+
+Sobald ein Operator mindestens eine Umgebung konfiguriert hat, kann ein
+Tenant-Administrator aus dem Designer bereitstellen:
+
+1. Öffnen Sie **Settings → Credentials**.
+2. Klicken Sie auf **Cloud deploy**.
+3. Geben Sie die **Pack-Referenz** ein, die ausgeliefert werden soll (zum Beispiel `my-pack@1.0.0`).
+4. Wählen Sie eine Zielumgebung und klicken Sie auf **Deploy**.
+
+Der Deploy wird in die Warteschlange gestellt und die Umgebung wechselt zu
+`provisioning`. Wenn die gewählte Umgebung ein BYOC-Ziel ist, dessen
+Anmeldedaten noch nicht konfiguriert wurden, wird der Deploy mit der für den
+Operator bestimmten Begründung abgelehnt, anstatt stillschweigend
+fehlzuschlagen.
+
+<Aside type="tip">
+Die Schaltfläche **Cloud deploy** erscheint nur für Tenant-Administratoren.
+Reguläre Mitglieder sehen sie nicht, und die zugrunde liegende API lehnt ihre
+Aufrufe ab.
+</Aside>
+
+### Standalone-Designer
+
+Wenn der Designer ohne Admin-Server läuft (Standalone-Modus), wird Cloud-Deploy
+schlicht nicht angeboten: die Umgebungsliste ist leer und das Panel erklärt, dass
+kein Admin-Server konfiguriert ist. Lokale und bundle-basierte Deploys über den
+Deploy-Assistenten sind davon nicht betroffen.

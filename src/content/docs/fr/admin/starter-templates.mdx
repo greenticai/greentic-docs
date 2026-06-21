@@ -1,0 +1,52 @@
+---
+title: Modèles de démarrage
+description: Sélectionnez des modèles de démarrage par tenant (et par équipe) dans la console d'administration afin que les utilisateurs puissent commencer un nouveau projet à partir d'un point de départ validé plutôt que d'une page blanche.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Modèles de démarrage
+
+Un **modèle de démarrage** est un point de départ validé qu'un utilisateur peut
+choisir lors de la création d'un nouveau projet dans le Designer. Au lieu d'une
+page blanche, il commence à partir d'un flux qui reflète déjà les conventions de
+votre organisation.
+
+Les opérateurs sélectionnent quels modèles un tenant — ou une équipe spécifique
+— voit, de sorte que la galerie qu'un utilisateur ouvre est toujours pertinente
+pour lui.
+
+## Sélectionner des modèles (opérateur)
+
+Dans la console d'administration, un opérateur de plateforme choisit quels
+modèles sont mis en avant pour un tenant. La sélection est résolue par
+utilisateur : la galerie qu'un utilisateur voit est l'union des modèles à
+l'échelle du tenant et des modèles sélectionnés pour les équipes auxquelles il
+appartient.
+
+<Aside type="note">
+Comme l'ensemble résolu dépend des appartenances d'équipe d'un utilisateur, deux
+utilisateurs du même tenant peuvent voir des galeries de démarrage différentes —
+chacun voit exactement les modèles sélectionnés pour ses équipes ainsi que ceux
+à l'échelle du tenant.
+</Aside>
+
+## Démarrer à partir d'un modèle (utilisateur)
+
+Dans le Designer, un utilisateur ouvre la boîte de dialogue **New project** et
+choisit **Start from a template**. Le sélecteur liste les modèles de démarrage
+sélectionnés ; en choisir un pré-remplit le nouveau projet avec le flux de ce
+modèle, prêt à être modifié.
+
+Le choix de l'option vierge fonctionne toujours exactement comme avant — les
+modèles sont une longueur d'avance optionnelle, jamais une exigence.
+
+## Ce qui fait un bon modèle de démarrage
+
+- Un nom et un résumé clairs et descriptifs, afin qu'un utilisateur puisse
+  choisir le bon sans l'ouvrir.
+- Un flux suffisamment complet pour s'exécuter, mais suffisamment générique pour
+  s'adapter.
+- Les conventions que vos équipes devraient suivre — nommage, structure des
+  nœuds, câblage des canaux — intégrées, afin que le modèle enseigne autant qu'il
+  accélère.

@@ -1,0 +1,108 @@
+---
+title: Entornos de Despliegue en la Nube
+description: Configura entornos de despliegue en la nube por inquilino (y por equipo) en la consola de administración, controla qué destinos de despliegue puede usar un inquilino y despliega un pack a un entorno gestionado desde el Designer.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Entornos de Despliegue en la Nube
+
+Un **entorno de despliegue** es un destino en la nube con nombre — Greentic Cloud, AWS,
+Azure o GCP — que un operador de la plataforma configura para un inquilino. Una vez que un
+entorno existe, un administrador de inquilino puede desplegar un pack publicado en él
+directamente desde el Designer, sin tener que tocar nunca las credenciales de la nube ni el
+CLI del deployer.
+
+Esta página cubre las tres piezas que hacen que eso funcione:
+
+1. **Entornos** — los destinos con nombre que un operador configura por inquilino (y opcionalmente por equipo).
+2. **Plugins de despliegue** — qué destinos de despliegue puede usar un inquilino.
+3. **Despliegue en la nube desde el Designer** — el flujo de autoservicio del administrador de inquilino.
+
+## Roles de un vistazo
+
+| Acción | Quién |
+| --- | --- |
+| Crear / editar / eliminar un entorno | Solo el operador de la plataforma |
+| Configurar credenciales de nube propia (bring-your-own-cloud) | Solo el operador de la plataforma |
+| Habilitar / deshabilitar destinos de despliegue para un inquilino | Solo el operador de la plataforma |
+| Listar entornos y desplegar un pack en uno | Administrador de inquilino (en el Designer) |
+
+La división es deliberada: los operadores son dueños de las cuentas y credenciales de la nube,
+los inquilinos son dueños de la decisión de *qué* enviar y *cuándo*.
+
+## Entornos
+
+En la consola de administración, abre un inquilino y ve a la pestaña **Environments**. Cada
+entorno tiene:
+
+- un **nombre** (único dentro del inquilino),
+- un **destino** — `greentic_cloud`, `aws`, `azure` o `gcp`,
+- una **región** opcional,
+- un **alcance** opcional — a nivel de inquilino (visible para todos los equipos) o fijado a un solo equipo,
+- un **estado** — `idle`, `provisioning`, `live` o `error`.
+
+### Greentic Cloud frente a nube propia (bring-your-own-cloud)
+
+- **Greentic Cloud** (`greentic_cloud`) despliega con el propio rol gestionado de la
+  plataforma. No se necesitan credenciales por inquilino — funciona en cuanto se crea el
+  entorno.
+- **AWS / Azure / GCP** son *nube propia* (BYOC). Antes de que un inquilino pueda
+  desplegar en uno, un operador debe adjuntar las credenciales de nube de ese entorno.
+  Hasta entonces, un intento de despliegue se rechaza con un mensaje claro de "configura las
+  credenciales primero".
+
+<Aside type="note">
+Las credenciales BYOC se almacenan como una referencia secreta en el entorno y nunca se
+devuelven al Designer ni se muestran a los usuarios del inquilino. El Designer solo
+llega a saber si las credenciales están presentes, no su valor.
+</Aside>
+
+### Entornos por equipo
+
+Un entorno puede limitarse a un solo equipo en lugar de a todo el inquilino.
+Los entornos limitados a un equipo son visibles solo para los miembros de ese equipo, y sus
+credenciales BYOC están aisladas en el alcance de secretos del equipo propietario. Deja el
+alcance como *a nivel de inquilino* para compartir un entorno entre todos los equipos.
+
+## Plugins de despliegue
+
+No todo inquilino debería poder enviar a toda nube. Los **plugins de despliegue** permiten
+a un operador activar o desactivar destinos de despliegue individuales, por inquilino y por equipo.
+
+En la pestaña **Environments**, los interruptores de destino de despliegue controlan qué destinos
+aparecen al crear un entorno. El catálogo de destinos disponibles proviene
+del propio deployer (solo se ofrecen los destinos que realmente pueden ejecutarse —
+`greentic_cloud`, `aws`, `azure`, `gcp`), de modo que la lista siempre coincide
+con lo que la plataforma puede desplegar.
+
+La resolución es **equipo → inquilino → habilitado por defecto**: una configuración a nivel de equipo gana
+sobre la de nivel de inquilino, y todo lo que quede sin establecer está habilitado por defecto.
+Crear un entorno para un destino deshabilitado está bloqueado.
+
+## Despliegue en la nube desde el Designer
+
+Una vez que un operador ha configurado al menos un entorno, un administrador de
+inquilino puede desplegar desde el Designer:
+
+1. Abre **Settings → Credentials**.
+2. Haz clic en **Cloud deploy**.
+3. Introduce la **referencia del pack** a enviar (por ejemplo `my-pack@1.0.0`).
+4. Elige un entorno de destino y haz clic en **Deploy**.
+
+El despliegue se pone en cola y el entorno pasa a `provisioning`. Si el
+entorno elegido es un destino BYOC cuyas credenciales aún no se han configurado,
+el despliegue se rechaza con el motivo orientado al operador en lugar de
+fallar silenciosamente.
+
+<Aside type="tip">
+El botón **Cloud deploy** solo aparece para los administradores de inquilino. Los miembros
+regulares no lo ven, y la API subyacente rechaza sus llamadas.
+</Aside>
+
+### Designer independiente
+
+Cuando el Designer se ejecuta sin un servidor de administración (modo independiente), el despliegue en la nube
+simplemente no se ofrece: la lista de entornos está vacía y el panel explica
+que no hay ningún servidor de administración configurado. Los despliegues locales y basados en bundles a través del
+asistente de despliegue no se ven afectados.

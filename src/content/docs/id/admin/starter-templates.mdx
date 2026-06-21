@@ -1,0 +1,45 @@
+---
+title: Template Starter
+description: Kurasi template starter per tenant (dan per team) di konsol admin sehingga pengguna dapat memulai proyek baru dari titik awal yang telah diverifikasi alih-alih kanvas kosong.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Template Starter
+
+Sebuah **template starter** adalah titik awal yang telah diverifikasi yang dapat dipilih pengguna saat membuat
+proyek baru di Designer. Alih-alih kanvas kosong, mereka memulai dari sebuah
+flow yang sudah mencerminkan konvensi organisasi Anda.
+
+Operator mengurasi template mana yang dilihat sebuah tenant — atau team tertentu — sehingga
+galeri yang dibuka pengguna selalu relevan bagi mereka.
+
+## Mengurasi template (operator)
+
+Di konsol admin, operator platform memilih template mana yang ditampilkan
+untuk sebuah tenant. Kurasi di-resolve per pengguna: galeri yang dilihat pengguna adalah
+gabungan dari template seluruh-tenant dan template yang dikurasi untuk team yang
+mereka ikuti.
+
+<Aside type="note">
+Karena set yang di-resolve bergantung pada keanggotaan team seorang pengguna, dua pengguna dalam
+tenant yang sama dapat melihat galeri starter yang berbeda — masing-masing melihat persis
+template yang dikurasi untuk team mereka ditambah template seluruh-tenant.
+</Aside>
+
+## Memulai dari sebuah template (pengguna)
+
+Di Designer, seorang pengguna membuka dialog **New project** dan memilih **Start
+from a template**. Pemilih menampilkan starter yang dikurasi; memilih salah satunya
+mengisi awal proyek baru dengan flow template tersebut, siap untuk diedit.
+
+Memilih opsi kosong tetap berfungsi persis seperti sebelumnya — template adalah
+awal yang opsional, tidak pernah menjadi keharusan.
+
+## Apa yang membuat starter yang baik
+
+- Nama dan ringkasan yang jelas dan deskriptif, sehingga pengguna dapat memilih yang tepat
+  tanpa membukanya.
+- Sebuah flow yang cukup lengkap untuk dijalankan, tetapi cukup generik untuk diadaptasi.
+- Konvensi yang harus diikuti team Anda — penamaan, struktur node, pengkabelan channel
+  — sudah tertanam, sehingga template mengajar sekaligus mempercepat.

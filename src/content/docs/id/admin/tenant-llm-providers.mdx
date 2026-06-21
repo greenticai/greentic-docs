@@ -1,0 +1,75 @@
+---
+title: Penyedia LLM Per-Tenant
+description: Memungkinkan tenant membawa API key LLM mereka sendiri untuk fitur AI Designer, sementara operator tetap mengontrol peran composer mana yang dikelola secara terpusat.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Penyedia LLM Per-Tenant
+
+Fitur AI Designer — flow builder, composer Agentic Worker,
+composer SoRLa dan OperaLa — semuanya berjalan melalui sebuah Large Language Model. Secara
+default, operator platform mengonfigurasi penyedia tersebut secara terpusat. Dengan
+**penyedia LLM per-tenant**, sebuah tenant juga dapat membawa API key sendiri dan membuat
+Designer menggunakannya.
+
+## Dua sumber, satu aturan
+
+Sebuah baris penyedia memiliki sebuah **source**:
+
+- **operator** — diatur oleh operator platform, read-only bagi tenant.
+- **tenant** — dibuat dan dimiliki oleh administrator tenant.
+
+Aturan resolusinya sederhana dan dapat diprediksi: **key operator selalu
+menang**. Sebuah key tenant hanya dapat mengisi peran composer yang *belum*
+ditugaskan oleh operator. Sebuah tenant tidak pernah dapat mengambil alih (atau "mencuri") peran yang
+dikelola operator.
+
+<Aside type="note">
+Ini menjaga tata kelola terpusat tetap utuh. Jika platform Anda mewajibkan penyedia
+tertentu untuk, misalnya, composer Agentic Worker, menugaskannya sebagai peran operator
+menjamin setiap tenant menggunakannya — key milik tenant sendiri tetap dapat melayani
+peran yang Anda biarkan terbuka.
+</Aside>
+
+## Peran composer
+
+Setiap penyedia LLM dapat ditugaskan ke satu atau lebih **peran composer**, yang memetakan
+ke permukaan Designer yang menggunakannya:
+
+| Peran | Menggerakkan |
+| --- | --- |
+| `flow_editor_composer` | Flow builder (BUILD / EDIT) dan chat AI |
+| `agentic_worker_composer` | Composer Agentic Worker / DW |
+| `sorla_composer` | Studio authoring SoRLa |
+| `operala_composer` | Panel operasi OperaLa |
+| `telco_playbook_composer` | Authoring playbook telco |
+
+Sebuah peran dimiliki oleh tepat satu penyedia. Menugaskan peran yang sudah dimiliki
+operator akan ditolak, sehingga tidak pernah ada pertanyaan ambigu "key mana yang melayani
+permukaan ini".
+
+## Alur administrator tenant
+
+Di Designer, seorang administrator tenant membuka **Settings → Credentials → My LLM
+providers**. Dari sana mereka dapat:
+
+- menambahkan penyedia (OpenAI, Anthropic, Azure OpenAI, Google, dan lainnya) dengan
+  API key mereka sendiri, base URL opsional, dan model,
+- menguji key sebelum menyimpan,
+- menugaskannya ke peran composer apa pun yang belum dicadangkan operator,
+- menghapus penyedia yang mereka miliki.
+
+Peran yang dicadangkan oleh operator ditampilkan tetapi dinonaktifkan — sinyal yang jelas tentang apa
+yang dikelola secara terpusat versus apa yang dikontrol tenant.
+
+## Bagaimana key ditangani
+
+- Key tenant dienkripsi saat disimpan (at rest) dan didekripsi hanya di memori ketika sebuah request
+  membutuhkannya.
+- Designer me-resolve stack LLM-nya dari admin dan menyegarkannya dalam
+  sekitar 30 detik setelah perubahan, sehingga menambah atau merotasi key berlaku tanpa
+  restart.
+- Peran yang tidak ditugaskan kembali ke konfigurasi startup lokal Designer
+  ketika satu disediakan; tanpa key untuk sebuah peran, permukaan itu melaporkan bahwa tidak ada
+  penyedia yang dikonfigurasi alih-alih secara diam-diam menggunakan yang salah.

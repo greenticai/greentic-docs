@@ -1,0 +1,75 @@
+---
+title: 每租户 LLM 提供商
+description: 让租户为 Designer 的 AI 功能自带 LLM API 密钥，同时操作员保持对哪些 composer 角色由中心管理的控制。
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# 每租户 LLM 提供商
+
+Designer 的 AI 功能——流程构建器、Agentic Worker composer、
+SoRLa 和 OperaLa composer——都通过一个大语言模型运行。
+默认情况下，平台操作员集中配置这些提供商。借助
+**每租户 LLM 提供商**，租户也可以自带 API 密钥，让
+Designer 使用它。
+
+## 两个来源，一条规则
+
+提供商行有一个**来源（source）**：
+
+- **operator**——由平台操作员设置，对租户只读。
+- **tenant**——由租户管理员创建和拥有。
+
+解析规则简单且可预测：**操作员的密钥始终
+优先**。租户密钥只能填补操作员*尚未*
+分配的 composer 角色。租户绝不能接管（或“窃取”）
+操作员管理的角色。
+
+<Aside type="note">
+这使中心治理保持完整。如果你的平台强制为某个角色（比如
+Agentic Worker composer）指定特定的提供商，将其
+分配为操作员角色可以保证每个租户都使用它——而租户自己的密钥仍可服务于
+你留空的那些角色。
+</Aside>
+
+## Composer 角色
+
+每个 LLM 提供商可以被分配给一个或多个 **composer 角色**，它们映射到
+使用它们的 Designer 界面：
+
+| 角色 | 驱动的界面 |
+| --- | --- |
+| `flow_editor_composer` | 流程构建器（BUILD / EDIT）和 AI 聊天 |
+| `agentic_worker_composer` | Agentic Worker / DW composer |
+| `sorla_composer` | SoRLa 创作工作室 |
+| `operala_composer` | OperaLa 操作面板 |
+| `telco_playbook_composer` | Telco playbook 创作 |
+
+一个角色恰好由一个提供商拥有。分配一个操作员
+已拥有的角色会被拒绝，因此绝不会出现“哪个密钥服务于这个
+界面”的歧义问题。
+
+## 租户管理员流程
+
+在 Designer 中，租户管理员打开 **Settings → Credentials → My LLM
+providers**。从那里他们可以：
+
+- 添加一个提供商（OpenAI、Anthropic、Azure OpenAI、Google 等），使用他们
+  自己的 API 密钥、可选的 base URL 和模型，
+- 在保存前测试密钥，
+- 将其分配给任何操作员未保留的 composer 角色，
+- 移除他们拥有的提供商。
+
+操作员保留的角色会显示但处于禁用状态——清晰地标示出哪些
+由中心管理，哪些由租户控制。
+
+## 密钥如何处理
+
+- 租户密钥在静态时加密，仅在请求
+  需要时才在内存中解密。
+- Designer 从管理端解析其 LLM 栈，并在变更后大约
+  30 秒内刷新它们，因此添加或轮换密钥无需
+  重启即可生效。
+- 当提供了配置时，未分配的角色会回退到 Designer 的本地启动
+  配置；如果某个角色没有密钥，该界面会报告未
+  配置任何提供商，而不是默默使用错误的那一个。

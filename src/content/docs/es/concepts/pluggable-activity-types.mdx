@@ -1,0 +1,70 @@
+---
+title: Tipos de Actividad Conectables
+description: Cómo los flujos de Greentic despachan trabajo a runtimes separados a través de nodos de actividad nativos como sorla.call y operala.call, y cómo se añade un nuevo tipo de actividad.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Tipos de Actividad Conectables
+
+Un flujo es un grafo de nodos. La mayoría de los nodos ejecutan un componente WASM en proceso, pero algunos
+nodos entregan el trabajo a un **runtime separado** — SoRLa, OperaLa y (en el
+futuro) otros — y esperan el resultado. Estos son los **tipos de actividad**:
+nodos de flujo nativos cuyo trabajo es despachar a un runtime externo a través del
+bus de mensajería.
+
+Hoy la plataforma incluye estos tipos de actividad de despacho:
+
+| Nodo | Despacha a | Estado |
+| --- | --- | --- |
+| `sorla.call` | el runtime de SoRLa | Activo |
+| `operala.call` | el runtime de OperaLa | Activo |
+| `telco-x.call` | un runtime de telco-x | Cableado, inerte hasta que exista un runtime |
+
+## Cómo funciona el despacho
+
+Un nodo de despacho no ejecuta lógica de negocio por sí mismo. Empaqueta la entrada del
+nodo, publica una solicitud al runtime a través de NATS, y o bien:
+
+- **espera** la respuesta (el flujo se pausa y se reanuda cuando llega el
+  resultado), o
+- **dispara y olvida** (el flujo continúa de inmediato).
+
+Todos los nodos de despacho comparten un mecanismo — el mismo contrato de solicitud/respuesta y
+el mismo manejo de correlación — de modo que se comportan de forma consistente sin importar a qué
+runtime apunten.
+
+<Aside type="note">
+Un nodo de despacho es *inerte* hasta que su runtime de destino está realmente desplegado y
+accesible en el bus. `telco-x.call`, por ejemplo, está completamente cableado tanto en el
+runner como en el Designer, pero no hace nada hasta que un runtime de telco-x está en
+ejecución — que es exactamente lo que significa "listo para cablear".
+</Aside>
+
+## Por qué esto importa para el Designer
+
+El constructor de flujos del Designer fundamenta su paleta en un **catálogo de capacidades**.
+Cada tipo de actividad aparece en ese catálogo como una capacidad despachable, lo que
+significa que el constructor de flujos con IA puede colocar un nodo `sorla.call` u `operala.call` cuando un
+usuario describe un trabajo que pertenece a uno de esos runtimes — del mismo modo que
+coloca cualquier otro nodo.
+
+## Añadir un nuevo tipo de actividad
+
+El objetivo de diseño es que un tipo de actividad totalmente nuevo cueste casi nada de añadir:
+
+1. **Una entrada de catálogo** en el catálogo de capacidades base del Designer, marcada
+   como una capacidad de despacho. Esto hace que el nodo sea descubrible por el constructor de flujos
+   con IA.
+2. **Una línea** en el runner que reconoce el nodo como una operación de despacho nativa.
+
+El runner ya sabe cómo ejecutar cualquier nodo de despacho de forma genérica, así que no se
+necesita código de ejecución nuevo — el nodo simplemente apunta a un nombre de runtime
+diferente. Cuando ese runtime se despliega más adelante, el nodo previamente inerte pasa a estar
+activo sin más cambios.
+
+<Aside type="tip">
+Este es el mismo patrón usado para `sorla.call` y `operala.call`, y es
+como se añadió `telco-x.call` antes de su runtime. Añadir el runtime más tarde
+"enciende" el nodo sin tocar de nuevo el editor de flujos ni el runner.
+</Aside>
