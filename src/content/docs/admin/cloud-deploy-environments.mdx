@@ -1,0 +1,108 @@
+---
+title: Cloud Deploy Environments
+description: Configure per-tenant (and per-team) cloud deploy environments in the admin console, control which deploy targets a tenant may use, and deploy a pack to a managed environment from the Designer.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Cloud Deploy Environments
+
+A **deploy environment** is a named cloud destination — Greentic Cloud, AWS,
+Azure, or GCP — that a platform operator configures for a tenant. Once an
+environment exists, a tenant administrator can deploy a published pack to it
+directly from the Designer, without ever touching cloud credentials or the
+deployer CLI.
+
+This page covers the three pieces that make that work:
+
+1. **Environments** — the named destinations an operator configures per tenant (and optionally per team).
+2. **Deploy plugins** — which deploy targets a tenant is allowed to use.
+3. **Cloud deploy from the Designer** — the tenant-admin self-service flow.
+
+## Roles at a glance
+
+| Action | Who |
+| --- | --- |
+| Create / edit / delete an environment | Platform operator only |
+| Configure bring-your-own-cloud credentials | Platform operator only |
+| Enable / disable deploy targets for a tenant | Platform operator only |
+| List environments and deploy a pack to one | Tenant administrator (in the Designer) |
+
+The split is deliberate: operators own the cloud accounts and credentials,
+tenants own the decision of *what* to ship and *when*.
+
+## Environments
+
+In the admin console, open a tenant and go to the **Environments** tab. Each
+environment has:
+
+- a **name** (unique within the tenant),
+- a **target** — `greentic_cloud`, `aws`, `azure`, or `gcp`,
+- an optional **region**,
+- an optional **scope** — tenant-wide (visible to every team) or pinned to a single team,
+- a **status** — `idle`, `provisioning`, `live`, or `error`.
+
+### Greentic Cloud vs bring-your-own-cloud
+
+- **Greentic Cloud** (`greentic_cloud`) deploys with the platform's own managed
+  role. No per-tenant credentials are needed — it works as soon as the
+  environment is created.
+- **AWS / Azure / GCP** are *bring-your-own-cloud* (BYOC). Before a tenant can
+  deploy to one, an operator must attach that environment's cloud credentials.
+  Until then, a deploy attempt is rejected with a clear "configure credentials
+  first" message.
+
+<Aside type="note">
+BYOC credentials are stored as a secret reference on the environment and are
+never returned to the Designer or shown to tenant users. The Designer only
+ever learns whether credentials are present, not their value.
+</Aside>
+
+### Per-team environments
+
+An environment can be scoped to a single team instead of the whole tenant.
+Team-scoped environments are visible only to members of that team, and their
+BYOC credentials are isolated to the owning team's secret scope. Leave the
+scope as *tenant-wide* to share one environment across every team.
+
+## Deploy plugins
+
+Not every tenant should be able to ship to every cloud. **Deploy plugins** let
+an operator turn individual deploy targets on or off, per tenant and per team.
+
+In the **Environments** tab, the deploy-target toggles control which targets
+appear when creating an environment. The catalog of available targets is
+sourced from the deployer itself (only targets that can actually run are
+offered — `greentic_cloud`, `aws`, `azure`, `gcp`), so the list always matches
+what the platform can deploy.
+
+Resolution is **team → tenant → default-enabled**: a team-level setting wins
+over the tenant-level one, and anything left unset is enabled by default.
+Creating an environment for a disabled target is blocked.
+
+## Cloud deploy from the Designer
+
+Once an operator has configured at least one environment, a tenant
+administrator can deploy from the Designer:
+
+1. Open **Settings → Credentials**.
+2. Click **Cloud deploy**.
+3. Enter the **pack reference** to ship (for example `my-pack@1.0.0`).
+4. Pick a target environment and click **Deploy**.
+
+The deploy is enqueued and the environment moves to `provisioning`. If the
+chosen environment is a BYOC target whose credentials have not been configured
+yet, the deploy is rejected with the operator-facing reason instead of
+silently failing.
+
+<Aside type="tip">
+The **Cloud deploy** button only appears for tenant administrators. Regular
+members do not see it, and the underlying API rejects their calls.
+</Aside>
+
+### Standalone Designer
+
+When the Designer runs without an admin server (standalone mode), cloud deploy
+is simply not offered: the environment list is empty and the panel explains
+that no admin server is configured. Local and bundle-based deploys through the
+deploy wizard are unaffected.

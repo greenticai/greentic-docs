@@ -1,0 +1,75 @@
+---
+title: Per-Tenant LLM Providers
+description: Let tenants bring their own LLM API keys for the Designer's AI features, while operators keep control of which composer roles are managed centrally.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Per-Tenant LLM Providers
+
+The Designer's AI features — the flow builder, the Agentic Worker composer,
+the SoRLa and OperaLa composers — all run through a Large Language Model. By
+default a platform operator configures those providers centrally. With
+**per-tenant LLM providers**, a tenant can also bring its own API key and have
+the Designer use it.
+
+## Two sources, one rule
+
+A provider row has a **source**:
+
+- **operator** — set by the platform operator, read-only to the tenant.
+- **tenant** — created and owned by the tenant administrator.
+
+The resolution rule is simple and predictable: **the operator's key always
+wins**. A tenant key can only fill a composer role that the operator has *not*
+already assigned. A tenant can never take over (or "steal") a role the
+operator manages.
+
+<Aside type="note">
+This keeps central governance intact. If your platform mandates a specific
+provider for, say, the Agentic Worker composer, assigning it as an operator
+role guarantees every tenant uses it — a tenant's own key can still serve the
+roles you left open.
+</Aside>
+
+## Composer roles
+
+Each LLM provider can be assigned to one or more **composer roles**, which map
+to the Designer surfaces that use them:
+
+| Role | Powers |
+| --- | --- |
+| `flow_editor_composer` | The flow builder (BUILD / EDIT) and AI chat |
+| `agentic_worker_composer` | The Agentic Worker / DW composer |
+| `sorla_composer` | The SoRLa authoring studio |
+| `operala_composer` | The OperaLa operations panel |
+| `telco_playbook_composer` | Telco playbook authoring |
+
+A role is owned by exactly one provider. Assigning a role that an operator
+already owns is rejected, so there is never an ambiguous "which key serves this
+surface" question.
+
+## Tenant administrator flow
+
+In the Designer, a tenant administrator opens **Settings → Credentials → My LLM
+providers**. From there they can:
+
+- add a provider (OpenAI, Anthropic, Azure OpenAI, Google, and more) with their
+  own API key, optional base URL, and model,
+- test the key before saving,
+- assign it to any composer role the operator has not reserved,
+- remove a provider they own.
+
+Roles reserved by the operator are shown but disabled — a clear signal of what
+is centrally managed versus what the tenant controls.
+
+## How keys are handled
+
+- Tenant keys are encrypted at rest and decrypted only in memory when a request
+  needs them.
+- The Designer resolves its LLM stacks from the admin and refreshes them within
+  about 30 seconds of a change, so adding or rotating a key takes effect without
+  a restart.
+- An unassigned role falls back to the Designer's local startup configuration
+  when one was provided; with no key for a role, that surface reports that no
+  provider is configured rather than silently using the wrong one.

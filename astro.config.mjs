@@ -100,6 +100,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Architecture Overview', slug: 'concepts/architecture' },
 						{ label: 'Flows', slug: 'concepts/flows' },
+						{ label: 'Pluggable Activity Types', slug: 'concepts/pluggable-activity-types' },
 						{ label: 'Agentic Workers', slug: 'concepts/agentic-workers' },
 						{ label: 'Agentic Workers in the Designer', slug: 'concepts/agentic-workers-designer' },
 						{ label: 'Packs', slug: 'concepts/packs' },
@@ -138,6 +139,9 @@ export default defineConfig({
 					items: [
 						{ label: 'Admin Access', slug: 'admin/admin-access' },
 						{ label: 'Designer SSO Login', slug: 'admin/designer-sso-login' },
+						{ label: 'Cloud Deploy Environments', slug: 'admin/cloud-deploy-environments' },
+						{ label: 'Per-Tenant LLM Providers', slug: 'admin/tenant-llm-providers' },
+						{ label: 'Starter Templates', slug: 'admin/starter-templates' },
 					],
 				},
 				{
