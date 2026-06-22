@@ -197,6 +197,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Overview', slug: 'mcp/overview' },
 						{ label: 'Creating MCP Tools', slug: 'mcp/creating-tools' },
+						{ label: 'OAuth for MCP Tools', slug: 'mcp/oauth-bake-in' },
 					],
 				},
 				{
