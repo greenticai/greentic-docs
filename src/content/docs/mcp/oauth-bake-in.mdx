@@ -1,0 +1,251 @@
+---
+title: OAuth for MCP Tools
+description: How an MCP tool that declares OAuth2 automatically gets a sign-in card and token handling (OAuth bake-in)
+---
+
+import { Steps, Aside, CardGrid, Card } from '@astrojs/starlight/components';
+
+## Overview
+
+**OAuth bake-in** means: any MCP component generated from an OpenAPI spec that declares an `oauth2` security scheme automatically gets a working sign-in card and token handling — with **no OAuth code in your flow** and **no bundled OAuth provider component**.
+
+<Aside type="note" title="No bundled OAuth provider">
+  Earlier designs shipped a dedicated OAuth/OIDC **provider component** (e.g. `oauth-oidc-generic`) inside the bundle to run the dance. That is gone — the **Greentic runtime now handles the OAuth dance natively** (consent URL, PKCE, callback, token exchange + refresh). Nothing OAuth-specific is bundled or compiled into the adapter.
+</Aside>
+
+When a flow calls an OAuth-aware tool and there is no token yet, the tool **self-gates**: instead of calling the API it returns a "Connect" card with a single **Authorize** button. The user clicks it, signs in with the provider, and the runtime persists the token. The next call proceeds normally — and refreshes the token automatically when it expires.
+
+<Aside type="note">
+  You write a normal flow node (`component.exec` / `mcp.exec`). You never write consent URLs, PKCE, callbacks, or token storage. Those live in the generated component (self-gate) and the Greentic runtime (the native OAuth engine).
+</Aside>
+
+## How it works
+
+The flow spans three pieces, each owning one part:
+
+<CardGrid>
+  <Card title="Generator" icon="seti:rust">
+    `greentic-mcp-gen` reads the OpenAPI `oauth2` scheme and emits an **OAuth declaration** into the tool's metadata (provider, authorize/token URLs, scopes, the setup fields the operator must supply).
+  </Card>
+  <Card title="MCP adapter (in the component)" icon="puzzle">
+    On every call it checks for a token. **No token → render the Connect card** (single **Authorize** button built from the operator's `client_id`). Token present → call the API.
+  </Card>
+  <Card title="Greentic runtime" icon="rocket">
+    Serves `/oauth/callback/<provider>`, builds the consent URL (PKCE + `redirect_uri` per provider profile), signs a CSRF `state`, exchanges the code, persists the token, and **refreshes it on read**.
+  </Card>
+</CardGrid>
+
+```text
+OpenAPI (oauth2)
+      │  greentic-mcp-gen
+      ▼
+MCP component  ──compose──►  node component (self-gate)
+      │
+      ▼  (flow calls the tool, no token)
+"Connect <provider>" card  ──Authorize──►  provider consent
+      │                                          │
+      │   /oauth/callback/<provider>  ◄──────────┘
+      ▼   (runtime: verify state, exchange code, persist token)
+flow call proceeds  ──►  real API response
+```
+
+## Prerequisites: register an OAuth client
+
+OAuth bake-in needs **one thing from you up front**: an OAuth client registered with the provider, so you have a **Client ID** (and, for some providers, a **Client Secret**). Greentic never creates these — they belong to your provider account.
+
+### How providers differ
+
+Whether you need a **Client Secret depends on the client *type***, not just the provider. **Public clients** (native mobile, SPA) use PKCE with *no* secret; **confidential clients** (web-server, daemon, and Google's Desktop/"installed" apps) require a secret. The refresh-token mechanism varies too:
+
+| Provider | Author setup | Secret? | Refresh token via | Register / docs |
+| --- | --- | --- | --- | --- |
+| **Google** (Sheets/Drive/Gmail) | `client_id` + `client_secret` (Web/Desktop client) + PKCE | **Yes** ¹ | `access_type=offline` + `prompt=consent` | [Cloud Credentials](https://console.cloud.google.com/apis/credentials) |
+| **Microsoft Graph** | `client_id` + tenant | Public: No · Web/daemon: Yes | `offline_access` scope | [App registrations](https://entra.microsoft.com/) · [docs](https://learn.microsoft.com/graph/auth-register-app-v2) |
+| **Okta / Auth0 / Keycloak** | `client_id` + domain/issuer | Public: No · Confidential: Yes | `offline_access` scope | [Okta](https://developer.okta.com/) · [Auth0](https://manage.auth0.com/) · [Keycloak](https://www.keycloak.org/docs/) |
+| **Slack** | `client_id` + `client_secret` | Yes | token rotation (opt-in) | [Slack apps](https://api.slack.com/apps) |
+| **GitHub** (OAuth App) | `client_id` + `client_secret` | Yes | classic = long-lived; GitHub App = refresh | [OAuth Apps](https://github.com/settings/developers) |
+
+¹ **Google's Web and Desktop ("installed app") clients require the `client_secret` on the token exchange** — Google mandates it even for Desktop apps (where it isn't treated as truly secret). Only native **iOS/Android** clients are secretless — so a Web/Desktop Google client requires **both** the Client ID and the Secret.
+
+<Aside type="tip">
+  Leave the Client Secret blank in `gtc setup` **only** when the provider issues a true public (PKCE) client with no secret — e.g. native mobile, or Microsoft/Okta/Auth0 SPA clients. **Google (Web/Desktop), Slack, and GitHub require the secret.** Greentic sends the secret on the token exchange whenever it's set, and runs the PKCE public-client flow when it isn't.
+</Aside>
+
+#### References
+
+The per-provider claims above come from each vendor's documentation:
+
+- **Google** — [OAuth 2.0 for Web Server apps](https://developers.google.com/identity/protocols/oauth2/web-server) (`client_secret`, `access_type=offline`, `prompt=consent`) and [OAuth 2.0 for Mobile & Desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app) (Desktop/installed apps still pass a `client_secret`, which Google states is "not treated as confidential").
+- **Microsoft** — [Authorization code (PKCE) flow](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-auth-code-flow) and the [`offline_access` scope](https://learn.microsoft.com/entra/identity-platform/scopes-oidc) for refresh tokens; [public vs confidential client apps](https://learn.microsoft.com/entra/identity-platform/msal-client-applications).
+- **Okta** — [Refresh token grant / `offline_access`](https://developer.okta.com/docs/guides/refresh-tokens/); **Auth0** — [Refresh tokens](https://auth0.com/docs/secure/tokens/refresh-tokens); **Keycloak** — [Offline access](https://www.keycloak.org/docs/latest/server_admin/#_offline-access).
+- **Slack** — [Token rotation](https://api.slack.com/authentication/rotation) (opt-in).
+- **GitHub** — [Authorizing OAuth apps](https://docs.github.com/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps) (classic user tokens are long-lived) vs [refreshing GitHub App user access tokens](https://docs.github.com/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens).
+- **PKCE / public clients** — [RFC 7636 (PKCE)](https://datatracker.ietf.org/doc/html/rfc7636) and [RFC 8252 (OAuth 2.0 for Native Apps)](https://datatracker.ietf.org/doc/html/rfc8252): public clients authenticate without a secret.
+
+<Steps>
+
+1. **Register an OAuth client** with the provider (e.g. Google Cloud Console → *APIs & Services → Credentials → Create OAuth client ID*; GitHub → *Settings → Developer settings → OAuth Apps*).
+
+2. **Register the redirect URI.** Greentic serves the callback at:
+
+   ```text
+   http://127.0.0.1:8080/oauth/callback/<provider>
+   ```
+
+   e.g. `http://127.0.0.1:8080/oauth/callback/google`. For a public deployment, set `GREENTIC_PUBLIC_BASE_URL` and register `<base>/oauth/callback/<provider>` instead. The exact URI to register is also shown in the setup question's help text.
+
+3. **Enable the API(s) the tool uses** in the provider's project. This is *separate* from OAuth scopes — granting a scope does **not** enable an API. For Google, enable each API in the [API Library](https://console.cloud.google.com/apis/library) (e.g. *Google Drive API*, *Google Sheets API*). A disabled API returns `403 SERVICE_DISABLED`.
+
+4. **Add test users** (providers in "testing"/unverified mode). For Google, *OAuth consent screen → Test users → Add* your account, or sign-in fails with `Error 403: access_denied`.
+
+5. **Keep the Client ID + Secret handy** — you'll paste them during `gtc setup` (next section). You do **not** put them in any file by hand.
+
+</Steps>
+
+<Aside type="tip">
+  Provider requirements differ and Greentic handles them via per-provider profiles: **Google** needs PKCE + `redirect_uri` + `access_type=offline` (for a refresh token); **GitHub** needs the client secret, no PKCE, and an implicit redirect.
+</Aside>
+
+## 1. Generate the component
+
+Generate the MCP component from an OpenAPI spec that declares an `oauth2` scheme. The generator detects it and bakes in the OAuth declaration.
+
+<Steps>
+
+1. **Put the spec in an input directory:**
+
+   ```text
+   input/sheets_reports.yaml
+   ```
+
+   The spec must declare an `oauth2` security scheme (with `authorizationUrl`, `tokenUrl`, and `scopes`) and reference it from the operations. That declaration is the **only** thing that turns on the bake-in:
+
+   ```yaml title="input/sheets_reports.yaml (excerpt)"
+   components:
+     securitySchemes:
+       googleOAuth:                         # <- becomes the provider/scheme in the card + state
+         type: oauth2
+         flows:
+           authorizationCode:
+             authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+             tokenUrl: https://oauth2.googleapis.com/token
+             scopes:
+               https://www.googleapis.com/auth/drive.readonly: Read your spreadsheets
+
+   # Apply it (globally here, or per-operation) so the generated tools self-gate:
+   security:
+     - googleOAuth:
+         - https://www.googleapis.com/auth/drive.readonly
+   ```
+
+   The generator reads this and emits the `oauth` declaration into each tool's metadata (provider, authorize/token URLs, scopes, and the setup fields the operator supplies). No `oauth2` scheme → no bake-in.
+
+2. **Generate:**
+
+   ```bash
+   greentic-mcp-gen --input-dir ./input --output-dir ./output
+   ```
+
+   <Aside type="caution" title="Use --input-dir">
+     `--spec <file>` alone silently runs batch mode against an empty `./input` and emits nothing. Put the spec in a directory and pass `--input-dir`.
+   </Aside>
+
+   This produces a telemetry-free WASM component whose tool metadata carries the `oauth` declaration. (Telemetry is opt-in / off by default — an unsupported `greentic:telemetry/logging` import would otherwise fail to link.)
+
+3. **Compose with the bundled adapter** (gives you the self-gating node component). `greentic-mcp compose` ships the adapter, so you don't manage the adapter wasm or run `wac` yourself:
+
+   ```bash
+   greentic-mcp compose --output sheets_reports.node.wasm sheets_reports.component.wasm
+   ```
+
+   <Aside type="tip">
+     Internally this plugs the router into the bundled `mcp_adapter_*.component.wasm` (via `wac` / `wasm-tools compose`). Pass `--wasm-tools <path>` or set `GREENTIC_MCP_WAC` if the tooling isn't on `PATH`. You can still compose by hand with `wac plug <adapter> --plug <router> -o <out>` when you need a custom adapter build.
+   </Aside>
+
+</Steps>
+
+## 2. Build the pack & surface the setup questions
+
+When you build the pack, Greentic infers the operator setup questions (Client ID / Client Secret) from the OAuth declaration — surfaced in the `gtc setup` UI.
+
+```bash
+greentic-pack build --in ./google-sheets-app
+```
+
+Make sure the app's `assets/setup.yaml` declares the OAuth questions (or they are inferred from the component's `oauth.setup_fields`), e.g.:
+
+```yaml
+id: google-sheets-app-setup
+title: Google Sheets — OAuth setup
+questions:
+  - name: auth.oauth2.googleOAuth.client_id
+    title: Google OAuth Client ID
+    kind: string
+    required: true
+    secret: false
+    help: >-
+      Register the redirect URI http://127.0.0.1:8080/oauth/callback/google and
+      enable the Google Drive API on this client.
+  - name: auth.oauth2.googleOAuth.client_secret
+    title: Google OAuth Client Secret
+    kind: string
+    required: true
+    secret: true
+```
+
+## 3. Set up (enter Client ID & Secret)
+
+Run setup against the bundle and enter the credentials you prepared. They are stored **encrypted**, pack-scoped — never in plaintext.
+
+```bash
+gtc setup ./my-bundle --tenant demo --team default
+```
+
+The UI shows the two questions (**Client ID**, **Client Secret**) with the exact **redirect URI to register** in the help text. Fill them in and **Execute**.
+
+<Aside type="note">
+  The operator (you) supplies `client_id`/`client_secret` once. End users never see them — they only click **Authorize** and sign in.
+</Aside>
+
+## 4. Run & sign in
+
+```bash
+gtc start ./my-bundle --tenant demo --team default
+```
+
+<Steps>
+
+1. Open the webchat and send a message that triggers the OAuth-aware tool.
+
+2. Because there is no token yet, the tool **self-gates** and you get a card:
+
+   > **Connect google account** — *Click Authorize to sign in… I can only move forward to google after you've authorized.*
+
+   with a single **Authorize** button.
+
+3. Click **Authorize** → the provider's consent screen → approve.
+
+4. The provider redirects to `/oauth/callback/<provider>`; the runtime verifies the signed `state`, exchanges the code (with PKCE + client secret as the provider requires), and **persists the token**.
+
+5. **The conversation auto-advances** — the runtime re-runs the flow with the token present and the next card (e.g. the spreadsheet picker) appears on its own. No re-typing. Subsequent calls reuse the token and **refresh it automatically** when it nears expiry.
+
+</Steps>
+
+<Aside type="note" title="Auto-advance after Authorize">
+  The signed `state` carries the originating conversation id, so once `/oauth/callback` persists the token it pushes a synthetic resume back into that conversation — the flow re-runs and delivers the next card automatically. (If there's no conversation context, the callback page just tells you to return to the chat.)
+</Aside>
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `Error 403: access_denied` on the consent screen | Your account isn't a **test user** | Add it under the provider's OAuth consent screen → Test users |
+| `403 SERVICE_DISABLED` / *"API has not been used in project…"* | The **API isn't enabled** in the project (scopes ≠ enablement) | Enable the API in the provider's API Library, wait ~1–2 min |
+| Card never appears / "Send failed" in webchat | Stale browser conversation (e.g. after a server restart) | Open the webchat in a fresh/incognito window |
+| `redirect_uri_mismatch` | The registered redirect URI doesn't match | Register exactly `http://127.0.0.1:8080/oauth/callback/<provider>` (or your `GREENTIC_PUBLIC_BASE_URL` form) |
+
+## See also
+
+- [Creating MCP Tools](/mcp/creating-tools/)
+- [Secrets](/concepts/secrets/)
+- [GTC setup](/cli/setup/)
