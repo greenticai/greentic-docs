@@ -66,6 +66,12 @@ The wizard can use the bundled catalog, check a catalog source, or use an explic
 
 For normal extension authoring, prefer the bundled/default catalog exposed by `gtc wizard`. For automation, pin the answers file and validate it with the schema before applying it.
 
-## Legacy Note
+## Design-Time Extensions
 
-This page replaces the old "designer extensions" documentation. `.gtxpack`, `gtdx`, and design-time extension classes are not the current extension-pack authoring path.
+The `gtc wizard` catalog above scaffolds **extension packs** (`.gtpack`) that provide platform capabilities — messaging, events, secrets, deployers, and the other catalog types.
+
+Separately, Greentic has **design-time extensions** (`.gtxpack`) that surface inside the Designer and are consumed by agentic workers: tools, guardrails, and composers. These are authored with the `gtdx` CLI (`gtdx new --kind design` for a design extension; other kinds include `mcp`, `llm`, `provider`, `deploy`, `bundle`, and `wasm-component`) and published to the store. Once registered, the Designer surfaces them in the flow-editor and the agentic-worker pickers.
+
+- Design extensions (tools, guardrails, composers): [Writing Extensions](/extensions/writing-extensions/) and [Guardrail Extensions](/extensions/guardrail-extensions/)
+- The `gtdx` CLI: [gtdx CLI](/extensions/gtdx-cli/)
+- Local-WASM MCP tools (`gtdx new --kind mcp`): [Creating MCP Tools](/mcp/creating-tools/)

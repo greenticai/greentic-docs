@@ -7,13 +7,48 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-The preferred way to create MCP tools for Greentic is to generate a WASM component from an API description, then call that component from a flow with `mcp.exec`.
+MCP tools in Greentic run on a shared MCP rail and are reached over one of two transports (see [MCP Overview](/mcp/overview/)):
 
-Use this path when you want a digital worker to call systems such as weather APIs, GitHub, Google APIs, ticketing systems, CRMs, HR systems, inventory systems, or internal HTTP services.
+- **local-wasm** — a `wasix:mcp/router` WASM component, scaffolded with `gtdx new --kind mcp`, that the runner executes in-process. Best for sandboxed, signed tools with no network hop.
+- **http** — a remote MCP server reached over Streamable HTTP. Register an existing or hosted server directly.
+
+This page also covers generating a WASM component from an API description (OpenAPI or Google Discovery) when you want to turn an existing API surface into callable tools.
+
+Use these paths when you want a digital worker to call systems such as weather APIs, GitHub, Google APIs, ticketing systems, CRMs, HR systems, inventory systems, or internal HTTP services.
 
 <Aside type="caution" title="Do not start from the old generic WIT example">
-  Older docs showed a hand-written `wit/tool.wit`, `tool.yaml`, and `type: mcp-tool` flow node. That does not match the current local Greentic flow fixtures or MCP generator. Start with `greentic-mcp-gen` for API-backed MCP tools, or use the component wizard when you are building a custom Greentic component.
+  Older docs showed a hand-written `wit/tool.wit`, `tool.yaml`, and `type: mcp-tool` flow node. That does not match the current local Greentic sources. Use `gtdx new --kind mcp` for a local-wasm tool, `greentic-mcp-gen` for API-backed MCP tools, or the component wizard when you are building a custom Greentic component.
 </Aside>
+
+## Create a Local-WASM Tool
+
+A `local-wasm` tool is a `wasix:mcp/router` WASM component packaged as a `.gtxpack` and executed in-process by the runner.
+
+<Steps>
+
+1. **Scaffold the router component**
+
+   ```bash
+   gtdx new --kind mcp my-tool
+   ```
+
+   This generates a `wasix:mcp/router` component that exports `wasix:mcp/router@25.6.18`.
+
+2. **Publish the `.gtxpack` to the store**
+
+   The store validates `kind: wasix:mcp/router` against its `describe-mcp-v1` schema.
+
+3. **Register the server in greentic-admin**
+
+   Admin pulls the `.gtxpack`, verifies its `sha256` and Ed25519 signature against trusted publisher keys, and caches the tool list by running `list_tools` at registration (best-effort, non-fatal — `tools` is left null if the probe fails).
+
+4. **Use it**
+
+   The Designer flow-editor prompt and the agentic-worker tool picker surface the cached tools with no HTTP probe. At runtime the runner pulls, verifies, caches, and executes the component in-process.
+
+</Steps>
+
+`gtdx new --kind` accepts `design`, `bundle`, `deploy`, `provider`, `wasm-component`, `mcp`, and `llm`. See [gtdx CLI](/extensions/gtdx-cli/) for the full scaffolding surface.
 
 ## Generate From OpenAPI
 

@@ -1,11 +1,11 @@
 ---
 title: Quick Start
-description: Get your first Greentic digital worker running in minutes
+description: Get your first Greentic agentic worker running in minutes
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-This guide gets you from zero to a running Greentic digital worker in a few minutes. The fastest path is to launch one of the published demos from the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog — every demo uses the same three-step flow.
+This guide gets you from zero to a running Greentic worker in a few minutes. The fastest path is to launch one of the published demos from the [`greentic-demo`](https://github.com/greenticai/greentic-demo) catalog — every demo uses the same three commands: [`gtc wizard`](/cli/wizard/), [`gtc setup`](/cli/setup/), and [`gtc start`](/cli/start/).
 
 <Aside type="tip">
 Want to browse all available demos and see exactly what each one does? Jump to [Running Demos](/getting-started/running-demos/).
@@ -15,19 +15,20 @@ Want to browse all available demos and see exactly what each one does? Jump to [
 
 Before you begin, ensure you have:
 
-- **`gtc` CLI** installed — see [Installation](/getting-started/installation/)
-- **Rust** 1.95 or later (required for `cargo binstall gtc` and source builds)
+- **`gtc` CLI** installed (run `gtc doctor` to confirm the companion binaries are on PATH) — see [Installation](/getting-started/installation/)
+- **Rust** 1.95 or later — only needed if you build packs, components, or the CLI from source; `cargo binstall gtc` downloads a prebuilt binary
 - A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only path
-- An **LLM backend**: either use OpenAI with an API key from https://platform.openai.com/, or use Ollama locally by setting the setup answers to `http://localhost:<ollama_port>/v1`, choosing a model from `ollama list` or one you install with `ollama pull`, and entering any value in the API key field
+- **Redis** if you run an [Agentic Worker](/concepts/agentic-workers/) — the `dw.agent` node uses Redis for multi-turn memory and is disabled without it (`brew services start redis`, or `docker run -d -p 6379:6379 redis:alpine`)
+- An **LLM backend** for agentic workers: a provider API key (DeepSeek, OpenAI, Anthropic, …), or a local Ollama endpoint (set the setup answers to `http://localhost:<ollama_port>/v1`, pick a model from `ollama list`, and enter any value in the API key field)
 
 ## Launch the deep research demo
 
-The `deep-research-demo` bundle is a better first look at what a Greentic digital worker can do. It gives you a WebChat research assistant with two execution modes:
+The `deep-research-demo` bundle is a good first look at what a Greentic worker can do. It gives you a WebChat research assistant with two execution modes:
 
 - **Single Shot** - Ask a question and let one research analyst produce a fast answer.
 - **Agentic** - Route the same question through a research planner and analyst, showing how workers can collaborate across multiple flow steps.
 
-![Deep Research Digital Worker showing a research question, Single Shot and Agentic actions, and a Research Analyst response](/images/deep-research-demo.png)
+![Deep Research demo showing a research question, Single Shot and Agentic actions, and a Research Analyst response](/images/deep-research-demo.png)
 
 <Steps>
 
@@ -120,92 +121,120 @@ greentic-i18n-translator translate --langs fr,de,ja --en i18n/en.json
 
 See [Multi-Language and i18n](/getting-started/multilanguage-i18n/) for the practical Getting Started overview, then continue to [i18n Overview](/i18n/overview/) and [Cards Translation](/i18n/cards-translation/) for the full workflow.
 
-## Example: Hello World Pack
+## Example: Build an Agentic Worker from scratch
 
-Create a pack with a `hello_world` messaging flow by replaying the hosted wizard answers:
+When you want your own worker rather than a published demo, you author a **pack** with `greentic-pack`, wrap it in a **bundle** with `gtc wizard`, then `gtc setup` and `gtc start`. The example below builds a WebChat research bot whose single `dw.agent` node is an [Agentic Worker](/concepts/agentic-workers/) — an LLM Plan-Act-Observe loop with web-search tools.
 
-```bash
-gtc wizard --answers https://docs.greentic.ai/examples/hello-world-answers.json
-```
+<Steps>
 
-The answers document creates `./hello-world-pack`, scaffolds the pack, adds `flows/hello.ygtc`, runs doctor, resolves the pack lock, and writes the built pack to `dist/hello-world-pack.gtpack`.
+1. **Scaffold the pack** and remove the placeholder flow:
 
-The generated pack contains the hello world flow alongside the scaffolded default flow:
+   ```bash
+   greentic-pack new --dir tavily-research tavily-research-demo
+   cd tavily-research
+   rm -f flows/main.ygtc
+   ```
 
-```text
-hello-world-pack/
-|-- pack.yaml
-|-- pack.lock.cbor
-|-- flows/
-|   |-- hello.ygtc
-|   `-- main.ygtc
-`-- dist/
-    `-- hello-world-pack.gtpack
-```
+2. **Write the flow** (`flows/on_message.ygtc`). It is linear — every node has exactly one component key. The welcome Adaptive Card is emitted inline with the builtin `emit.response`, then the message is routed to the agent:
 
-## Bundle Structure
+   ```yaml title="tavily-research/flows/on_message.ygtc"
+   id: on_message
+   title: Tavily Research Bot
+   type: messaging
+   start: research
 
-After creating the hello world pack, create a bundle that includes it:
+   nodes:
+     research:
+       dw.agent:
+         user_text: "{{in.text}}"
+       operation: tavily_researcher   # = agent_id
+       routing:
+         - to: send_reply
 
-```bash
-gtc wizard --answers https://docs.greentic.ai/examples/hello-world-bundle-answers.json
-```
+     send_reply:
+       emit.response:
+         messages:
+           - type: text
+             text: "{{research.reply}}"
+       routing:
+         - out: true
+   ```
 
-The answers document expects the pack artifact from the previous step at `./hello-world-pack/dist/hello-world-pack.gtpack`. It creates `./hello-world-bundle`, copies the pack into the bundle workspace, writes the bundle definition, and records default tenant access for the `hello-world` pack.
+3. **Declare the pack and agent** (`pack.yaml`). The Agentic Worker is an `AgentConfig`: a system prompt, the tools it may call, and the LLM provider/model. Here the tools come from the installed `greentic.tavily` extension:
 
-The generated bundle looks like this:
+   ```yaml title="tavily-research/pack.yaml"
+   pack_id: tavily-research-demo
+   version: 0.1.0
+   kind: application
+   publisher: YourName
+   components: []
+   dependencies: []
 
-```text
-hello-world-bundle/
-|-- bundle.yaml
-|-- bundle.lock.json
-|-- packs/
-|   `-- hello-world-pack.gtpack
-|-- tenants/
-|   `-- default/
-|       `-- tenant.gmap
-|-- resolved/
-|   `-- default.yaml
-`-- state/
-    `-- resolved/
-        `-- default.yaml
-```
+   flows:
+     - id: on_message
+       file: flows/on_message.ygtc
+       tags: [messaging, default]
+       entrypoints: [default]
 
-`bundle.yaml` is the source definition. It names the bundle, lists the app pack references, records the global pack mapping, and keeps extension providers, catalogs, hooks, subscriptions, capabilities, setup intent, and export intent explicit:
+   agents:
+     tavily_researcher:
+       agent_id: tavily_researcher
+       system_prompt: |
+         You are a research assistant. When the user asks about facts, recent events,
+         prices, or anything you are not certain of, call `tavily_search` to find current
+         information on the web, then answer concisely and cite the source URLs.
+       tools:
+         - extension_id: greentic.tavily
+           tool_name: tavily_search
+         - extension_id: greentic.tavily
+           tool_name: tavily_extract
+       guardrails: []
+       llm:
+         provider: deepseek
+         model: deepseek-chat
 
-```yaml title="hello-world-bundle/bundle.yaml"
-schema_version: 1
-bundle_id: hello-world-bundle
-bundle_name: Hello World Bundle
-locale: en
-mode: create
-advanced_setup: false
-app_packs:
-  - ./hello-world-pack/dist/hello-world-pack.gtpack
-app_pack_mappings:
-  - reference: ./hello-world-pack/dist/hello-world-pack.gtpack
-    scope: global
-extension_providers: []
-remote_catalogs: []
-hooks: []
-subscriptions: []
-capabilities: []
-setup_execution_intent: false
-export_intent: false
-```
+   assets: []
+   ```
 
-`bundle.lock.json` records the resolved inputs for reproducible bundle operations. `packs/` contains the copied pack artifacts used by the bundle. `tenants/default/tenant.gmap` controls tenant access; in this example it allows `hello-world` and denies everything else:
+4. **Validate and build the pack.** The agent's tools are resolved from the extension store, so point `greentic-pack` at it before building:
 
-```text title="hello-world-bundle/tenants/default/tenant.gmap"
-_ = forbidden
-hello-world = public
-```
+   ```bash
+   export GREENTIC_STORE_URL=https://store.greentic.cloud
+   greentic-pack update --in .
+   greentic-pack lint   --in .      # → "lint ok"
+   greentic-pack build  --in .      # → dist/tavily-research.gtpack
+   ```
+
+5. **Wrap the pack in a bundle** with `gtc wizard`. Generate an answers document, point its `app_packs` reference at `./tavily-research/dist/tavily-research.gtpack` (plus the WebChat and `state-memory` providers), then apply it:
+
+   ```bash
+   cd ..
+   gtc wizard --dry-run --emit-answers ./tavily-create-answers.json
+   # edit ./tavily-create-answers.json to reference the built .gtpack, then:
+   gtc wizard --answers ./tavily-create-answers.json   # → ./tavily-research-bundle
+   ```
+
+6. **Set credentials and run.** `gtc setup` derives its questions from the agent (the LLM key and each tool extension's secret requirements via `secret-requirements.json`), so you are prompted for exactly what this pack needs:
+
+   ```bash
+   gtc setup ./tavily-research-bundle   # enter the LLM key + Tavily API key
+   gtc start ./tavily-research-bundle --cloudflared off
+   ```
+
+   `gtc start` prints the WebChat URL. Open it, ask a question, and the agent searches the web and answers with sources.
+
+</Steps>
+
+<Aside type="note">
+Agentic Workers need **Redis** running for multi-turn memory — set `GREENTIC_AW_REDIS_URL=redis://127.0.0.1:6379`. Without it the `dw.agent` node is disabled. See [Agentic Workers](/concepts/agentic-workers/) for the full `AgentConfig` reference (tools, guardrails, memory, knowledge, limits).
+</Aside>
 
 ## Next Steps
 
-Now that you have a basic setup running:
+Now that you have a worker running:
 
+- [Agentic Workers](/concepts/agentic-workers/) - Configure the LLM Plan-Act-Observe agent
 - [Learn about Flows](/concepts/flows/) - Understand flow definitions
-- [Configure Telegram](/providers/messaging/telegram/) - Set up Telegram bot
-- [Configure Slack](/providers/messaging/slack/) - Connect to Slack workspace
+- [Building Packs](/cli/building-packs/) - Author and build your own packs
+- [Configure Slack](/providers/messaging/slack/) - Connect to a Slack workspace
 - [Build custom components](/concepts/components/) - Create your own WASM components

@@ -7,7 +7,12 @@ import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What Extensions Are
 
-An **extension** is a Greentic pack that adds platform behavior through explicit metadata in `pack.yaml`. The current implemented path is `.gtpack`-based:
+Greentic has **two complementary extension surfaces**:
+
+- **Pack-embedded extension metadata** (`.gtpack`) — explicit `pack.yaml` keys (capability offers, deployer contracts, static routes) that the runtime reads when it loads a bundle. This is the focus of most of this page.
+- **Standalone design-time extension packs** (`.gtxpack`) — signed, independently published packs in four kinds (**design**, **bundle**, **deploy**, **provider**) installed into `GREENTIC_EXTENSIONS_DIR` and consumed by the Greentic Designer and the runtime. **Design extensions are how [agentic workers](/concepts/agentic-workers/) get their tools and [guardrails](/extensions/guardrail-extensions/).** See [Design Extensions](#design-extensions-gtxpack) below.
+
+A pack-embedded **extension** adds platform behavior through explicit metadata in `pack.yaml`. The `.gtpack` authoring path is:
 
 1. `gtc wizard` scaffolds the pack and captures extension answers.
 2. `gtc dev pack` validates and builds the pack.
@@ -145,6 +150,25 @@ extensions:
 
 Static route paths are deliberately constrained. Public paths must live under `/v1/web/`, `source_root` must point under `assets/`, and team-scoped routes must also be tenant-scoped.
 
+## Design Extensions (.gtxpack)
+
+Alongside the pack-embedded `.gtpack` metadata above, Greentic ships a **design-time extension** system: standalone, signed `.gtxpack` packs that are published independently and installed into `GREENTIC_EXTENSIONS_DIR`. There are four kinds:
+
+| Kind | What it adds |
+| --- | --- |
+| **design** | Agentic-worker tools, guardrails, and Designer compose-time helpers (e.g. DW composers). Discovered from `GREENTIC_EXTENSIONS_DIR/design/`. |
+| **bundle** | Bundle-level helpers applied when a bundle is assembled. |
+| **deploy** | Deployment targets and operations beyond the built-in deployers. |
+| **provider** | Channel/service providers surfaced to the Designer and runtime. |
+
+**Design extensions are the mechanism behind agentic-worker tools and guardrails.** An agentic worker's `AgentConfig` references tools by `extension_id` + `tool_name`, and guardrails by capability id — both resolved against installed design extensions. Guardrails implement the `greentic:extension-design/guardrail@0.3.0` WIT interface.
+
+Design extensions are published as signed `.gtxpack` artifacts with the [`gtdx` CLI](/extensions/publishing-extensions/) to [`store.greentic.cloud`](https://store.greentic.cloud). For authoring see:
+
+- [Agentic Workers](/concepts/agentic-workers/) — build a worker and its tool extension.
+- [Guardrail Extensions](/extensions/guardrail-extensions/) — author content-safety guardrails.
+- [Publishing Extension Packs](/extensions/publishing-extensions/) — sign and publish `.gtxpack` artifacts.
+
 ## Why Extensions Matter
 
 <CardGrid>
@@ -162,6 +186,11 @@ Static route paths are deliberately constrained. Public paths must live under `/
   </Card>
 </CardGrid>
 
-## Legacy Terminology
+## Two Surfaces, Not One
 
-Older experiments used `.gtxpack`, `gtdx`, `DesignExtension`, `BundleExtension`, `DeployExtension`, and `ProviderExtension`. Those names describe the legacy design-time proposal, not the current runtime extension path. New extension docs should use `.gtpack`, `gtc wizard`, `gtc dev pack`, and the manifest keys above.
+`.gtpack` and `.gtxpack` extensions are **distinct, complementary surfaces** — not old vs new:
+
+- **Pack-embedded `.gtpack` metadata** — `greentic.ext.capabilities.v1`, `greentic.deployer.v1`, and `greentic.static-routes.v1` keys authored with `gtc wizard` / `gtc dev pack` and loaded by `gtc start`. Covered by the sections above.
+- **Standalone `.gtxpack` design extensions** — the `design` / `bundle` / `deploy` / `provider` kinds installed into `GREENTIC_EXTENSIONS_DIR` and published with the [`gtdx` CLI](/extensions/publishing-extensions/). These power agentic-worker tools, guardrails, and Designer compose-time helpers. Covered by [Design Extensions](#design-extensions-gtxpack).
+
+When deciding which to author: a pack that offers a runtime capability, deployer contract, or static route uses `.gtpack` metadata; an agentic-worker tool, guardrail, or Designer composer ships as a `.gtxpack` design extension.

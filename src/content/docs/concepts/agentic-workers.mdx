@@ -27,16 +27,17 @@ This guide shows how to build one by hand and run it end to end. (Code identifie
 
 A worker has three pieces:
 
-1. **An `AgentConfig`** — the system prompt, the allowed tools, the LLM provider/model, and
-   limits.
-2. **Its tools** — packaged as a `.gtxpack` **design-extension** (the same format as
-   `component-tavily-ext`), discovered at runtime.
+1. **An `AgentConfig`** — the system prompt, the allowed tools, the LLM provider/model,
+   limits, and optional `guardrails`, `memory`, and `knowledge` blocks.
+2. **Its tools** — either a `.gtxpack` **design-extension** (the same format as
+   `component-tavily-ext`), discovered at runtime, or an **MCP server** registered for the
+   tenant.
 3. **A flow** with a single `dw.agent` node that hands user messages to the worker.
 
-<Aside type="caution" title="Tools are extensions, not flow-node components">
-A worker's tools are **`.gtxpack` design-extensions**, *not* the
-`greentic:component/component@0.6.0` flow-node components run by `component.exec`. The
-agentic-worker loop only loads design-extensions (from `GREENTIC_EXTENSIONS_DIR`). Adding a
+<Aside type="caution" title="Tools are extensions or MCP servers, not flow-node components">
+A worker's tools come from **`.gtxpack` design-extensions** (from `GREENTIC_EXTENSIONS_DIR/design/`)
+or from **MCP servers** registered for the tenant — *not* from the
+`greentic:component/component@0.6.0` flow-node components run by `component.exec`. Adding a
 capability to a flow-node component's `describe()` does **not** make it an agent tool.
 </Aside>
 
@@ -62,6 +63,11 @@ Save it as `<agent_id>.json` in `GREENTIC_AGENT_MANIFESTS_DIR` (default `~/.gree
   one of its tools. Only listed tools are exposed to the model.
 - `limits.max_iter` bounds the loop (default 8) — enough for multi-step
   resolve-then-analyse investigations.
+- `llm` accepts **any greentic-llm provider** — `openai`, `anthropic`, `deepseek`, `gemini`,
+  and the others — as `{ "provider": "...", "model": "...", "credential_ref": "..." }`. Use
+  `credential_ref` to name a stored credential instead of relying on an environment variable.
+- The config also supports optional `guardrails` (see [below](#guardrails)), `memory`, and
+  `knowledge` blocks. Omit them to start simple.
 
 <Aside type="tip" title="Spell out tool arguments in the prompt">
 At the current runtime, extension tools reach the model by **name** with an empty argument
@@ -149,6 +155,27 @@ USER:  What are the top source ASNs for prefix 10.0.0.0/8?
  turn 3: model writes the final answer
 WORKER: The top source ASNs for 10.0.0.0/8 are: AS15169 (Google) 4.2 Gbps (38.1%), …
 ```
+
+## Guardrails
+
+A worker can run **guardrails** — content-safety hooks that fire on every step at two points:
+**inbound** (the user prompt, before the LLM sees it) and **outbound** (the LLM reply, before
+it reaches the caller). Each guardrail returns one of three verdicts — **accept** (pass
+through), **update** (replace with masked/rewritten content), or **deny** (block with a
+structured payload). Guardrails are chained in order; an `update` feeds the modified content
+to the next guardrail.
+
+Declare agent-level guardrails in `AgentConfig.guardrails` by capability id, e.g.:
+
+```jsonc
+"guardrails": ["greentic:guardrail/pii"]
+```
+
+Agent-level guardrails **fail open** (skipped if unresolvable); platform/tenant *mandatory*
+guardrails injected by policy **fail closed** (block if unresolvable). Each guardrail is a
+design extension implementing `greentic:extension-design/guardrail@0.3.0`. See
+[Guardrail Extensions](/extensions/guardrail-extensions/) for authoring and the reference
+`component-guardrail-pii` implementation.
 
 ## Worked example
 

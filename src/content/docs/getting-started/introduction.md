@@ -41,6 +41,12 @@ That means a single worker can combine:
 - Tenant-aware data access
 - Auditable outcomes
 
+### Agentic Workers
+
+A worker can be as simple as a deterministic flow, or as autonomous as an **Agentic Worker** — an LLM Plan-Act-Observe agent exposed to a flow as a single `dw.agent` node. You declare *who the agent is, what tools it has, and which model it uses* in an `AgentConfig` (system prompt, tools, LLM provider/model, optional guardrails, memory, and knowledge), and the runtime runs the reasoning loop for you. Tools come from installed extensions or MCP servers, and the agent keeps multi-turn memory in Redis.
+
+See [Agentic Workers](/concepts/agentic-workers/) for the full configuration model.
+
 ### WebAssembly-First Architecture
 
 Greentic uses **WebAssembly (WASI Preview 2)** for sandboxed, portable execution of:
@@ -174,7 +180,7 @@ Greentic excels at building:
 
 ## Next Steps
 
-- [Quick Start Guide](/getting-started/quick-start/) - Get your first digital worker running
+- [Quick Start Guide](/getting-started/quick-start/) - Get your first worker running
 - [Multi-Language and i18n](/getting-started/multilanguage-i18n/) - Learn how locale, translation assets, and tenant context work
 - [Installation](/getting-started/installation/) - Detailed installation instructions
 - [Architecture Overview](/concepts/architecture/) - Deep dive into the platform architecture
