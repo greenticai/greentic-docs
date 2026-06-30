@@ -57,23 +57,17 @@ Static route metadata is intentionally constrained:
 
 ## Authoring
 
-Use the wizard first:
+Author a bundle extension with the [`gtdx` CLI](/extensions/gtdx-cli/):
 
 ```bash
-gtc wizard
+gtdx new my-bundle-ext --kind bundle
+gtdx dev
 ```
 
-For non-interactive authoring:
-
-```bash
-gtc wizard --schema
-gtc wizard --answers static-routes-answers.json
-```
-
-The generated extension artifacts under `extensions/` are JSON. Do not document YAML files in `extensions/` for this path; YAML is only the pack manifest representation.
+`gtdx new --kind bundle` scaffolds the extension project and its `describe.json` manifest. See [Writing Extensions](/extensions/writing-extensions/) for the inner loop and [Publishing Extensions](/extensions/publishing-extensions/) for signing and distribution.
 
 ## Relationship to Bundles
 
-Static routes are not a separate `.gtxpack` bundle-extension system. They are pack metadata that survives `gtc dev pack build` and is consumed by `gtc start`.
+Static routes are bundle-extension metadata: they declare how packaged `assets/` files are mounted, and `gtc start` serves them when it runs a bundle.
 
 See [Bundle Assets](/concepts/bundle-assets/) for the broader asset packaging model.

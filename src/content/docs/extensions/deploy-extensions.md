@@ -5,7 +5,7 @@ description: Declare deployment planners and operations with greentic.deployer.v
 
 Deployer extensions describe how Greentic can deploy a bundle without baking every target into application packs. A deployer can target local development, Docker or Podman, Kubernetes, Terraform, AWS, Azure, GCP, private clouds, or a custom enterprise deployer.
 
-The current deployer path is `greentic.deployer.v1` metadata inside a `.gtpack`.
+A deployer extension declares a `greentic.deployer.v1` contract and is authored with the [`gtdx` CLI](/extensions/gtdx-cli/) as a `deploy` extension.
 
 ## Contract Shape
 
@@ -44,22 +44,16 @@ Supported deployer capabilities are:
 
 Validation requires `schema_version: 1`, a non-empty planner `flow_id`, non-empty capability `flow_id` values, no duplicate capability entries, and at least the `plan` capability.
 
-## Create One with the Wizard
+## Create One with gtdx
 
-Use the wizard and select the `deployer` extension type:
-
-```bash
-gtc wizard
-```
-
-For repeatable generation:
+Scaffold a deployer extension with the [`gtdx` CLI](/extensions/gtdx-cli/):
 
 ```bash
-gtc wizard --schema
-gtc wizard --answers deployer-extension-answers.json
+gtdx new my-deployer --kind deploy
+gtdx dev
 ```
 
-The wizard catalog maps `deployer` to `greentic.deployer.v1`. It writes catalog answers under `extensions/`, updates `pack.yaml`, and scaffolds the files the selected template needs.
+`gtdx new --kind deploy` scaffolds the extension project and its `describe.json` manifest. See [Writing Extensions](/extensions/writing-extensions/) for the inner loop and [Publishing Extensions](/extensions/publishing-extensions/) for signing and distribution.
 
 ## What a Deployer Does
 
@@ -74,13 +68,12 @@ This keeps deployment separate from business flows. The same application bundle 
 
 ## Validate
 
-Run:
+Check the extension before publishing:
 
 ```bash
-gtc dev pack lint --in ./my-deployer-pack
-gtc dev pack resolve --in ./my-deployer-pack
-gtc dev pack build --in ./my-deployer-pack
-gtc dev pack doctor ./my-deployer-pack
+gtdx validate .          # describe.json against its JSON Schema
+gtdx lint                # cross-field invariants beyond JSON Schema
+gtdx publish --dry-run   # full build + pack + validate, no registry write
 ```
 
-Do not document the older `.gtxpack` deploy-extension contract or `gtdx` commands as the current path.
+See [Publishing Extensions](/extensions/publishing-extensions/) for the full validation and signing flow.

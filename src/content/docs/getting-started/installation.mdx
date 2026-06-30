@@ -107,9 +107,9 @@ gtc doctor
 
 ## Optional Dependencies
 
-### Redis (Session Storage)
+### Redis (Session Storage & Agentic Workers)
 
-For production session persistence:
+For production session persistence, and required for [Agentic Workers](/concepts/agentic-workers/) — the `dw.agent` node uses Redis for multi-turn memory and is disabled without it:
 
 <Tabs>
 <TabItem label="Docker">
@@ -205,7 +205,7 @@ gtc --help
 # Check Rust WASM target
 rustup target list --installed | grep wasm32-wasip2
 
-# Create and run a test bundle
+# Preview the wizard without writing any files
 gtc wizard --dry-run
 ```
 
@@ -226,5 +226,5 @@ chmod +x /usr/local/bin/gtc
 
 ## Next Steps
 
-- [Quick Start](/getting-started/quick-start/) - Create your first digital worker
+- [Quick Start](/getting-started/quick-start/) - Create your first worker
 - [Architecture Overview](/concepts/architecture/) - Understand the platform
