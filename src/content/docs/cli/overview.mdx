@@ -68,7 +68,7 @@ The `gtc` binary is a thin router. It owns the top-level UX, then delegates most
 | `gtc add-admin` | `gtc` | Register an admin client certificate identity for a local bundle |
 | `gtc remove-admin` | `gtc` | Remove an admin client certificate identity for a local bundle |
 | `gtc admin` | `greentic` + `greentic-deployer` + `greentic-start` | Admin access, health, status, and runtime control |
-| `gtc dev` | `greentic-dev` | Developer tooling, including pack, flow, component, MCP, GUI, secrets, and coverage passthroughs |
+| `gtc dev` | `greentic-dev` | Developer tooling, including pack, flow, component, MCP (e.g. `gtc dev mcp gen`), GUI, secrets, and coverage passthroughs |
 | `gtc op` | `greentic-operator` | Operator tooling |
 | `gtc docs` | `gtc` docs helper | Generated schema documentation maintenance |
 
@@ -154,12 +154,19 @@ gtc dev flow doctor ./my-bundle/apps/my-app/flows/
 # Build a pack
 gtc dev pack build --in ./my-pack/
 
+# Generate an MCP component from an OpenAPI spec (passthrough to greentic-mcp-gen)
+gtc dev mcp gen --spec ./openapi/weatherapi.yaml --output-dir ./output
+
 # Start with verbose logging
 gtc start ./my-bundle --verbose
 
 # Start with ngrok tunnel
 gtc start ./my-bundle --ngrok on
 ```
+
+`gtc dev mcp gen` is a passthrough to `greentic-mcp-gen`. For a publish-ready extension
+with an auto-authored `describe.json`, use `gtdx new --kind mcp --from-openapi` instead.
+See [Creating MCP Tools](/mcp/creating-tools/).
 
 ### Production Deployment
 

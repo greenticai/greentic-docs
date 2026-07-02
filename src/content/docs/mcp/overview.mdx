@@ -137,7 +137,19 @@ Do not use that older shape for new flows.
 
 ## Generating MCP Components
 
-Use `greentic-mcp-gen` to generate MCP components from an API description:
+For a publish-ready `wasix:mcp/router` extension from an OpenAPI or Swagger spec, use the
+`gtdx` high-level wrapper:
+
+```bash
+gtdx new --kind mcp --from-openapi ./openapi/weatherapi.yaml
+```
+
+`gtdx` shells out to `greentic-mcp-gen` and auto-authors `describe.json` — deriving
+`runtime.permissions.network` from the spec's `servers` and `secret_requirements` from its
+security schemes. See [Creating MCP Tools](/mcp/creating-tools/) for the full step-by-step
+including dependency setup and `gtdx publish`.
+
+For lower-level control, call `greentic-mcp-gen` directly:
 
 ```bash
 greentic-mcp-gen \
