@@ -36,3 +36,6 @@ SEMVER_FIX_REPORT.md
 
 # git worktrees
 .worktrees/
+
+# SDD scratch
+.superpowers/

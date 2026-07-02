@@ -39,6 +39,11 @@ Key options:
 
 - `--kind <KIND>` — extension kind, one of `design` (default), `bundle`, `deploy`,
   `provider`, `wasm-component`, `mcp`, `llm`.
+- `--from-openapi <SPEC>` — (with `--kind mcp`) seed the extension from an
+  OpenAPI/Swagger spec instead of the empty echo skeleton: `gtdx` shells out to
+  `greentic-mcp-gen` to generate a `wasix:mcp/router` component and auto-authors
+  `describe.json` (network from the spec's `servers`, plus `secret_requirements`).
+  See [Creating MCP Tools](/mcp/creating-tools/).
 - `--id <ID>` — reverse-DNS extension id (default `com.example.<name>`).
 - `--version <VERSION>` — initial version (default `0.1.0`).
 - `--author <AUTHOR>` — defaults to `git config user.name`.
