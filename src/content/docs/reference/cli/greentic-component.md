@@ -34,7 +34,7 @@ Commands:
   store      Interact with the component store
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>  
   -h, --help             Print help
   -V, --version          Print version
 ```
@@ -50,7 +50,7 @@ Usage: greentic-component new [OPTIONS] --name <kebab_or_snake>
 
 Options:
       --locale <LOCALE>
-
+          
       --name <kebab_or_snake>
           Name for the component (kebab-or-snake case)
       --path <dir>
@@ -125,13 +125,13 @@ Component wizard helpers
 Usage: greentic-component wizard [OPTIONS] [COMMAND]
 
 Commands:
-  run
-  validate
-  apply
+  run       
+  validate  
+  apply     
 
 Options:
       --locale <LOCALE>
-
+          
 
       --mode <MODE>
           [default: create]
@@ -142,50 +142,50 @@ Options:
           [possible values: dry-run, execute]
 
       --dry-run
-
+          
 
       --validate
-
+          
 
       --apply
-
+          
 
       --qa-answers <answers.json>
-
+          
 
       --answers <answers.json>
-
+          
 
       --qa-answers-out <answers.json>
-
+          
 
       --emit-answers <answers.json>
-
+          
 
       --schema-version <VER>
-
+          
 
       --migrate
-
+          
 
       --plan-out <plan.json>
-
+          
 
       --project-root <PATH>
           [default: .]
 
       --template <TEMPLATE_ID>
-
+          
 
       --full-tests
-
+          
 
       --json
-
+          
 
       --schema
           Print the current answers.json schema and exit.
-
+          
           Agentic coding tools such as Codex and Claude should call this first to fetch the current answer schema, fill out answers.json, and replay the wizard non-interactively.
 
   -h, --help
@@ -201,7 +201,7 @@ Usage: greentic-component templates [OPTIONS]
 
 Options:
       --json             Emit JSON instead of a table
-      --locale <LOCALE>
+      --locale <LOCALE>  
   -h, --help             Print help
 ```
 
@@ -216,7 +216,7 @@ Arguments:
   <TARGET>  Path or identifier resolvable by the loader
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>      
       --manifest <MANIFEST>  Explicit path to component.manifest.json when it is not adjacent to the wasm
       --format <FORMAT>      Output format [default: human] [possible values: human, json]
   -h, --help                 Print help
@@ -233,7 +233,7 @@ Arguments:
   [TARGET]  Path or identifier resolvable by the loader
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>      
       --manifest <MANIFEST>  Explicit path to component.manifest.json when it is not adjacent to the wasm
       --describe <DESCRIBE>  Inspect a pre-generated describe CBOR file (skip WASM execution)
       --json                 Emit structured JSON instead of human output
@@ -254,7 +254,7 @@ Arguments:
 
 Options:
       --json             Emit the info report as JSON
-      --locale <LOCALE>
+      --locale <LOCALE>  
   -h, --help             Print help
 ```
 
@@ -269,7 +269,7 @@ Arguments:
   [MANIFEST]  Path to component.manifest.json [default: component.manifest.json]
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>  
       --wasm <WASM>      Optional override for the wasm artifact path
   -h, --help             Print help
 ```
@@ -282,7 +282,7 @@ Build component wasm + update config flows
 Usage: greentic-component build [OPTIONS]
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>     
       --manifest <PATH>     Path to component.manifest.json (or directory containing it) [default: component.manifest.json]
       --cargo <PATH>        Path to the cargo binary (fallback: $CARGO, then `cargo` on PATH)
       --no-flow             Skip flow regeneration
@@ -304,14 +304,14 @@ Usage: greentic-component test [OPTIONS] --wasm <PATH>
 
 Options:
       --locale <LOCALE>
-
+          
 
       --wasm <PATH>
           Path to the component wasm binary
 
       --world <WORLD>
           Component world to invoke
-
+          
           [default: greentic:component/component@0.6.0]
 
       --manifest <PATH>
@@ -343,7 +343,7 @@ Options:
 
       --dry-run <BOOL>
           Run in dry-run mode (disables HTTP and filesystem writes)
-
+          
           [default: true]
           [possible values: true, false]
 
@@ -355,17 +355,17 @@ Options:
 
       --timeout-ms <MS>
           Timeout in milliseconds
-
+          
           [default: 2000]
 
       --max-memory-mb <MB>
           Max memory in megabytes
-
+          
           [default: 256]
 
       --state <STATE>
           State backend (only inmem is supported)
-
+          
           [default: inmem]
           [possible values: inmem]
 
@@ -389,12 +389,12 @@ Options:
 
       --env <ENV>
           Environment identifier for the exec context
-
+          
           [default: dev]
 
       --tenant <TENANT>
           Tenant identifier for the exec context
-
+          
           [default: default]
 
       --team <TEAM>
@@ -430,7 +430,7 @@ Commands:
   update  Regenerate config flows and embed them into component.manifest.json
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>  
   -h, --help             Print help
 ```
 
@@ -445,6 +445,6 @@ Commands:
   fetch  Fetch a component from a source and write the wasm bytes to disk
 
 Options:
-      --locale <LOCALE>
+      --locale <LOCALE>  
   -h, --help             Print help
 ```
