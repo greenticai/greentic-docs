@@ -50,6 +50,85 @@ A `local-wasm` tool is a `wasix:mcp/router` WASM component packaged as a `.gtxpa
 
 `gtdx new --kind` accepts `design`, `bundle`, `deploy`, `provider`, `wasm-component`, `mcp`, and `llm`. See [gtdx CLI](/extensions/gtdx-cli/) for the full scaffolding surface.
 
+## Generate a Publish-Ready MCP Extension
+
+`gtdx new --kind mcp --from-openapi` is the high-level wrapper around `greentic-mcp-gen`.
+It generates a `wasix:mcp/router` component from an OpenAPI or Swagger spec and
+auto-authors `describe.json` — populating `runtime.permissions.network` from the spec's
+`servers` and `secret_requirements` from its security schemes — producing a publish-ready
+extension in one step.
+
+<Steps>
+
+1. **Install dependencies**
+
+   Install the `greentic-mcp-gen` binary (requires a `GITHUB_TOKEN` with access to the
+   private repo) and the `wasm32-wasip2` Rust target:
+
+   ```bash
+   export GITHUB_TOKEN=ghp_...
+   cargo binstall greentic-mcp-generator
+   rustup target add wasm32-wasip2
+   ```
+
+   `cargo`, `cargo-component`, and `gtdx` must also be available (`gtc install` installs
+   `gtdx`).
+
+2. **Generate from an OpenAPI spec**
+
+   ```bash
+   gtdx new --kind mcp --from-openapi ./openapi/weatherapi.yaml
+   ```
+
+   `gtdx` shells out to `greentic-mcp-gen`, which produces the `wasix:mcp/router`
+   component. It then auto-authors `describe.json` with:
+
+   - `runtime.permissions.network` — derived from the spec's `servers` list, so the
+     component has exactly the network access the API requires.
+   - `secret_requirements` — derived from the spec's security schemes (e.g. API key,
+     OAuth 2.0 scopes), so credential injection is wired automatically.
+
+3. **What gets produced**
+
+   ```text
+   my-tool/
+   ├── describe.json          # auto-authored manifest (network + secrets pre-filled)
+   ├── Cargo.toml
+   └── target/wasm32-wasip2/
+       └── release/
+           └── my_tool.component.wasm
+   ```
+
+   Validate before publishing:
+
+   ```bash
+   gtdx validate .
+   gtdx lint --publish
+   ```
+
+4. **Publish to the store**
+
+   Pass the pre-built WASM with `--wasm` so `gtdx publish` skips `cargo component build`
+   and packages the generated artifact directly:
+
+   ```bash
+   gtdx publish \
+     --wasm ./target/wasm32-wasip2/release/my_tool.component.wasm \
+     --manifest ./Cargo.toml \
+     --registry store.greentic.cloud \
+     --sign --key-id my-key \
+     .
+   ```
+
+   The store validates `kind: wasix:mcp/router` against the `describe-mcp-v1` schema
+   and verifies the Ed25519 signature.
+
+</Steps>
+
+A sibling passthrough `greentic-dev mcp gen <args...>` reaches the same generator
+directly when you prefer the lower-level `greentic-mcp-gen` surface from within the
+`gtc dev` toolchain.
+
 ## Generate From OpenAPI
 
 <Steps>
