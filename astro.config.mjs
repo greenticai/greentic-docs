@@ -142,6 +142,7 @@ export default defineConfig({
 						{ label: 'Designer SSO Login', slug: 'admin/designer-sso-login' },
 						{ label: 'Cloud Deploy Environments', slug: 'admin/cloud-deploy-environments' },
 						{ label: 'Per-Tenant LLM Providers', slug: 'admin/tenant-llm-providers' },
+						{ label: 'Component Tools & Registry Credentials', slug: 'admin/component-tools' },
 						{ label: 'Starter Templates', slug: 'admin/starter-templates' },
 					],
 				},
