@@ -1,0 +1,70 @@
+---
+title: Component Tools & Private-OCI Registry Credentials
+description: Register a gtc component by URL so its operations become agentic-worker tools — including private ghcr.io packages, via per-tenant registry credentials.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Component Tools
+
+A **component tool** is a gtc component you register for a tenant by URL
+(store, repo, or OCI). Greentic reads the component's `describe()` operations
+and surfaces them as **agentic-worker tools** (keyed `component:<ref>`), so a
+Digital Worker can call them like any other tool.
+
+You register them under a tenant's **Component tools** tab in the admin
+console. Each registration is a name plus a `source_url` (for example
+`ghcr.io/acme/refund:1.2.3`); on registration Greentic pins the component's
+**version** (from the tag) and, when possible, its **digest**.
+
+## Private-OCI components
+
+A public component resolves anonymously. A **private** OCI package — for
+example a private `ghcr.io` repository — needs a credential to pull. Without
+one, introspection fails and the component never appears as a tool.
+
+To support this, add a **registry credential** for the tenant.
+
+### Add a registry credential
+
+In the same **Component tools** tab, open the **Registry credentials**
+section and add one per registry host:
+
+| Field | Meaning |
+| --- | --- |
+| **Registry host** | e.g. `ghcr.io` — matched exactly against a component's ref |
+| **Username** | any non-empty value for GHCR (the token is the secret) |
+| **Token** | a registry access token (for GHCR, a PAT with `read:packages`) |
+
+<Aside type="caution">
+Tokens are **write-only**. The console shows only whether a token is set, never
+the token itself. To change a token, rotate it (enter a new one); leave the
+field blank and cancel to keep the existing token.
+</Aside>
+
+The credential is stored **sealed** (the same encryption the platform uses for
+MCP server tokens) and scoped to the tenant. It is shared by every private
+component of that tenant whose registry host matches.
+
+### How it's used
+
+- **On registration**, the admin resolves the component's **digest** through
+  the distributor, authenticating with the matching registry credential —
+  so a private package still pins a content digest. This is best-effort: if
+  the credential is missing or the registry is unreachable, the digest is left
+  unpinned and registration still succeeds.
+- **In the Designer**, when a component's registry host has a credential, the
+  Designer authenticates the pull itself (over the tenant-scoped, server-side
+  feed — the token never reaches the browser), fetches the component, reads its
+  `describe()`, and surfaces its operations as tools. A component whose host
+  has no credential is pulled anonymously, exactly as before.
+
+<Aside type="note">
+A credential is only ever applied to a component whose `source_url` host
+matches the credential's host — a token is never sent to a different registry.
+</Aside>
+
+## Requirements
+
+Authenticated private-OCI pulls require `greentic-distributor-client` **0.5.4**
+or newer across the admin and Designer.
