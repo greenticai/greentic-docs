@@ -1,0 +1,90 @@
+---
+title: Agent Types
+description: The three shapes of an agentic worker — single_turn, agent_graph, and deep_worker — and how each is executed and packaged
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+An [agentic worker](/concepts/agentic-workers/) comes in one of **three shapes**. The shape
+you pick decides the worker's execution model and how it is packaged — specifically, which
+**executing node** ends up in the worker's `flows/main.ygtc`.
+
+| Type | Runtime shape | Executing node | Best for |
+|------|---------------|----------------|----------|
+| **`single_turn`** | One Plan → Act → Observe loop | `dw.agent` | A single tool-using assistant |
+| **`agent_graph`** | A coordinator routing to specialist agents over a shared blackboard | `dw.agent_graph` | Multi-role, multi-step routing |
+| **`deep_worker`** | A long-horizon plan → reflect → delegate loop with an iteration budget | `operala.call` | Research and deep, iterative tasks |
+
+<Aside type="note" title="Same worker, different execution model">
+All three are still "an LLM with tools." The difference is the **control flow around the
+model** — one loop, a graph of cooperating agents, or a deep iterative loop — and the type
+determines the pack's executing node, not a field on `AgentConfig`.
+</Aside>
+
+## `single_turn`
+
+The default. One agent runs the [Plan → Act → Observe loop](/concepts/agentic-workers/):
+the model receives the user message, decides which tools to call, observes the results, and
+keeps going until it can answer. The `limits.max_iter` bound (default 8) caps the loop.
+
+This is the shape documented step-by-step in [Agentic Workers](/concepts/agentic-workers/).
+Reach for it whenever one agent with a tool allow-list can do the job.
+
+## `agent_graph`
+
+Several agents cooperate. A **coordinator** (supervisor) reads the request and routes it to
+one of its **specialists** — each specialist is itself an LLM agent with its own
+instructions and tools. Specialists can run in sequence (supervisor routing) or in parallel
+(fan-out, then a join merges their results). All agents read and write a shared run
+blackboard, so a later agent sees what earlier agents produced.
+
+- The coordinator selects a route each turn; a deterministic router resolves it (bounded
+  loop). Parallel branches `join_all` and merge at a join node.
+- A global visit cap protects against runaway graphs.
+
+Author it as **"coordinator + specialists"** — a coordinator with routing instructions plus
+a named specialist per capability (`billing`, `tech`, …). Pick `agent_graph` when one prompt
+would be overloaded juggling several distinct roles, or when sub-tasks can run in parallel.
+
+## `deep_worker`
+
+A long-horizon worker for open-ended tasks (research, multi-stage analysis). Instead of a
+single reply, it runs an iterative **plan → act → reflect → delegate** loop bounded by an
+`iteration_budget` (default 8), optionally reflecting between iterations and using a separate
+`planning_model`. It is executed through an `operala.call` node.
+
+```yaml
+# deep_worker configuration
+deep_worker:
+  iteration_budget: 8
+  reflection: true
+  planning_model: gpt-4o
+```
+
+Pick `deep_worker` when the task needs sustained, self-directed iteration rather than a
+bounded tool-use loop.
+
+<Aside type="caution" title="Knowledge on deep_worker">
+Automatic knowledge retrieval (RAG) currently applies to `single_turn` and `agent_graph`.
+Wiring [knowledge](/concepts/agent-knowledge/) into the `deep_worker` loop is planned — see
+that page's caveat.
+</Aside>
+
+## Authoring
+
+Today all three types are authored **visually in the Designer** — the composer's agent-type
+picker offers `single_turn`, `agent_graph` (coordinator + specialists form), and
+`deep_worker`. See [Agentic Workers in the Designer](/concepts/agentic-workers-designer/).
+
+<Aside type="tip" title="CLI authoring — gtc 1.1.2">
+`gtc 1.1.2` adds authoring all three types from the command line via `gtc worker`
+(`gtc worker init <type>`, `gtc worker new`, `gtc worker build <spec.yaml>`), producing the
+same runner-loadable `.gtpack` as the Designer. Until then, the CLI can run and deploy a
+worker pack but not author its type.
+</Aside>
+
+## See also
+
+- [Agentic Workers](/concepts/agentic-workers/) — the `dw.agent` loop, tools, and running one
+- [Agent Memory](/concepts/agent-memory/) — short-term and long-term memory
+- [Agent Knowledge (RAG)](/concepts/agent-knowledge/) — attaching a knowledge corpus
