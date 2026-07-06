@@ -1,0 +1,208 @@
+---
+title: Deployment Targets
+description: Choose and configure an infrastructure target for the Greentic runtime, from local development through single-VM systemd to cloud providers and Kubernetes
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Deploying a Greentic environment involves two distinct layers:
+
+1. **Infrastructure deployment** provisions the VM, cluster, or cloud service that runs the Greentic runtime. This is done once per environment (or when infrastructure changes).
+2. **Application bundle deployment** ships `.gtbundle` workloads onto a running environment. This happens on every app update and is covered in [Deploying Bundles](/operations/deploying-bundles/).
+
+The two layers compose. Provision infrastructure with the deployer CLI, then deploy and manage bundles with `gtc op deploy` and the environment store. The environment's `deployer` env-pack slot (e.g. `greentic.deployer.aws-ecs@1.0.0`) records which infrastructure backing is in use.
+
+## Choosing a target
+
+| Target | Tooling | Best for |
+|--------|---------|----------|
+| Local | `gtc op env init` + `gtc start` | Day-to-day development, demos, testing |
+| Desktop (compose) | Desktop backend | Local container-based dev environments |
+| Single VM (systemd) | `greentic-deployer single-vm` | Self-hosted production on a single Linux server |
+| AWS (ECS Fargate) | `greentic-deployer aws` | AWS-native production deployments |
+| Azure (Container Apps) | `greentic-deployer azure` | Azure-native production deployments |
+| GCP (Cloud Run) | `greentic-deployer gcp` | GCP-native production deployments |
+| Kubernetes (raw manifests) | `greentic-deployer k8s-raw` | Teams with existing K8s clusters (early-stage) |
+| Helm | `greentic-deployer helm` | Helm-based K8s workflows (early-stage) |
+
+Local and single-VM targets are stable and production-usable. The cloud targets (AWS, Azure, GCP) provide functional IaC generation and execution. Kubernetes and Helm generate deployment artifacts but do not yet include a verified end-to-end cluster recipe.
+
+Additional backends (Juju, serverless, snap, K8s operator, generic Terraform) exist as previews.
+
+## Local development
+
+The default path requires no deployer tooling at all. Initialize the local environment, bootstrap the trust root, and start serving:
+
+```bash
+gtc op env init
+gtc op trust-root bootstrap local
+gtc start
+```
+
+Then deploy bundles with `gtc op deploy` from another terminal. This is the workflow described in [Deploying Bundles](/operations/deploying-bundles/).
+
+For a container-based local setup, the desktop backend wraps Docker Compose or Podman to run the runtime in a container.
+
+## Single VM (systemd)
+
+The single-VM target deploys the Greentic runtime as a systemd service on a Linux x86_64 host.
+
+### Deployment spec
+
+Start by generating or writing a deployment spec:
+
+```yaml
+apiVersion: greentic.ai/v1alpha1
+kind: Deployment
+metadata:
+  name: acme-prod
+spec:
+  target: single-vm
+  bundle:
+    source: file:///opt/greentic/bundles/acme.squashfs
+    format: squashfs
+  runtime:
+    arch: x86_64
+    admin:
+      bind: 127.0.0.1:8433
+      mtls:
+        caFile: /etc/greentic/admin/ca.crt
+        certFile: /etc/greentic/admin/server.crt
+        keyFile: /etc/greentic/admin/server.key
+  storage:
+    stateDir: /var/lib/greentic/state
+    cacheDir: /var/lib/greentic/cache
+    logDir: /var/log/greentic
+    tempDir: /var/lib/greentic/tmp
+  service:
+    manager: systemd
+    user: greentic
+    group: greentic
+  health:
+    readinessPath: /ready
+    livenessPath: /health
+    startupTimeoutSeconds: 120
+  rollout:
+    strategy: recreate
+```
+
+You can also generate this file with `greentic-deployer single-vm render-spec`.
+
+### Lifecycle
+
+| Step | Command | What it does |
+|------|---------|-------------|
+| Plan | `greentic-deployer single-vm plan --spec deployment.yaml` | Read-only preview of what will change. |
+| Apply (preview) | `greentic-deployer single-vm apply --spec deployment.yaml` | Dry-run that shows planned systemd operations. |
+| Apply (execute) | `greentic-deployer single-vm apply --spec deployment.yaml --execute` | Writes units and env files, runs `systemctl daemon-reload`, enables and starts the service. |
+| Status | `greentic-deployer single-vm status --spec deployment.yaml` | Shows the service state. |
+| Destroy | `greentic-deployer single-vm destroy --spec deployment.yaml --execute` | Stops and removes the service, units, and directories. |
+
+### Constraints
+
+- Architecture must be `x86_64`.
+- Admin bind address must be `127.0.0.1:8433` (never `0.0.0.0`), with mTLS file paths specified.
+- Bundle format must be `squashfs`.
+- Service manager must be `systemd`.
+- Rollout strategy must be `recreate`.
+
+## Cloud targets (AWS, Azure, GCP)
+
+The three cloud backends share the same verb structure and safety model. Each generates Terraform configuration for the target provider and executes it on your behalf.
+
+### Shared verbs
+
+All cloud targets support these lifecycle verbs:
+
+| Verb | What it does |
+|------|-------------|
+| `generate` | Produce Terraform configuration files. |
+| `plan` | Run a Terraform plan (read-only). |
+| `apply` | Apply the plan. Requires `--execute` to actually run. |
+| `destroy` | Tear down the deployed infrastructure. Requires `--execute`. |
+| `status` | Show the current state of deployed resources. |
+| `rollback` | Roll back to the previous deployment state. |
+
+<Aside type="note">
+Nothing external is executed without the `--execute` flag. Without it, these commands are safe previews.
+</Aside>
+
+### Credential validation
+
+Each target declares its required credentials and configuration variables. The deployer validates them before running anything. If permissions are missing, the error message reports exactly what is needed.
+
+Terraform uses a distroless operator container image by default. Override it with environment variables such as `GREENTIC_DEPLOY_TERRAFORM_VAR_OPERATOR_IMAGE`.
+
+### Example: AWS
+
+```bash
+greentic-deployer aws generate --tenant acme --environment prod \
+  --bundle-pack ./packs/app.gtpack \
+  --bundle-source https://registry.example.com/acme.gtbundle \
+  --bundle-digest sha256:<digest>
+
+greentic-deployer aws plan --tenant acme --environment prod
+
+greentic-deployer aws apply --tenant acme --environment prod --execute
+```
+
+Azure and GCP follow the same pattern, substituting `azure` or `gcp` for `aws`.
+
+### Bundle upload helper
+
+Upload a bundle to cloud storage and get back a reference URL:
+
+```bash
+greentic-deployer bundle-upload upload \
+  --target s3://my-bucket/bundles/ \
+  --bundle ./app.gtbundle
+```
+
+The `--target` flag accepts S3 (`s3://`), GCS (`gs://`), or Azure Blob Storage (`https://<account>.blob.core.windows.net/...`) URIs. Use `bundle-upload refresh-url` to re-issue a presigned URL without re-uploading.
+
+## Kubernetes
+
+The `k8s-raw` and `helm` backends generate Kubernetes manifests and Helm charts, respectively. These are artifact-generation tools: they produce files for you to apply with your own cluster tooling (`kubectl apply`, `helm install`).
+
+<Aside type="note">
+The Kubernetes backends are early-stage. Artifact generation works, but there is no verified end-to-end cluster deployment recipe yet. Plan to inspect and adapt the generated manifests for your cluster.
+</Aside>
+
+For environments backed by a Kubernetes deployer, additional env-level verbs exist for rendering and reconciling deployer artifacts:
+
+```bash
+gtc op env render <env_id>
+gtc op env reconcile <env_id>
+```
+
+These are specific to the Kubernetes deployer descriptor and are not part of the general environment workflow.
+
+## Deploying to a shared environment store
+
+All `gtc op` verbs can target a remote environment store instead of the local filesystem. Pass the store URL and a bearer token:
+
+```bash
+gtc op deploy --bundle ./app.gtbundle \
+  --store-url https://store.example.com \
+  --store-token $TOKEN \
+  --env prod-eu
+```
+
+You can also set the `GREENTIC_STORE_URL` and `GREENTIC_STORE_TOKEN` environment variables instead of repeating the flags. The remote store enforces role-based access control and maintains a durable audit log.
+
+## Managed deploys from the Designer
+
+The Greentic Designer and admin console provide a self-service deployment flow for tenants. An operator configures per-tenant cloud environments (Greentic Cloud, AWS, Azure, or GCP) in the admin console, and tenant administrators can then deploy packs directly from the Designer without touching the CLI or cloud credentials. See [Cloud Deploy Environments](/admin/cloud-deploy-environments/) for details.
+
+That managed surface sits above the CLI tooling described on this page. The CLI gives operators full control; the Designer gives tenants a guided path.
+
+## Related Pages
+
+- [Deploying Bundles](/operations/deploying-bundles/)
+- [Cloud Deploy Environments](/admin/cloud-deploy-environments/)
+- [Secrets](/concepts/secrets/)
+- [Deploy Extensions](/extensions/deploy-extensions/)
+- [gtc start](/cli/start/)
+- [Configuration Reference](/reference/configuration/)

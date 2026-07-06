@@ -1,0 +1,184 @@
+---
+title: Managing Environments
+description: Creating, configuring, inspecting, and destroying Greentic environments
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+An environment is a named deployment target that owns infrastructure bindings, application bundles, messaging endpoints, extensions, and a trust root. Greentic stores environment state on the local filesystem by default; every `gtc op` command can also operate directly against a remote environment store.
+
+This page covers the full lifecycle: creating environments, configuring them, bootstrapping the trust root, using a remote store, running health checks, and destroying environments.
+
+## Creating environments
+
+There are two creation commands, depending on whether you want the default local environment or a named one.
+
+**`gtc op env init`** bootstraps the `local` environment with five default env-pack bindings (deployer, secrets, telemetry, sessions, and state). It is idempotent — running it against an existing `local` environment reports that nothing changed. The `local` environment is special: the webchat GUI is enabled for it by default, and `customer_id` defaults to `local-dev` on deploy.
+
+```bash
+gtc op env init
+gtc op env init --public-url https://chat.example.com
+```
+
+**`gtc op env create`** creates a named environment. Any safe directory-segment string is a valid environment id.
+
+```bash
+gtc op env create prod-eu \
+  --name "Production EU" \
+  --region eu-west-1 \
+  --public-url https://chat.example.com \
+  --tenant-org acme
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--name` | Human-readable label |
+| `--region` | Logical region identifier |
+| `--public-url` | Public base URL for the environment |
+| `--listen-addr` | Address the runtime binds to |
+| `--tenant-org` | Tenant organization id |
+
+## On-disk store layout
+
+Each environment lives under `~/.greentic/environments/<env_id>/`. You can change the root with `--store-root <path>`.
+
+```
+environment.json              # greentic.environment.v1 — source of truth
+runtime.json                  # post-apply discovered config
+runtime-config.json           # materialized boot config for the runtime
+trust-root.json               # greentic.trust-root.v1 — Ed25519 public keys
+env-packs/<slot>/answers.json # per-slot provider answers
+messaging/index.json          # messaging endpoint index
+messaging/<endpoint_id>.json  # per-endpoint config
+billing-policies/             # billing policy documents
+backups/                      # environment backups
+audit/                        # audit log
+.lock                         # advisory lock
+```
+
+## Updating environments
+
+**`gtc op env update`** modifies metadata on an existing environment:
+
+```bash
+gtc op env update prod-eu --name "Production EU (Frankfurt)" --region eu-central-1
+```
+
+**`gtc op env set-public-url`** sets the public base URL. The value must be origin-only — `https://host[:port]` with no path or query component.
+
+```bash
+gtc op env set-public-url prod-eu https://chat.example.com
+```
+
+## Listing and inspecting
+
+```bash
+gtc op env list
+gtc op env show prod-eu
+```
+
+## Trust root
+
+The trust root holds Ed25519 public keys used to verify pack signatures. Signature verification is fail-closed: if the trust root is missing or empty, no bundle can be deployed.
+
+<Aside type="caution">
+You must bootstrap the trust root before deploying any bundle. Without it, signature verification rejects every deploy attempt.
+</Aside>
+
+**`gtc op trust-root bootstrap`** seeds the trust root with the operator's Ed25519 public key. It is idempotent.
+
+```bash
+gtc op trust-root bootstrap local
+gtc op trust-root bootstrap prod-eu
+```
+
+Additional trust-root commands:
+
+| Command | Purpose |
+|---------|---------|
+| `gtc op trust-root list <env>` | List all keys in the trust root |
+| `gtc op trust-root add <env> --key-id <id> --public-key-pem <pem>` | Add a key (also accepts `--public-key-file`) |
+| `gtc op trust-root remove <env> --key-id <id>` | Remove a key |
+
+## Remote environment stores
+
+By default, every `gtc op` command operates on the local filesystem store. To work against a remote environment store, pass `--store-url` and `--store-token` (or set `GREENTIC_STORE_URL` and `GREENTIC_STORE_TOKEN`):
+
+```bash
+gtc op env show prod-eu \
+  --store-url https://store.example.com \
+  --store-token $GREENTIC_STORE_TOKEN
+```
+
+The remote store is an HTTP API with role-based access control (admin, operator, and read-only roles), idempotency replay protection, a durable audit log, and backup and restore support. All `gtc op` mutation verbs work the same way against a remote store.
+
+## Health checks
+
+Two complementary doctor surfaces verify environment readiness.
+
+**`gtc op env doctor`** checks a specific environment:
+
+```bash
+gtc op env doctor prod-eu
+```
+
+It runs the following check groups in order:
+
+1. **Environment resolution** — the environment id is valid, `environment.json` exists and validates.
+2. **Trust root** — PEM parses correctly, key id matches. An empty trust root is an error once revisions exist and a warning before.
+3. **Messaging-endpoint linkage** — an endpoint with no linked bundles admits nothing (fail-closed). A linked bundle must have an active deployment with a ready revision receiving traffic.
+4. **Secret-ref resolvability** — each endpoint's `secret_refs` are read-verified. Values are discarded; only URIs appear in diagnostics.
+5. **Runtime config** — the materialized `runtime-config.json` exists and loads.
+
+**`gtc start doctor`** checks runtime readiness before or instead of starting the runtime:
+
+| Flag | Effect |
+|------|--------|
+| `--env <env_id>` | Environment to check (defaults to `$GREENTIC_ENV` or `local`) |
+| `--json` | Machine-readable JSON output |
+| `--strict` | Promote warnings to errors (use this in CI) |
+| `--fix-hints` | Include remediation suggestions |
+| `--stage <stage>` | Run only a specific check group: `all`, `setup`, `cache`, `runtime`, `routes`, `provider`, or `secrets` |
+
+## Global flags
+
+Every `gtc op` noun accepts the following flags:
+
+| Flag | Purpose |
+|------|---------|
+| `--store-root <path>` | Override the local store root directory |
+| `--store-url <URL>` | Remote environment store URL |
+| `--store-token <TOKEN>` | Bearer token for the remote store |
+| `--schema` | Print the JSON schema for the verb's input payload and exit |
+| `--answers <path>` | JSON or YAML payload file for the verb |
+| `--locale <tag>` | Locale for user-facing output |
+
+## Serving an environment
+
+`gtc start` serves an environment from the persisted store. No bundle argument is needed.
+
+```bash
+gtc start                   # serves the local environment
+gtc start --env prod-eu     # serves a named environment
+```
+
+The `--env` flag defaults to `$GREENTIC_ENV` or `local`. Hot-attach a bundle to a running environment from a second terminal with `gtc op deploy`.
+
+## Destroying an environment
+
+```bash
+gtc op env destroy prod-eu --confirm
+```
+
+The `--confirm` flag is required to prevent accidental deletion.
+
+## Related Pages
+
+- [Environments & Deployment](/operations/overview/)
+- [The Environment Manifest](/operations/env-manifest/)
+- [Deploying Bundles](/operations/deploying-bundles/)
+- [Secrets](/concepts/secrets/)
+- [gtc start](/cli/start/)
+- [gtc setup](/cli/setup/)

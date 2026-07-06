@@ -1,0 +1,265 @@
+---
+title: Deploying Bundles
+description: Deploy application bundles into an environment, manage revisions and traffic splits, run multiple bundles side by side, and perform blue-green and canary releases
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+An environment is a long-lived deployment target that can host many application bundles at the same time. Each bundle gets its own deployment record, its own revision sequence, and its own traffic split. Canarying one bundle never touches another bundle's traffic.
+
+This multi-bundle model means you can run a customer-facing chat bot and an internal analytics pipeline in the same environment, deploy them independently, and roll one back without affecting the other.
+
+Before you can deploy anything, the environment must exist and its trust root must be bootstrapped. If you have not done that yet, run:
+
+```bash
+gtc op env init
+gtc op trust-root bootstrap local
+```
+
+Without a trust root, signature verification fails closed and no bundle deploys.
+
+## One-shot deploys with gtc op deploy
+
+The fastest path from a `.gtbundle` file to a running workload is a single command:
+
+```bash
+gtc op deploy --bundle ./my-app.gtbundle --env local
+```
+
+This orchestrates the full lifecycle: register the bundle (if new), stage a revision, warm it, and shift 100% of traffic to it.
+
+### Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--bundle <path>` | Path to the `.gtbundle` file. Required. |
+| `--env <id>` | Target environment. Defaults to `$GREENTIC_ENV` or `local`. |
+| `--bundle-id <id>` | Logical name for this bundle in the environment. Auto-derived from the bundle if omitted. |
+| `--customer-id <id>` | Customer identity for the deployment. Defaults to `local-dev` in the `local` environment. |
+| `--tenant <tenant>` | Tenant identity for route binding and secret scope. |
+| `--team <team>` | Team identity, scoped under the tenant. |
+| `--path-prefix <prefix>` | URL path prefix for routing (e.g. `/support`). |
+| `--host <host>` | Hostname for routing (e.g. `chat.example.com`). |
+| `--config-override <pack:key=val>` | Non-secret per-pack config override. Repeatable. |
+| `--config-override-json <pack:key=json>` | JSON-valued config override. |
+| `--config-overrides-from <file>` | Load config overrides from a file. |
+| `--idempotency-key <key>` | Ensures the same deploy is not applied twice. |
+
+Re-deploying the same bundle id stages a new revision and performs a blue-green traffic shift to it automatically.
+
+### Hot-attach to a running environment
+
+You can deploy against an environment that is already being served. Run `gtc start` in one terminal and `gtc op deploy` in another. The running process picks up the new revision without restarting.
+
+```bash
+# Terminal 1
+gtc start
+
+# Terminal 2
+gtc op deploy --bundle ./my-app.gtbundle --env local
+```
+
+## Deployments, revisions, and traffic splits
+
+Each bundle in an environment is tracked by a **BundleDeployment** record, keyed by `(env_id, bundle_id, customer_id)`. The deployment carries a unique id (ULID), optional revenue-share entries, config overrides, status, and a route binding.
+
+### Revisions
+
+A revision is an immutable, content-addressed snapshot of a staged `.gtbundle`. Each deploy creates a new revision in the bundle's revision sequence.
+
+Revisions move through these lifecycle states:
+
+| State | Meaning |
+|-------|---------|
+| `inactive` | Initial or post-drain state. Not receiving traffic. |
+| `staged` | Bundle content registered but not yet warmed. |
+| `warming` | Readiness checks in progress. |
+| `ready` | Eligible to receive traffic. |
+| `draining` | Finishing in-flight requests before going inactive. |
+| `failed` | Warming or staging failed. |
+| `archived` | Permanently retired. |
+
+Warming is a readiness gate. A revision must reach `ready` before it can receive traffic.
+
+### Traffic splits
+
+Each bundle has its own traffic split that distributes requests across its ready revisions. Weights can be expressed as percentages (`50%`) or basis points (`5000bps`).
+
+<Aside type="caution">
+Weights must sum to exactly 100% (10000 bps). The runtime rejects a split that does not balance.
+</Aside>
+
+### Fine-grained verbs
+
+The one-shot `deploy` command handles the common case. For more control, use the individual verbs:
+
+| Command | What it does |
+|---------|-------------|
+| `gtc op bundles add\|update\|remove` | Manage bundle deployment records. Payload via `--answers`. |
+| `gtc op bundles list <env>` | List bundle deployments. |
+| `gtc op revisions stage <env> --deployment <ULID> --bundle <path>` | Stage a new revision. |
+| `gtc op revisions warm\|drain\|archive` | Move a revision through its lifecycle. Payload via `--answers`. |
+| `gtc op revisions list <env>` | List all revisions. |
+| `gtc op traffic set <env> <rev>=<weight>... --deployment <ULID>` | Set traffic weights. |
+| `gtc op traffic show <env> --deployment <ULID>` | Show current split. |
+| `gtc op traffic rollback <env> --deployment <ULID>` | Revert to the previous split. |
+
+Verbs that take a payload read it from a JSON or YAML file passed with `--answers <file>`. Run any verb with `--schema` to print the payload shape it accepts.
+
+## Running multiple bundles in one environment
+
+Deploy two bundles into the same environment by giving each its own identity and route binding:
+
+```bash
+gtc op deploy --bundle ./support-bot.gtbundle --env prod-eu \
+  --bundle-id support --tenant acme --team support \
+  --path-prefix /support
+
+gtc op deploy --bundle ./sales-bot.gtbundle --env prod-eu \
+  --bundle-id sales --tenant acme --team sales \
+  --path-prefix /sales
+```
+
+Each bundle gets its own deployment, revision history, and traffic split. Updating the support bot has no effect on the sales bot.
+
+### Route bindings
+
+The runtime builds a deployment route table from each active deployment's route binding. A route binding has three parts:
+
+- **hosts** -- hostnames the deployment responds to (e.g. `chat.example.com`).
+- **path_prefixes** -- URL path prefixes (e.g. `/support`, `/`).
+- **tenant_selector** -- the `(tenant, team)` identity under which the deployment runs, controlling secret scope and access rules.
+
+Route bindings are operator-owned data. Public traffic cannot select a deployment directly; the runtime matches inbound requests to bindings by host and path. Requests that match no binding fall back to the legacy single-bundle path.
+
+### Manifest form
+
+For reproducible setups, declare multiple bundles in an environment manifest and apply them with `gtc op env apply --answers manifest.json`. The `bundles` array holds one entry per bundle:
+
+```json
+{
+  "bundles": [
+    {
+      "bundle_id": "support",
+      "bundle_path": "support-bot.gtbundle",
+      "customer_id": "cust-acme",
+      "status": "active",
+      "route_binding": {
+        "path_prefixes": ["/support"],
+        "hosts": ["chat.example.com"],
+        "tenant_selector": { "tenant": "acme", "team": "support" }
+      }
+    },
+    {
+      "bundle_id": "sales",
+      "bundle_path": "sales-bot.gtbundle",
+      "customer_id": "cust-acme",
+      "status": "active",
+      "route_binding": {
+        "path_prefixes": ["/sales"],
+        "hosts": ["chat.example.com"],
+        "tenant_selector": { "tenant": "acme", "team": "sales" }
+      }
+    }
+  ]
+}
+```
+
+Within the manifest, `bundle_path` (one-shot single-revision deploy) and `revisions[]` (multi-revision with explicit weights) are mutually exclusive on each entry. See the next section for the multi-revision form.
+
+## Blue-green and canary releases
+
+Re-deploying a bundle with `gtc op deploy` stages a new revision and shifts all traffic to it in a blue-green fashion. The previous revision drains and goes inactive.
+
+For a gradual rollout, use `traffic set` to split traffic between two ready revisions:
+
+```bash
+gtc op traffic set prod-eu rev-01HABC=90% rev-01JXYZ=10% \
+  --deployment <ULID>
+```
+
+This sends 10% of requests to the new revision while the old one handles the rest. Adjust the weights as confidence grows, then shift fully to the new revision.
+
+To roll back, use `traffic rollback` to restore the previous split:
+
+```bash
+gtc op traffic rollback prod-eu --deployment <ULID>
+```
+
+<Aside type="note">
+You cannot zero out a traffic split entirely. To retire the last revision of a bundle, deploy a new one and let blue-green handle the transition.
+</Aside>
+
+### Multi-revision manifest form
+
+For declarative canary deploys, use the `revisions` array instead of `bundle_path`:
+
+```json
+{
+  "bundles": [
+    {
+      "bundle_id": "support",
+      "customer_id": "cust-acme",
+      "status": "active",
+      "revisions": [
+        { "name": "stable", "bundle_path": "support-v2.gtbundle", "weight_percent": 90 },
+        { "name": "canary", "bundle_path": "support-v3.gtbundle", "weight_percent": 10 }
+      ],
+      "route_binding": {
+        "path_prefixes": ["/support"],
+        "hosts": ["chat.example.com"],
+        "tenant_selector": { "tenant": "acme", "team": "support" }
+      }
+    }
+  ]
+}
+```
+
+Weight rules: if all entries specify `weight_percent`, the values must sum to 100. If none specify it, traffic is split equally. Mixing set and unset weights in the same bundle is an error.
+
+## Serving the environment
+
+Once bundles are deployed, serve the environment with:
+
+```bash
+gtc start [--env <env_id>]
+```
+
+No bundle argument is needed. The `--env` flag defaults to `$GREENTIC_ENV` or `local`. The runtime loads all deployed bundles from the environment store and begins serving.
+
+### Tunnels
+
+To expose the environment over a public URL for testing or webhook integration, use a tunnel:
+
+```bash
+gtc start --cloudflared on
+gtc start --ngrok on
+```
+
+Override the tunnel binary location with `--cloudflared-binary <path>` or `--ngrok-binary <path>`.
+
+The runtime resolves the public base URL in this order: the `PUBLIC_BASE_URL` environment variable, the tunnel-discovered URL, then the persisted `public_base_url` from the environment store.
+
+## Verifying a deployment
+
+After deploying, verify that the environment is healthy:
+
+```bash
+gtc op env doctor local
+gtc op traffic show local --deployment <ULID>
+gtc op revisions list local --deployment <ULID>
+```
+
+The doctor command checks environment resolution, trust root validity, messaging-endpoint linkage, secret-ref resolvability, and runtime config. For CI automation, `gtc start doctor --env <id> --strict` promotes warnings to errors.
+
+## Related Pages
+
+- [Secrets](/concepts/secrets/)
+- [Multi-Tenancy](/concepts/multi-tenancy/)
+- [Deployment Targets](/operations/deployment-targets/)
+- [Cloud Deploy Environments](/admin/cloud-deploy-environments/)
+- [gtc start](/cli/start/)
+- [gtc setup](/cli/setup/)
+- [Configuration Reference](/reference/configuration/)

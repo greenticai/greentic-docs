@@ -122,6 +122,18 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Environments & Deployment',
+					items: [
+						{ label: 'Overview', slug: 'operations/overview' },
+						{ label: 'Managing Environments', slug: 'operations/environments' },
+						{ label: 'The Environment Manifest', slug: 'operations/env-manifest' },
+						{ label: 'Deploying Bundles', slug: 'operations/deploying-bundles' },
+						{ label: 'Deployment Targets', slug: 'operations/deployment-targets' },
+						{ label: 'Tenants & Teams', slug: 'operations/tenants-and-teams' },
+						{ label: 'Secrets in Environments', slug: 'operations/environment-secrets' },
+					],
+				},
+				{
 					label: 'Extensions',
 					items: [
 						{ label: 'Overview', slug: 'concepts/extensions' },

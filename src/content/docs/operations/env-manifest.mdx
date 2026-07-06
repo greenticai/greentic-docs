@@ -1,0 +1,179 @@
+---
+title: The Environment Manifest
+description: Declarative whole-environment reconciliation with gtc op env apply
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The environment manifest is a single JSON document (schema `greentic.env-manifest.v1`) that describes an entire environment. Running `gtc op env apply --answers <path>` reconciles the live environment to match the manifest through a validate, diff, plan, execute, and verify pipeline.
+
+The manifest is upsert-only: resources present in the live store but absent from the manifest are left untouched. Re-applying an unchanged manifest is a visible no-op. All manifest structs enforce `deny_unknown_fields`, so a typo in a key name fails loudly at parse time rather than being silently ignored.
+
+## Full example
+
+```json title="env-manifest.json"
+{
+  "schema": "greentic.env-manifest.v1",
+  "environment": {
+    "id": "local",
+    "public_base_url": "https://chat.example.com",
+    "name": "Local Dev",
+    "region": "us-east-1",
+    "tenant_org_id": "acme",
+    "listen_addr": "127.0.0.1:8080",
+    "gui_enabled": true
+  },
+  "trust_root": "bootstrap",
+  "packs": [
+    { "slot": "deployer", "kind": "greentic.deployer.k8s@1.0.0", "pack_ref": "builtin", "answers_ref": "deployer-answers.json" },
+    { "slot": "secrets", "kind": "greentic.secrets.dev-store@1.0.0", "pack_ref": "builtin" }
+  ],
+  "secrets": [
+    { "path": "default/_/messaging-telegram/telegram_bot_token", "from_env": "TELEGRAM_BOT_TOKEN" },
+    { "path": "default/_/messaging-webchat/public_base_url" }
+  ],
+  "bundles": [
+    {
+      "bundle_id": "fast2flow",
+      "bundle_path": "fast2flow.gtbundle",
+      "customer_id": "cust-acme",
+      "revenue_share": [
+        { "party_id": "agency", "basis_points": 3000 },
+        { "party_id": "greentic", "basis_points": 7000 }
+      ],
+      "status": "active",
+      "config_overrides": { "messaging-telegram": { "api_base_url": "https://staging.example.com" } },
+      "route_binding": {
+        "path_prefixes": ["/"],
+        "hosts": ["chat.example.com"],
+        "tenant_selector": { "tenant": "default", "team": "default" }
+      }
+    }
+  ],
+  "extensions": [
+    { "kind": "acme.oauth.auth0@1.0.0", "pack_ref": "builtin", "instance_id": "primary", "answers_ref": "ext-auth0-answers.json" }
+  ],
+  "messaging_endpoints": [
+    {
+      "name": "telegram-legal-bot",
+      "provider_type": "messaging.telegram.bot",
+      "links": ["fast2flow"],
+      "welcome_flow": { "bundle_id": "fast2flow", "pack_id": "echo-pack", "flow_id": "main" },
+      "secret_refs": ["secret://local/default/_/messaging-telegram/telegram_bot_token"]
+    }
+  ]
+}
+```
+
+Only the `schema` and `environment` sections are required. All other sections are optional and applied only when present.
+
+## Manifest sections
+
+### environment
+
+The `environment` section sets the environment's identity and host configuration. The `id` field is required. For the `local` environment, apply auto-initializes it if it does not exist. Named environments must already exist (create them with `gtc op env create` first).
+
+| Field | Purpose |
+|-------|---------|
+| `id` | Environment identifier (required) |
+| `name` | Human-readable label |
+| `region` | Logical region |
+| `public_base_url` | Public base URL (origin-only) |
+| `listen_addr` | Address the runtime binds to |
+| `tenant_org_id` | Tenant organization |
+| `gui_enabled` | Enable the webchat GUI |
+
+### trust_root
+
+The only supported directive value is `"bootstrap"`, which idempotently seeds the trust root with the operator's Ed25519 public key. Omit this section to leave the trust root unchanged.
+
+### packs
+
+Env-pack bindings, one per capability slot. Each entry specifies the `slot`, a `kind` descriptor (for example `greentic.deployer.k8s@1.0.0`), a `pack_ref`, and an optional `answers_ref` pointing at a sibling answers file.
+
+### secrets
+
+A list of secret references to populate in the store. Each entry has a `path` in the format `<tenant>/<team|_>/<category>/<name>` and an optional `from_env` field.
+
+When `from_env` is set, the value is read from the named environment variable at apply time. When `from_env` is absent, the operator is prompted for a masked paste during interactive apply.
+
+<Aside type="caution">
+Secret values never appear in the manifest file. The manifest records only the path and, optionally, which environment variable supplies the value. A secret already present in the store is not re-prompted on subsequent applies.
+</Aside>
+
+Secrets are "always-put" steps in the apply plan because their stored values cannot be diffed.
+
+### bundles
+
+One entry per application bundle. Each entry carries a `bundle_id`, deployment metadata (`customer_id`, `revenue_share`, `status`, `config_overrides`), and a `route_binding` that maps inbound requests to the deployment.
+
+`bundle_path` and `revisions[]` are mutually exclusive:
+
+- **`bundle_path`** deploys a single revision from the given `.gtbundle` file.
+- **`revisions[]`** deploys multiple named revisions with traffic weights. Each entry has `name`, `bundle_path`, and optional `weight_percent` and `drain_seconds`. Weight rules: if all entries set weights, the sum must equal 100. If no entry sets a weight, traffic is split equally. Mixing set and unset weights is an error.
+
+You can also specify `bundle_source_uri` and `bundle_digest` for registry-pinned bundles.
+
+### extensions
+
+Open-namespace extension bindings, keyed by `(kind, instance_id)`. Each entry specifies the `kind` descriptor, a `pack_ref`, an `instance_id`, and an optional `answers_ref`.
+
+### messaging_endpoints
+
+Provider endpoint instances. Each entry has a `name`, a `provider_type`, a `links` array naming the bundles this endpoint connects to, an optional `welcome_flow` identifying the flow that greets new conversations, and `secret_refs` as `secret://` URIs.
+
+## Apply flags
+
+| Flag | Effect |
+|------|--------|
+| `--dry-run` | Validate, diff, and print the plan without mutating anything. Exits 0. |
+| `--check` | CI convergence gate: like dry-run, but exits non-zero if there is pending drift. Always-put secret steps are excluded from the verdict. |
+| `--non-interactive` | Never prompt. Missing inputs are reported in a JSON `missing` section. |
+| `--yes` | Skip the confirmation prompt. |
+| `--emit-answers-template <path>` | Write a skeleton manifest to the given path as a starting point. |
+| `--updated-by <principal>` | Audit actor recorded with every change (defaults to `env-apply`). |
+
+## Apply ordering
+
+The apply engine processes sections in a deterministic order:
+
+1. Ensure the environment exists.
+2. Apply host configuration (name, region, listen address, GUI).
+3. Set the public URL.
+4. Bootstrap the trust root.
+5. Bind env-packs to capability slots.
+6. Write secrets.
+7. Deploy new bundles.
+8. Update properties on existing bundles.
+9. Bind extensions.
+10. Add messaging endpoints.
+11. Link bundles to messaging endpoints.
+12. Set welcome flows on messaging endpoints.
+
+## Using --check as a CI gate
+
+The `--check` flag turns manifest apply into a CI-friendly convergence gate. It runs the full validate-and-diff pipeline without mutating the store and exits non-zero if the live environment has drifted from the manifest.
+
+```bash
+gtc op env apply --answers env-manifest.json --check
+```
+
+Always-put steps (secrets) are excluded from the drift verdict because their stored values cannot be compared against the manifest. Pair `--check` with `gtc start doctor --strict` for a complete readiness gate.
+
+## Gotchas
+
+- **`deny_unknown_fields` is strict.** A misspelled key in the manifest is a parse-time error. This is intentional — silent typos are more dangerous than loud failures.
+- **Upsert-only, no pruning.** Resources present in the live store but absent from the manifest are left untouched. The manifest cannot delete resources in v1.
+- **Named environments must pre-exist.** Unlike `local` (which apply auto-initializes), named environments must be created with `gtc op env create` before they can be targeted by a manifest.
+- **Weight sum rules.** When `revisions[]` entries all specify `weight_percent`, the values must sum to exactly 100. When none specify a weight, traffic is split equally. Mixing set and unset weights in the same bundle is an error.
+- **Interactive secrets and `--non-interactive`.** In non-interactive mode, apply fails if a secret entry lacks `from_env` and the secret is not already in the store.
+
+## Related Pages
+
+- [Environments & Deployment](/operations/overview/)
+- [Managing Environments](/operations/environments/)
+- [Deploying Bundles](/operations/deploying-bundles/)
+- [Secrets](/concepts/secrets/)
+- [gtc setup](/cli/setup/)
