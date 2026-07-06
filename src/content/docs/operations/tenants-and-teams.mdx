@@ -1,0 +1,175 @@
+---
+title: "Tenants & Teams in Environments"
+description: How to configure tenant and team identity, access maps, and secret scoping in a deployed Greentic environment
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Greentic isolates workloads along a four-level identity chain: **Global, Tenant, Team, User**. Every runtime call carries a `TenantCtx` that threads tenant and team identity through routing, secret resolution, state, sessions, and telemetry. The [Multi-Tenancy](/concepts/multi-tenancy/) concept page covers the runtime model, the `TenantCtx` type, and `bundle.yaml` workspace configuration in detail. This page focuses on the operator side: how tenants and teams surface in a deployed environment, and what you configure to onboard them.
+
+The system is deny-by-default everywhere. A new tenant or team directory starts with no access. Packs, flows, and nodes must be explicitly granted before they become available.
+
+Three mechanisms carry tenant identity through an environment:
+
+| Mechanism | Where it applies |
+|-----------|-----------------|
+| **Tenant selector** on bundle deployments | Sets the `(tenant, team)` identity a deployment serves under. Drives routing and secret resolution scope. |
+| **Secret scoping** | Secret paths embed `<tenant>/<team>` segments so each tenant receives its own credentials. |
+| **`.gmap` access maps** inside the bundle | Per-tenant and per-team allow/deny rules for packs, flows, and nodes. |
+
+## The tenant selector on deployments
+
+When you deploy a bundle to an environment, the tenant selector determines which tenant and team identity the deployment operates under. Set it at deploy time with flags:
+
+```bash
+gtc op deploy --bundle ./app.gtbundle --env prod-eu \
+  --tenant acme --team support
+```
+
+Or in an environment manifest under the bundle's `route_binding`:
+
+```json
+"route_binding": {
+  "path_prefixes": ["/"],
+  "hosts": ["chat.example.com"],
+  "tenant_selector": { "tenant": "acme", "team": "support" }
+}
+```
+
+The tenant selector flows into two things:
+
+1. **Ingress routing** — the runtime's deployment route table maps inbound requests by `(host, path)` to a deployment and its associated tenant identity. Public traffic cannot choose a deployment or override the tenant.
+2. **Secret resolution scope** — when the runtime resolves a `secret://` reference, it uses the deployment's tenant and team as the lookup scope. A deployment with `--tenant acme` resolves secrets under the `acme` path segment.
+
+## Tenant and team directories
+
+Inside a bundle workspace, tenant and team scopes are expressed as directories:
+
+```
+<bundle_root>/
+  tenants/
+    <tenant>/
+      tenant.gmap
+      teams/
+        <team>/
+          team.gmap
+```
+
+New directories are created by the operator tooling (the bundle wizard) with default-deny content. You can also create them by hand. A tenant directory without a `.gmap` file, or with only `_ = forbidden`, grants no access to any pack.
+
+## Access control with .gmap files
+
+`.gmap` files are line-oriented policy files that control which packs, flows, and nodes a tenant or team may use. They are not tenant metadata or configuration documents.
+
+Each non-comment line follows the format:
+
+```text
+<path> = <policy>
+```
+
+**Path shapes:**
+
+| Path | Matches |
+|------|---------|
+| `_` | Everything (wildcard) |
+| `<pack>` | All flows and nodes in the named pack |
+| `<pack>/_` | All flows in the named pack (wildcard variant) |
+| `<pack>/<flow>` | A specific flow |
+| `<pack>/<flow>/<node>` | A specific node |
+
+**Policies:** `public` (allow) or `forbidden` (deny).
+
+**Evaluation rules:**
+
+- Most-specific match wins. A rule for `accounting/main/approve` takes precedence over `accounting/main`, which takes precedence over `accounting`, which takes precedence over `_`.
+- Same-specificity ties are resolved by last-line-wins within the file.
+- Team rules overlay tenant rules. The runtime checks the team's `.gmap` first. If no matching rule is found, it falls back to the tenant's `.gmap`.
+
+### Example
+
+```text title="tenants/acme/tenant.gmap"
+# Deny everything by default
+_ = forbidden
+
+# Allow the weather demo pack
+weather-demo = public
+
+# Allow one flow in another pack
+accounting-invoice/main = public
+```
+
+```text title="tenants/acme/teams/ops/team.gmap"
+# The ops team also gets the admin flow
+accounting-invoice/admin = public
+
+# But not the delete node within it
+accounting-invoice/admin/delete-record = forbidden
+```
+
+In this example, a user in `acme/ops` can access `weather-demo` (inherited from the tenant), `accounting-invoice/main` (inherited), and `accounting-invoice/admin` (team override) — but not `accounting-invoice/admin/delete-record` (explicitly denied at the team level).
+
+### Helper commands
+
+For quick policy edits during development and demos, you can use the grant commands instead of editing `.gmap` files directly:
+
+```bash
+gtc op demo allow --bundle ./bundle --tenant acme --path weather-demo
+gtc op demo allow --bundle ./bundle --tenant acme --team ops --path accounting-invoice/admin
+gtc op demo forbid --bundle ./bundle --tenant acme --team ops --path accounting-invoice/admin/delete-record
+```
+
+These commands edit the appropriate `.gmap` file for you.
+
+## Onboarding a tenant
+
+<Aside type="note">
+There is no dedicated `gtc op tenant` command today. Tenant onboarding is expressed through directories, `.gmap` files, deploy-time selectors, and secret scopes. The steps below bring those pieces together.
+</Aside>
+
+Follow these four steps to onboard a new tenant to an existing environment:
+
+1. **Create the tenant directory structure** in the bundle workspace. Use the bundle wizard or create the directories and `.gmap` files by hand:
+
+   ```
+   tenants/new-client/
+     tenant.gmap
+     teams/
+       default/
+         team.gmap
+   ```
+
+   Start each `.gmap` with `_ = forbidden`.
+
+2. **Grant access** to the packs, flows, or nodes the tenant should use. Edit the `.gmap` files to add `public` lines, or use the helper commands:
+
+   ```bash
+   gtc op demo allow --bundle ./bundle --tenant new-client --path support-agent
+   ```
+
+3. **Provision the tenant's secrets** under the tenant scope. Secret paths follow the pattern `<tenant>/<team|_>/<category>/<name>`. See [Secrets in Environments](/operations/environment-secrets/) for details on supplying secret values.
+
+   ```bash
+   gtc op secrets put --answers secrets-payload.json
+   ```
+
+   The payload addresses secrets under the `new-client` tenant path, for example `new-client/_/messaging-telegram/telegram_bot_token`.
+
+4. **Deploy the bundle** with the tenant selector so that routing and secret resolution carry the tenant identity:
+
+   ```bash
+   gtc op deploy --bundle ./app.gtbundle --env prod-eu \
+     --tenant new-client --team default
+   ```
+
+   Or include the `tenant_selector` in an environment manifest and apply it with `gtc op env apply --answers manifest.json`.
+
+After deployment, the runtime routes requests to the new deployment under the `new-client` identity, resolves secrets within that tenant scope, and enforces the `.gmap` access policy.
+
+## Related Pages
+
+- [Multi-Tenancy](/concepts/multi-tenancy/) — runtime model, `TenantCtx`, `.gmap` format details, resolved manifests
+- [Secrets in Environments](/operations/environment-secrets/) — supplying and scoping secrets per tenant and team
+- [Secrets](/concepts/secrets/) — declaration, runtime access, backends overview, redaction
+- [Cloud Deploy Environments](/admin/cloud-deploy-environments/) — the admin-console self-service deploy surface (a managed layer above the CLI)

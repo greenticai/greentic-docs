@@ -1,0 +1,120 @@
+---
+title: Environments & Deployment
+description: Deploying and operating Greentic environments, from local development to production cloud targets
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+An environment is a named, long-lived deployment target that owns everything needed to run Greentic workloads:
+
+- Infrastructure capability bindings (env-packs, one per slot)
+- Application bundle deployments (one or many per environment)
+- Immutable revisions per bundle
+- Mutable traffic splits per bundle
+- Messaging endpoints
+- Extensions
+- A cryptographic trust root (Ed25519 public keys)
+
+One environment can host many application bundles, each with its own independent revision sequence and traffic configuration. A production environment might run a customer-facing chatbot bundle alongside an internal operations bundle, each deployed, versioned, and canaried independently.
+
+Environments are managed through the `gtc op` CLI surface. Operators create and configure environments, deploy bundles into them, and monitor their health. For declarative management, a single JSON manifest can describe the entire environment and reconcile the live state to match with `gtc op env apply`.
+
+Environment state is stored on the local filesystem by default (under `~/.greentic/environments/`); every `gtc op` command can also operate directly against a remote environment store for shared access and audit.
+
+## Environments and application bundles
+
+An environment separates two concerns:
+
+- **Env-packs** are infrastructure capability bindings. Each environment binds one provider per capability slot — secrets, telemetry, sessions, state, deployer, and optionally revocation. Think of these as the installed appliances in your kitchen: they define what the environment can do, not what it runs.
+- **Application bundles** are the workloads you deploy into the environment. They reference capabilities by name and the runtime resolves them through the environment's bound env-packs at request time. Think of these as the dishes you cook: they are environment-agnostic and portable across different infrastructure configurations.
+
+Each environment binds one provider per capability slot. The slots are:
+
+| Slot | What it provides | Example descriptors |
+|------|------------------|---------------------|
+| deployer | How workloads reach infrastructure | `greentic.deployer.local-process`, `greentic.deployer.k8s`, `greentic.deployer.aws-ecs` |
+| secrets | Where secrets are stored | `greentic.secrets.dev-store`, `greentic.secrets.aws-sm`, `greentic.secrets.vault-kv` |
+| telemetry | Where logs, traces, and metrics go | `greentic.telemetry.stdout`, `greentic.telemetry.otlp` |
+| sessions | Session state store | `greentic.sessions.in-memory`, `greentic.sessions.redis` |
+| state | Working-memory store | `greentic.state.in-memory`, `greentic.state.redis` |
+| revocation | Pack-revocation feed (optional) | — |
+
+Providers are namespaced string descriptors (for example `greentic.deployer.k8s@1.0.0`), not a closed enum. New providers are published as env-packs, so the set of available providers grows without changes to the platform itself.
+
+Because application bundles reference capabilities by name (`secret://...`, state, telemetry) rather than by concrete provider, swapping an env-pack does not require redeploying any bundles. For example, you can move from the local dev-store secrets backend to AWS Secrets Manager by rebinding the `secrets` slot. All bundles in the environment pick up the new backend at the next request, with no redeploy and no configuration change inside the bundle.
+
+## Core capabilities
+
+The environment and deployment system provides:
+
+- **Named environments** — a `local` environment for development, plus any number of named environments (for example `staging`, `prod-eu`), backed by a local filesystem store or a remote environment store with RBAC and audit.
+- **Declarative manifest apply** — describe the entire environment in one JSON document and reconcile the live state to match with `gtc op env apply`. Use `--check` as a CI convergence gate.
+- **Multiple bundles per environment** — each bundle carries its own independent revision sequence and traffic split. Canarying one bundle never touches another.
+- **Blue-green and canary deploys per bundle** — stage a new revision, warm it, then shift traffic gradually or all at once.
+- **Tenant and team scoping** — every deployment binds to a `(tenant, team)` identity through its route binding. Access is deny-by-default and controlled by `.gmap` access maps inside the bundle. Secrets, sessions, and state are all scoped by tenant.
+- **Pluggable secrets backends** — from a local dev store for development to AWS Secrets Manager, Azure Key Vault, GCP Secret Manager, HashiCorp Vault, and Kubernetes Secrets for production.
+- **Deployment targets from a laptop to the cloud** — local process for development, single VM with systemd for production, Docker Compose for local containers, and cloud targets including AWS ECS, Azure Container Apps, GCP Cloud Run, and Kubernetes.
+- **Readiness doctor** — health checks for environment resolution, trust root, messaging endpoints, secret references, and runtime configuration. Use `--strict` to promote warnings to errors for CI gating.
+
+## Quick start
+
+The verified local development sequence is four steps. Run `env init` and `trust-root bootstrap` once, then start the runtime and deploy a bundle.
+
+```bash
+# Step 1 — initialize the local environment (idempotent)
+gtc op env init
+
+# Step 2 — seed the trust root with your operator key (idempotent)
+gtc op trust-root bootstrap local
+
+# Step 3 — start the runtime (serves the local environment)
+gtc start
+
+# Step 4 — deploy a bundle (from a second terminal; hot-attaches to the running process)
+gtc op deploy --bundle ./app.gtbundle
+```
+
+Re-deploying the same bundle id stages a new revision and automatically blue-green shifts traffic to it. You can also deploy multiple different bundles into the same running environment.
+
+For a complete environment setup in a single file, use the [environment manifest](/operations/env-manifest/) instead of individual commands.
+
+<Aside type="caution">
+The trust-root bootstrap step is required before any deploy. Without a trust root, signature verification fails closed and nothing deploys.
+</Aside>
+
+## Two deployment layers
+
+Greentic separates two deployment concerns that compose but should not be conflated:
+
+1. **Infrastructure deployment** provisions the VM, cluster, or cloud service that runs the Greentic runtime.
+   This is done rarely — typically once per environment — and uses the `greentic-deployer` CLI with target-specific subcommands (for example `greentic-deployer single-vm apply` or `greentic-deployer aws apply`).
+
+2. **Application bundle deployment** ships `.gtbundle` workloads onto a running environment.
+   This is done on every application update and uses `gtc op deploy` or `gtc op env apply`.
+
+The two layers compose: you provision infrastructure with layer one, then deploy and manage bundles on top of it with layer two. The environment's `deployer` slot descriptor (for example `greentic.deployer.aws-ecs@1.0.0`) records which infrastructure backing the environment uses.
+
+The Designer admin console also offers a self-service [Cloud Deploy Environments](/admin/cloud-deploy-environments/) surface for tenant administrators to deploy packs to operator-configured cloud destinations. That is a managed layer above the CLI surface documented here. See that page for the admin-console workflow and the distinction between operator and tenant responsibilities.
+
+## Where to go next
+
+The remaining pages in this section cover each topic in detail.
+
+- [Managing Environments](/operations/environments/) — creating, configuring, inspecting, and destroying environments, including the trust root, remote stores, and health checks.
+- [The Environment Manifest](/operations/env-manifest/) — declarative whole-environment reconciliation with `gtc op env apply`, including the full manifest schema and CI gating.
+- [Deploying Bundles](/operations/deploying-bundles/) — the bundle, revision, and traffic-split lifecycle, including blue-green deploys and canary routing.
+- [Deployment Targets](/operations/deployment-targets/) — infrastructure provisioning for local process, single-VM systemd, Docker Compose, AWS ECS, Azure Container Apps, GCP Cloud Run, and Kubernetes.
+- [Tenants and Teams](/operations/tenants-and-teams/) — multi-tenant access control, `.gmap` rules, and tenant onboarding.
+- [Environment Secrets](/operations/environment-secrets/) — supplying, scoping, and rotating secrets across backends from the local dev store to cloud secret managers.
+
+## Related Pages
+
+- [Secrets](/concepts/secrets/)
+- [Multi-Tenancy](/concepts/multi-tenancy/)
+- [Components](/concepts/components/)
+- [Cloud Deploy Environments](/admin/cloud-deploy-environments/)
+- [Configuration](/reference/configuration/)
+- [gtc setup](/cli/setup/)
+- [gtc start](/cli/start/)
