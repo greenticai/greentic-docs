@@ -1,0 +1,112 @@
+---
+title: gtc worker
+description: Author agentic workers from the command line — single_turn, agent_graph, and deep_worker — with a WorkerSpec
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Coming in gtc 1.1.2">
+`gtc worker` is planned for **gtc 1.1.2**. The commands and `WorkerSpec` format below describe
+that upcoming release. Until then, author workers in the [Designer](/concepts/agentic-workers-designer/).
+</Aside>
+
+`gtc worker` builds an [agentic worker](/concepts/agentic-workers/) — of any
+[type](/concepts/agent-types/) — into a runner-loadable `.gtpack`, entirely from the command
+line. It is the CLI counterpart to the Designer composer: you describe the worker in a
+**`WorkerSpec`** file (YAML or JSON), and `gtc worker build` produces the same pack the
+Designer would.
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `gtc worker init <single_turn\|agent_graph\|deep_worker>` | Write a starter `WorkerSpec` for that type |
+| `gtc worker new` | Interactive wizard → a `WorkerSpec` → a built `.gtpack` |
+| `gtc worker build <spec.yaml> [-o out.gtpack]` | Build a `.gtpack` from a `WorkerSpec` |
+| `gtc worker validate <spec.yaml>` | Validate a `WorkerSpec` without building |
+
+```bash
+gtc worker init single_turn -o triage.yaml   # scaffold
+# …edit triage.yaml…
+gtc worker validate triage.yaml               # check
+gtc worker build triage.yaml -o triage.gtpack # build
+gtc start ./triage.gtpack                      # run
+```
+
+## The `WorkerSpec`
+
+One file describes the whole worker. The interactive `gtc worker new` produces the same
+format, so the wizard and the file path are interchangeable.
+
+```yaml
+apiVersion: greentic.ai/v1
+kind: single_turn            # | agent_graph | deep_worker
+name: support-triage
+llm:
+  provider: openai
+  model: gpt-4o
+  credential_ref: llm-openai
+instructions: |              # system prompt
+  You are a support triage agent. Resolve the customer's intent, then route or answer.
+tools: [ web.search, hubspot.contacts ]
+memory:
+  short_term: true
+  long_term: { provider: chronicle, credential_ref: chronicle-main }
+knowledge:                   # RAG — see the caveat below
+  provider: chronicle
+  embedding: { provider: openai, model: text-embedding-3-small, credential_ref: embed-openai }
+  top_k: 5
+  documents: [ ./kb/policies.pdf, ./kb/faq.md ]
+guardrails: [ pii-redact ]
+```
+
+- **`kind`** selects the [worker type](/concepts/agent-types/). The type-specific block
+  (below) is required only for `agent_graph` / `deep_worker`.
+- **`tools`** is the allow-list of tool ids the worker may call.
+- **`memory`** and **`knowledge`** carry the same settings as the Designer — see
+  [Agent Memory](/concepts/agent-memory/) and [Agent Knowledge](/concepts/agent-knowledge/).
+- **`documents`** are read locally, text-extracted, chunked, and baked into the pack's corpus.
+
+### `agent_graph`
+
+```yaml
+kind: agent_graph
+# …llm / instructions / tools as above…
+agent_graph:
+  coordinator: { instructions: "Route to the right specialist." }
+  specialists:
+    - { name: billing, instructions: "Handle billing questions.", tools: [stripe.lookup] }
+    - { name: tech,    instructions: "Handle technical questions.", tools: [docs.search]  }
+```
+
+### `deep_worker`
+
+```yaml
+kind: deep_worker
+# …llm / instructions / tools as above…
+deep_worker:
+  iterationBudget: 8         # long-horizon plan → reflect → delegate loop
+  reflection: true
+  delegation: false
+```
+
+## What `build` produces
+
+`gtc worker build` emits a runner-loadable `.gtpack`: a `manifest.cbor`, a `dw-agents.json`
+carrying each agent's config (llm, tools, memory, knowledge, guardrails), a `flows/main.ygtc`
+with the type's executing node (`dw.agent` / `dw.agent_graph` / `operala.call`), and — when
+`knowledge.documents` is set — the baked knowledge corpus. The pack runs with `gtc start`.
+
+<Aside type="caution" title="Knowledge & long-term memory need the knowledge-enabled runner">
+Authoring memory/knowledge into the pack always works. **Retrieving** from a knowledge corpus,
+or reading long-term memory, at runtime needs the knowledge-enabled runner build
+(`runner-full`) plus the embedding/Chronicle environment — the default runner does not. See
+[Agent Knowledge](/concepts/agent-knowledge/#runtime-requirement). Automatic knowledge
+retrieval currently covers `single_turn` and `agent_graph`, not `deep_worker`.
+</Aside>
+
+## See also
+
+- [Agent Types](/concepts/agent-types/) — single_turn, agent_graph, deep_worker
+- [Agent Memory](/concepts/agent-memory/) · [Agent Knowledge (RAG)](/concepts/agent-knowledge/)
+- [Agentic Workers in the Designer](/concepts/agentic-workers-designer/) — the visual counterpart
