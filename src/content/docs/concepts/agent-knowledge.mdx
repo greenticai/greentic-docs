@@ -1,0 +1,89 @@
+---
+title: Agent Knowledge (RAG)
+description: Attach a knowledge corpus to an agentic worker for automatic retrieval-augmented generation
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Give an [agentic worker](/concepts/agentic-workers/) its own **knowledge corpus** — a set of
+documents (PDFs, text) the worker retrieves from automatically. Before each LLM call the
+worker searches the corpus and injects the most relevant passages as a `<knowledge>` block in
+the system prompt. This is **retrieval-augmented generation (RAG)** as auto pre-retrieval: the
+model always sees grounded context, without you wiring a retrieval tool by hand.
+
+## How it works
+
+1. **Attach documents** to the worker. They are extracted, chunked, and **baked into the
+   worker's `.gtpack`** as a corpus — the pack is self-contained.
+2. At runtime, each turn: the worker embeds the query, searches the corpus for the top
+   `top_k` passages, and prepends them to the prompt (after any long-term memory facts).
+3. The model answers grounded in the retrieved passages.
+
+```jsonc
+// AgentConfig.knowledge
+"knowledge": {
+  "provider":  "chronicle",                 // cap://dw.knowledge
+  "embedding": { "provider": "openai", "model": "text-embedding-3-small" },  // cap://dw.embedding
+  "top_k": 5
+}
+```
+
+- **`provider`** — the knowledge store capability (`cap://dw.knowledge`), e.g. Chronicle.
+- **`embedding`** — the embedding provider (`cap://dw.embedding`) used to index the corpus and
+  embed queries.
+- **`top_k`** — how many passages to retrieve per turn (default 5).
+
+## Runtime requirement
+
+Knowledge retrieval is **opt-in at the runner build**, the same as
+[long-term memory](/concepts/agent-memory/#long-term-memory): the runner must be built with the
+`knowledge-chronicle` feature, and retrieval stays silently disabled unless the embedding
+environment is set. An unconfigured tier never fails startup — the worker just answers without
+retrieval.
+
+| Variable | Purpose |
+|----------|---------|
+| `GREENTIC_KNOWLEDGE_EMBED_BASE_URL` | Embedding API base URL. |
+| `GREENTIC_KNOWLEDGE_EMBED_API_KEY` | Embedding API key. |
+| `GREENTIC_KNOWLEDGE_EMBED_MODEL` | Embedding model. |
+| `GREENTIC_KNOWLEDGE_BACKEND` | Graph/vector store (defaults to embedded SurrealDB). |
+
+<Aside type="note" title="Feature-gated runner build — gtc 1.1.2">
+The default deployed runner (features `verify` + `agentic-worker`) does **not** retrieve
+knowledge. `gtc 1.1.2` ships a knowledge-enabled runner artifact (`runner-full`, built with
+`knowledge-chronicle`) and adds `gtc start` / `gtc doctor` checks that warn when a worker
+declares knowledge but the running binary or the `GREENTIC_KNOWLEDGE_EMBED_*` environment
+can't serve it — instead of silently answering without retrieval.
+</Aside>
+
+<Aside type="caution" title="deep_worker not yet covered">
+Automatic knowledge retrieval currently applies to the [`single_turn` and `agent_graph`
+types](/concepts/agent-types/). Wiring RAG into the `deep_worker` loop is planned but not yet
+available — a `deep_worker` will run, but it won't auto-retrieve from an attached corpus.
+</Aside>
+
+## Authoring
+
+In the Designer, manage a reusable tenant **knowledge library** (upload and manage PDFs), then
+attach documents to a worker in the composer's **Knowledge** section; the corpus is emitted
+into the worker's pack.
+
+<Aside type="tip" title="CLI — gtc 1.1.2">
+From `gtc 1.1.2`, declare knowledge in a [`WorkerSpec`](/concepts/agent-types/#authoring):
+
+```yaml
+knowledge:
+  provider: chronicle
+  embedding: { provider: openai, model: text-embedding-3-small, credential_ref: embed-openai }
+  top_k: 5
+  documents: [ ./kb/policies.pdf, ./kb/faq.md ]
+```
+
+`gtc worker build` reads the documents locally, extracts and chunks them, and bakes the corpus
+into the `.gtpack`.
+</Aside>
+
+## See also
+
+- [Agent Types](/concepts/agent-types/) — single_turn, agent_graph, deep_worker
+- [Agent Memory](/concepts/agent-memory/) — short-term and long-term memory

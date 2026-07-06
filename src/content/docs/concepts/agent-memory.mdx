@@ -1,0 +1,74 @@
+---
+title: Agent Memory
+description: Give an agentic worker short-term working memory and long-term persistent memory
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+An [agentic worker](/concepts/agentic-workers/) can remember things across turns and across
+sessions. Memory has **two tiers**, configured in the optional `memory` block of the worker's
+`AgentConfig`:
+
+| Tier | Scope | Backing | Runner requirement |
+|------|-------|---------|--------------------|
+| **Short-term** (working memory) | Within a conversation | In-memory provider | Built in; needs a state store to run the worker at all |
+| **Long-term** | Across conversations | Chronicle (persistent) | `long-term-chronicle` feature + `GREENTIC_CHRONICLE_*` |
+
+```jsonc
+// AgentConfig.memory
+"memory": {
+  "short_term": { "enabled": true },
+  "long_term":  { "provider": "chronicle", "credential_ref": "chronicle-main" }
+}
+```
+
+## Short-term (working) memory
+
+Short-term memory is the worker's scratchpad within a conversation. It is served by an
+always-on in-memory provider, so nothing extra is needed to build it — the model gets
+`remember` / `recall` behaviour when `memory.short_term` is enabled.
+
+<Aside type="caution" title="A worker still needs a conversation state store to run">
+Short-term working memory is separate from the **conversation state store** that lets a
+`dw.agent` node run at all. On a server the runner needs `GREENTIC_AW_REDIS_URL`; without it,
+`dw.agent` nodes are disabled. For local / desktop runs, a runner built with the
+`desktop-agent-ephemeral` feature keeps that state in memory with no external infra.
+</Aside>
+
+## Long-term memory
+
+Long-term memory persists facts **across** conversations, backed by
+[Chronicle](https://github.com/greenticai) (embedded SurrealDB by default, or an external
+graph store). Before each turn the worker can surface relevant long-term facts and inject
+them into the prompt.
+
+Long-term memory is **opt-in at the runner build**: the runner must be built with the
+`long-term-chronicle` feature, and the tier stays silently disabled unless the Chronicle
+environment is configured. It never fails worker startup — an unconfigured tier is simply
+inactive.
+
+<Aside type="note" title="Feature-gated runner build — gtc 1.1.2">
+The default deployed runner ships with features `verify` + `agentic-worker` only, so
+long-term memory is **not** active on a stock build. `gtc 1.1.2` adds a knowledge/memory-
+enabled runner artifact (`runner-full`, built with `long-term-chronicle` +
+`knowledge-chronicle`) plus `gtc start` / `gtc doctor` checks that warn when a worker
+declares memory but the running binary or environment can't serve it.
+</Aside>
+
+## Reference
+
+| Variable | Purpose |
+|----------|---------|
+| `GREENTIC_AW_REDIS_URL` | **Required on a server.** Conversation state store; unset → `dw.agent` nodes disabled. |
+| `GREENTIC_CHRONICLE_*` | Long-term memory (Chronicle) connection. Absent → long-term tier inactive. |
+
+<Aside type="tip" title="Authoring">
+Configure both tiers visually in the Designer composer's **Memory** section, or (from
+`gtc 1.1.2`) declare them in a [`WorkerSpec`](/concepts/agent-types/#authoring) `memory`
+block and build with `gtc worker build`.
+</Aside>
+
+## See also
+
+- [Agent Types](/concepts/agent-types/) — single_turn, agent_graph, deep_worker
+- [Agent Knowledge (RAG)](/concepts/agent-knowledge/) — retrieval over an attached corpus

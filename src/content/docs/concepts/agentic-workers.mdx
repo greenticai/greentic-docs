@@ -13,6 +13,10 @@ observes the results, and keeps going until it can answer.
 This guide shows how to build one by hand and run it end to end. (Code identifiers use
 `dw_*` / `dw.agent` — the runtime name for what the product calls an "Agentic Worker".)
 
+A worker comes in one of three shapes — see [Agent Types](/concepts/agent-types/) for
+`single_turn` (this guide), `agent_graph`, and `deep_worker`. Workers can also carry
+[memory](/concepts/agent-memory/) and a [knowledge corpus](/concepts/agent-knowledge/).
+
 ## The pipeline
 
 ```
@@ -66,8 +70,9 @@ Save it as `<agent_id>.json` in `GREENTIC_AGENT_MANIFESTS_DIR` (default `~/.gree
 - `llm` accepts **any greentic-llm provider** — `openai`, `anthropic`, `deepseek`, `gemini`,
   and the others — as `{ "provider": "...", "model": "...", "credential_ref": "..." }`. Use
   `credential_ref` to name a stored credential instead of relying on an environment variable.
-- The config also supports optional `guardrails` (see [below](#guardrails)), `memory`, and
-  `knowledge` blocks. Omit them to start simple.
+- The config also supports optional `guardrails` (see [below](#guardrails)),
+  [`memory`](/concepts/agent-memory/), and [`knowledge`](/concepts/agent-knowledge/) blocks.
+  Omit them to start simple.
 
 <Aside type="tip" title="Spell out tool arguments in the prompt">
 At the current runtime, extension tools reach the model by **name** with an empty argument
