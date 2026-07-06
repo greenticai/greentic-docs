@@ -121,6 +121,7 @@ export default defineConfig({
 						{ label: 'gtc wizard', slug: 'cli/wizard' },
 						{ label: 'gtc setup', slug: 'cli/setup' },
 						{ label: 'gtc start', slug: 'cli/start' },
+						{ label: 'gtc worker', slug: 'cli/worker' },
 						{ label: 'Building Packs', slug: 'cli/building-packs' },
 					],
 				},
