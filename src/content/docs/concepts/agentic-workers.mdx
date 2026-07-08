@@ -133,10 +133,13 @@ nodes:
 
 ## 4. Run it
 
-The runtime needs Redis (worker state), an LLM key, and the extension + manifest staged:
+The runtime needs a state backend (in-memory by default — no Redis required), an LLM key, and
+the extension + manifest staged:
 
 ```bash
-export GREENTIC_AW_REDIS_URL=redis://127.0.0.1:6379
+# State backend is optional: unset → in-memory (ephemeral). For durability use
+# `export GREENTIC_AW_STATE_BACKEND=disk` (on-disk redb) or point at Redis for
+# multi-instance state: `export GREENTIC_AW_REDIS_URL=redis://127.0.0.1:6379`
 export OPENAI_API_KEY=sk-...                 # or GREENTIC_LLM_API_KEY
 export GREENTIC_EXTENSIONS_DIR=~/.greentic/extensions
 export GREENTIC_AGENT_MANIFESTS_DIR=~/.greentic/agents
@@ -188,7 +191,9 @@ A complete, runnable agentic worker lives in the **Telco-X** solution repo under
 
 | Variable | Purpose |
 |----------|---------|
-| `GREENTIC_AW_REDIS_URL` | **Required.** Worker conversation state + idempotency. Unset → `dw.agent` nodes disabled. |
+| `GREENTIC_AW_STATE_BACKEND` | State backend: `redis` \| `memory` \| `disk`. Unset → `redis` if `GREENTIC_AW_REDIS_URL` is set, else `memory` (ephemeral). `memory`/`disk` = single-process locking only. |
+| `GREENTIC_AW_STATE_PATH` | On-disk (redb) path when `GREENTIC_AW_STATE_BACKEND=disk` (default `~/.greentic/aw-state.redb`). |
+| `GREENTIC_AW_REDIS_URL` | **Optional.** Redis worker conversation state + idempotency for durable / multi-instance state. Unset → in-memory backend (worker still runs). |
 | `GREENTIC_LLM_API_KEY` / `OPENAI_API_KEY` | LLM credential. |
 | `GREENTIC_LLM_PROVIDER` / `GREENTIC_LLM_MODEL` | Override provider/model. |
 | `GREENTIC_EXTENSIONS_DIR` | Tool-extension discovery root (scans `<root>/design/`). |
