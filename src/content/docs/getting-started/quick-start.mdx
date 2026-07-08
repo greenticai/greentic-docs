@@ -18,7 +18,7 @@ Before you begin, ensure you have:
 - **`gtc` CLI** installed (run `gtc doctor` to confirm the companion binaries are on PATH) — see [Installation](/getting-started/installation/)
 - **Rust** 1.95 or later — only needed if you build packs, components, or the CLI from source; `cargo binstall gtc` downloads a prebuilt binary
 - A **public URL** for webhook providers (e.g. `ngrok` or `cloudflared`) — not required for the WebChat-only path
-- **Redis** if you run an [Agentic Worker](/concepts/agentic-workers/) — the `dw.agent` node uses Redis for multi-turn memory and is disabled without it (`brew services start redis`, or `docker run -d -p 6379:6379 redis:alpine`)
+- **(Optional) Redis** for an [Agentic Worker](/concepts/agentic-workers/) — the `dw.agent` node runs on an in-memory backend by default (no Redis needed); use Redis only for durable, multi-instance worker state (`brew services start redis`, or `docker run -d -p 6379:6379 redis:alpine`)
 - An **LLM backend** for agentic workers: a provider API key (DeepSeek, OpenAI, Anthropic, …), or a local Ollama endpoint (set the setup answers to `http://localhost:<ollama_port>/v1`, pick a model from `ollama list`, and enter any value in the API key field)
 
 ## Launch the deep research demo
@@ -226,7 +226,7 @@ When you want your own worker rather than a published demo, you author a **pack*
 </Steps>
 
 <Aside type="note">
-Agentic Workers need **Redis** running for multi-turn memory — set `GREENTIC_AW_REDIS_URL=redis://127.0.0.1:6379`. Without it the `dw.agent` node is disabled. See [Agentic Workers](/concepts/agentic-workers/) for the full `AgentConfig` reference (tools, guardrails, memory, knowledge, limits).
+Agentic Workers run on an **in-memory** state backend by default — no Redis required. For durability set `GREENTIC_AW_STATE_BACKEND=disk` (on-disk redb), or point at Redis for multi-instance state with `GREENTIC_AW_REDIS_URL=redis://127.0.0.1:6379` (`memory`/`disk` give single-process locking only). See [Agentic Workers](/concepts/agentic-workers/) for the full `AgentConfig` reference (tools, guardrails, memory, knowledge, limits).
 </Aside>
 
 ## Next Steps
