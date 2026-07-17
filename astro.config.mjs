@@ -154,6 +154,7 @@ export default defineConfig({
 				{
 					label: 'Admin & Operations',
 					items: [
+						{ label: 'Operator Roles (RBAC)', slug: 'admin/operator-roles' },
 						{ label: 'Admin Access', slug: 'admin/admin-access' },
 						{ label: 'Designer SSO Login', slug: 'admin/designer-sso-login' },
 						{ label: 'Cloud Deploy Environments', slug: 'admin/cloud-deploy-environments' },

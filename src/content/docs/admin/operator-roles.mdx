@@ -1,0 +1,88 @@
+---
+title: Operator Roles (RBAC)
+description: The three operator tiers in the Greentic admin console — platform admin, partnership admin, and tenant admin — and how their reach differs.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Operator Roles (RBAC)
+
+The Greentic admin console distinguishes **operators** — people who administer
+the platform, a group of tenants, or a single tenant — from tenant end-users.
+There are three operator tiers, each with a different reach:
+
+| Tier | Reach | Can create tenants | Can manage operators | Platform-wide surfaces |
+| --- | --- | --- | --- | --- |
+| **Platform admin** | Every tenant, unscoped | Yes, anywhere | Yes, any operator at any tier | Yes |
+| **Partnership admin** | Every tenant in its partnership(s) | Yes, within its partnership | Only tenant admins it created/scoped to its partnership | No |
+| **Tenant admin** | A fixed, explicitly-granted set of tenants | No | No | No |
+
+<Aside type="tip">
+A partnership admin is **not** a platform admin. It never sees platform
+policy, other partnerships, or operators outside its own partnership — its
+entire reach is derived from partnership membership.
+</Aside>
+
+## Platform admin
+
+The **platform admin** tier (`owner`/`admin` role) is unscoped. It can act on
+every tenant and every platform surface: add or remove tenants, create and
+manage operators at any tier, create and manage partnerships, and change
+platform-wide policy.
+
+## Partnership admin
+
+A **partnership** is a first-class named group of tenants — typically used to
+model a reseller, an agency, or another organization that operates a set of
+tenants on a customer's behalf. Only platform admins can create partnerships,
+appoint partnership admins, and move tenants between partnerships.
+
+A **partnership admin** administers one or more partnerships. Its reach is
+*derived dynamically* from partnership membership rather than granted
+per-tenant: it can see and drill into every tenant that belongs to its
+partnership, and a tenant added to the partnership later appears
+automatically, with no separate grant required.
+
+Within its partnership, a partnership admin can:
+
+- **Create tenants.** New tenants it creates are automatically joined to its
+  partnership.
+- **Manage its own tenant admins.** It may create and manage `tenant_admin`
+  operators scoped within its partnership. It can never create or elevate
+  anyone to platform admin or partnership admin, and it cannot touch operators
+  outside its partnership. Ownership is provenance-tracked: a partnership
+  admin only manages tenant admins it created, or that are otherwise scoped
+  entirely within its partnership.
+- **View a usage rollup** across all of its partnership's tenants.
+
+A partnership admin cannot reach any platform-wide surface — no cross-
+partnership visibility, no platform policy, no operator management outside
+its own partnership.
+
+### Disabling a partnership
+
+Setting a partnership's status to `disabled` **freezes its partnership
+admins**: they immediately lose drill-in access, tenant management, tenant
+creation, and usage rollup access for that partnership, until it is
+re-enabled.
+
+<Aside type="note">
+Disabling a partnership only affects partnership admins. **Platform admins
+are unaffected** and retain full access to a disabled partnership and its
+tenants.
+</Aside>
+
+## Tenant admin
+
+A **tenant admin** (`tenant_admin` role) is scoped to a fixed, explicitly
+granted set of tenants. It manages those tenants' resources — flows,
+credentials, extensions, and so on — but cannot create new tenants and cannot
+manage other operators.
+
+## Managing operators and partnerships
+
+Partnerships and operator roles are managed by platform admins from the admin
+console (or the admin API, under `/api/admin/partnerships` and
+`/api/admin/operators`). Only a platform admin can create a partnership,
+appoint a partnership admin, move a tenant between partnerships, or grant the
+platform admin tier itself.
