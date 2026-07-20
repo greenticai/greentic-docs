@@ -40,6 +40,41 @@ maps directly to the worker's `AgentConfig`, the same shape described in
 [Agentic Workers](/concepts/agentic-workers/#1-the-agent-config).
 </Aside>
 
+### Effective prompt — seeing what the model actually gets
+
+Beside the Manifest Preview sits the **Effective prompt** panel, collapsed behind a
+*Show what the AI receives* toggle. It is read-only, and it shows the system message a
+**deployed** worker would receive — not an approximation — plus one row per bound tool
+with its description and usage note.
+
+Why it exists depends on which instruction mode the worker uses:
+
+| Mode | What the model receives | What the panel adds |
+|---|---|---|
+| **Custom** | Your Instructions, verbatim | Little — the prompt *is* what you typed |
+| **Managed** | A platform-authored backbone with your instructions slotted in | The point of the panel |
+
+In Managed mode the platform supplies a standard structure — an identity line, a
+workflow-and-escalation paragraph, and the guardrail framing — and you only write the
+business-specific layer. Because the result is one continuous prompt, it is otherwise
+impossible to tell your sentences from the platform's. The panel therefore renders it as
+labelled blocks:
+
+- **identity** — the *"You are …"* line, from your display name and tone
+- **added by the platform** — the fixed backbone you cannot edit
+- **your instructions** — the layer you wrote
+
+If you have not written instructions yet, that block says so rather than sitting blank.
+A **Copy** button puts the whole system message on your clipboard.
+
+<Aside type="caution">
+The preview is composed server-side, through the exact same code path that builds a
+deployed worker's config — so it cannot quietly drift from reality. Note what it does
+**not** show: knowledge bases are not prompt text. On the agent path they are retrieved
+per turn at runtime, so an attached knowledge base correctly appears nowhere in this
+panel.
+</Aside>
+
 ## Chat ✨ Auto-fill (compose from a goal)
 
 In the Studio, type a goal (e.g. *"A read-only network operations assistant for our telco"*)
