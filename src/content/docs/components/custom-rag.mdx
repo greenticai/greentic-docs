@@ -1,0 +1,580 @@
+---
+title: Add a custom RAG
+description: Plug your own retrieval stack into Greentic as a WASM component
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Greentic ships a built-in [knowledge tier](/concepts/agent-knowledge/) for agentic workers:
+attach documents, and the worker retrieves from them automatically. Sometimes that isn't
+enough — you already run a retrieval service, or your ranking logic doesn't fit the
+attach-and-go model. This page walks through wiring your **own** retrieval-augmented
+generation (RAG) stack into Greentic as a WASM component, using a real, published reference
+component every code block on this page is copied from verbatim:
+[`greentic-example-rag`](https://github.com/greenticai/greentic-example-rag) at tag
+[`v0.1.0`](https://github.com/greenticai/greentic-example-rag/tree/v0.1.0).
+
+## Choose your path
+
+| You have | Path |
+|---|---|
+| An HTTP retrieval service (a search API, a vector DB behind an endpoint, an internal RAG microservice) | **Path 1** — call it from a component |
+| Retrieval logic in code, no separate service to call (an in-memory or embedded corpus you score yourself) | **Path 2** — embed the logic in the component |
+| Only documents, no code and no service | **Path 3** — use Knowledge Base collections, no component needed |
+
+## The component contract
+
+Every component the Greentic runner loads is a WASI Preview 2 component built against
+**ABI `greentic:component@0.6.0`**, world **`greentic:component/component@0.6.0`**. Two exports
+are non-negotiable — miss either and the component fails silently at runtime, not at build time:
+
+| Export | Purpose |
+|---|---|
+| `greentic:component/node@0.6.0` | The `invoke` entry point the runner calls to run an operation. |
+| `greentic:component/component-descriptor@0.6.0` | The `describe` entry point the runner calls to introspect operations, schemas, and capability requirements. |
+
+<Aside type="caution">
+There is no `greentic:component@0.6.1`. If you see that version anywhere in your own WIT
+output, something regenerated against the wrong package — the ABI for this whole page is
+`0.6.0`.
+</Aside>
+
+`describe()` is the single source of truth for what the runner and the designer see. Three
+fields matter more than the rest:
+
+- **`operation.id`** becomes the tool name a flow node key or an agentic-worker tool call
+  addresses. Get this wrong and nothing routes to your component.
+- **`display_name.fallback`** — if you only supply an i18n key with no fallback text, the
+  designer synthesizes a generic description instead of showing your actual intent. Always give
+  a fallback string.
+- **`input.schema`** — a trivial or empty schema means the model the agentic worker runs on
+  receives `{}` for this tool's parameters. It won't know to send a `query`. Write a real schema.
+
+## Path 1: call an HTTP retrieval service
+
+### Scaffold
+
+Start from the component generator. This is the exact command that produced
+`greentic-example-rag`:
+
+```bash
+greentic-component new --name greentic-example-rag --org ai.greentic \
+  --operation retrieve --default-operation retrieve \
+  --http-client --secret-key RAG_API_KEY --secret-format text \
+  --non-interactive --no-git
+```
+
+`--template` defaults to `rust-wasi-p2-min` and `--org` defaults to `ai.greentic`, so this is
+the full generator invocation — no flags are implied that aren't shown. `--http-client` turns on
+the `capabilities.host.http.client` capability; `--secret-key RAG_API_KEY --secret-format text`
+declares a text-format secret requirement in the manifest.
+
+<Aside type="caution" title="The scaffold does not export component-descriptor">
+The generated project satisfies `greentic:component/node@0.6.0` but not
+`greentic:component/component-descriptor@0.6.0` — the runner's introspection path silently
+returns nothing and the designer falls back to raw WIT export names instead of your logical
+operation. You have to add the export yourself. Here's the block that does it, taken verbatim
+from `src/lib.rs`:
+</Aside>
+
+```rust
+// `component-descriptor@0.6.0` is not part of the canonical WIT package
+// vendored inside `greentic-interfaces-guest` (that package only declares a
+// `component-descriptor` *record* nested in the `node` interface, not an
+// exported interface of that name). The runner's introspection path reads
+// this separate interface, so we declare + export it locally: this inline
+// `generate!` targets the *same* `greentic:component@0.6.0` package, and the
+// componentizer unions it with the guest crate's own `node` /
+// `component-qa` / `component-i18n` exports into one final component.
+#[cfg(target_arch = "wasm32")]
+wit_bindgen::generate!({
+    inline: r#"
+        package greentic:component@0.6.0;
+
+        interface component-descriptor {
+          // CBOR-encoded JSON read by runner-host for contract introspection.
+          describe: func() -> list<u8>;
+        }
+
+        world component-descriptor-only {
+          export component-descriptor;
+        }
+    "#,
+    world: "component-descriptor-only",
+    generate_all,
+});
+```
+
+and the export itself, wired to a `describe()` payload that mirrors the operation's real JSON
+schemas:
+
+```rust
+#[cfg(target_arch = "wasm32")]
+struct ComponentDescriptorExports;
+
+#[cfg(target_arch = "wasm32")]
+impl exports::greentic::component::component_descriptor::Guest for ComponentDescriptorExports {
+    fn describe() -> Vec<u8> {
+        encode_cbor(&component_descriptor_payload_json())
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+export!(ComponentDescriptorExports);
+
+#[cfg(target_arch = "wasm32")]
+greentic_interfaces_guest::export_component_v060!(Component);
+```
+
+### Enable the HTTP client feature — exactly one HTTP feature
+
+In `Cargo.toml`:
+
+```toml
+greentic-interfaces-guest = { version = ">=1.1.0-dev, <1.2.0-0", default-features = false, features = ["component-v0-6", "secrets", "http-client-v1-1"] }
+```
+
+<Aside type="caution">
+Enable **`http-client-v1-1` only**. Turning on both `http-client` and `http-client-v1-1` (or the
+catch-all `guest` feature, which turns on both) fails at the link step with `failed to upgrade
+greentic:http/http-client@1.0.0 to @1.1.0 ... different number of function parameters`.
+</Aside>
+
+### The domain logic — `src/retrieve.rs`
+
+This is the file a partner actually edits; `lib.rs` is ABI plumbing. Two pure functions, quoted
+verbatim:
+
+```rust
+//! Retrieval against an external HTTP service.
+//!
+//! This is the file a partner edits. `lib.rs` is ABI plumbing; the domain logic lives here.
+
+use serde_json::{Value, json};
+
+/// Shapes the request body sent to the partner's retrieval endpoint.
+pub fn build_request_body(payload: &Value) -> Result<Value, String> {
+    let query = payload
+        .get("query")
+        .and_then(Value::as_str)
+        .filter(|q| !q.trim().is_empty())
+        .ok_or_else(|| "missing required field 'query'".to_string())?;
+    let top_k = payload.get("top_k").and_then(Value::as_u64).unwrap_or(5);
+    Ok(json!({ "query": query, "top_k": top_k }))
+}
+
+/// Normalises the service response into the component's output contract.
+pub fn shape_response(body: &Value) -> Value {
+    let chunks = body
+        .get("chunks")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let context = body
+        .get("context")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            chunks
+                .iter()
+                .filter_map(|c| c.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        });
+    json!({ "context": context, "chunks": chunks })
+}
+```
+
+`build_request_body` requires a non-blank `query` and defaults `top_k` to `5`.
+`shape_response` prefers an explicit `context` string from the service; if the service only
+returns `chunks`, it joins their `text` fields into one context blob. This is the part you
+rewrite for your own service's response shape.
+
+### Calling the service, and where config and secrets come from
+
+```rust
+/// Calls the partner's retrieval endpoint.
+///
+/// `payload` is the full invocation payload the runner delivers:
+/// `{ "config": { ... }, "input": { ... } }`. The runner merges the flow node's
+/// `config:` block into the payload before `invoke` (`pack.rs:2390-2422`);
+/// components never read host environment variables.
+#[cfg(target_arch = "wasm32")]
+fn call_retrieval_service(payload: &serde_json::Value) -> Result<serde_json::Value, String> {
+    use greentic_interfaces_guest::http_client_v1_1 as client;
+    use greentic_interfaces_guest::secrets_store;
+
+    let endpoint = payload
+        .get("config")
+        .and_then(|c| c.get("rag_endpoint"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "missing config.rag_endpoint".to_string())?;
+
+    // Secrets come from the secrets store only — never from config or the payload.
+    let api_key_bytes = secrets_store::get(RAG_API_KEY_SECRET)
+        .map_err(|e| format!("secrets get failed: {e:?}"))?
+        .ok_or_else(|| format!("missing secret {RAG_API_KEY_SECRET}"))?;
+    let api_key = String::from_utf8(api_key_bytes).map_err(|_| "secret is not utf8".to_string())?;
+
+    let body = retrieve::build_request_body(payload.get("input").unwrap_or(payload))?;
+
+    let req = client::Request {
+        method: "POST".to_string(),
+        url: endpoint.to_string(),
+        headers: vec![
+            ("Content-Type".to_string(), "application/json".to_string()),
+            ("Authorization".to_string(), format!("Bearer {api_key}")),
+        ],
+        body: serde_json::to_vec(&body).ok(),
+    };
+    let opts = client::RequestOptions {
+        timeout_ms: Some(10_000),
+        allow_insecure: Some(false),
+        follow_redirects: Some(true),
+    };
+
+    let resp = client::send(&req, Some(opts), None)
+        .map_err(|e| format!("http error: {} ({})", e.message, e.code))?;
+    if !(200..300).contains(&resp.status) {
+        return Err(format!("retrieval service returned status {}", resp.status));
+    }
+    let body_bytes = resp.body.ok_or_else(|| "empty response body".to_string())?;
+    serde_json::from_slice(&body_bytes).map_err(|e| format!("invalid JSON response: {e}"))
+}
+
+#[cfg(target_arch = "wasm32")]
+const RAG_API_KEY_SECRET: &str = "RAG_API_KEY";
+```
+
+Two things worth calling out explicitly, both visible in that snippet:
+
+- **Config, not environment variables.** The retrieval endpoint comes from
+  `payload.config.rag_endpoint`. The invocation payload the runner hands to `invoke` is always
+  `{ "config": { ... }, "input": { ... } }` — the flow node's `config:` block merged in. A
+  component never reads a host environment variable for this.
+- **Secrets come from the secrets store, never from config, payload, or environment.** The API
+  key is fetched with `secrets_store::get("RAG_API_KEY")` — a call to the
+  `greentic:secrets-store` host interface, resolved per-tenant at runtime. It is never read out
+  of `config` or the invocation payload.
+
+### The dispatcher branch
+
+The single ABI entry point (`invoke`) routes by operation name. The `retrieve` branch:
+
+```rust
+"retrieve" => match call_retrieval_service(&value) {
+    Ok(body) => retrieve::shape_response(&body),
+    Err(err) => serde_json::json!({ "error": err }),
+},
+```
+
+An HTTP or secrets failure becomes a structured `{"error": "..."}` output rather than a trap —
+the component stays well-behaved even when the retrieval service is down or misconfigured.
+
+## Path 2: embed retrieval logic in the component
+
+Same skeleton as Path 1 — same scaffold command, same two required exports, same manifest and
+packaging steps below — but `retrieve` never leaves the component. It embeds the query and
+scores it directly against a corpus carried in `config`, instead of calling out over HTTP. Drop
+`--http-client` from the scaffold command and skip the `http-client-v1-1` feature entirely; there
+is no outbound call to make.
+
+`component-rag` in this workspace is a useful **logic reference** for this path — its scoring
+approach is a valid pattern to read. It is **not** a copy-paste starting point: its call sites
+and module layout were generated against a different bindings shape than the scaffold above
+produces, so treat it as a shape to learn from, not code to lift verbatim.
+
+## Path 3: no code — Knowledge Base collections
+
+If you only have documents and no retrieval logic to write, you don't need a component at all.
+Use the Designer's [Knowledge Base collections](/concepts/agent-knowledge/): upload documents to
+the tenant knowledge library, group them into a named collection, and attach the collection to
+an agentic worker's Knowledge tile. The built-in knowledge tier (see
+[Agent Knowledge (RAG)](/concepts/agent-knowledge/)) handles chunking, embedding, and per-turn
+retrieval for you.
+
+## Build, test, package
+
+<Aside type="caution" title="A component that imports http-client@1.1.0 cannot be locally instantiated today">
+As of CLI `1.3.0-research.1`, `greentic-component doctor` and `greentic-component test` cannot
+instantiate a component that imports `greentic:http/http-client@1.1.0` — both fail with
+`component imports instance greentic:http/http-client@1.1.0, but a matching implementation was
+not found in the linker`. `greentic-component build` (no flags) additionally fails outright
+before that, at dev-flow generation, because the operation's `query` field is required with no
+default. The root cause for the linker error is that the local test harness only wires the
+legacy runner-host HTTP surface (`greentic:host@1.0.0`), not `http-client@1.1.0` — the **runner**
+does wire `http-client@1.1.0` and instantiates the component correctly; this is a gap in the
+local harness, not a defect in the component.
+
+Practical effect: for an HTTP-calling component, local verification is `cargo test` (the
+retrieve logic) plus an export check with `wasm-tools component wit` — not
+`greentic-component test`. Don't expect `greentic-component test --op retrieve` to hand back a
+`{context, chunks}` result locally; it doesn't, for this component, today. Full instantiation is
+confirmed only once the pack runs in the runner.
+</Aside>
+
+<Steps>
+
+1. **Run the unit tests** — the part of the component that *is* verifiable locally, no runtime
+   needed:
+
+   ```bash
+   cargo test --lib retrieve
+   ```
+
+2. **Build the release wasm**:
+
+   ```bash
+   cargo build --target wasm32-wasip2 --release
+   ```
+
+3. **Check the required exports** — this is the property that actually matters, since a missing
+   export fails silently at runtime rather than at build time. The repo commits a small script
+   for this, `check-exports.sh`:
+
+   ```bash
+   #!/usr/bin/env bash
+   # Both exports are required by the runner: node@0.6.0 for invoke,
+   # component-descriptor@0.6.0 for describe.
+   set -euo pipefail
+   WASM="${1:-target/wasm32-wasip2/release/greentic_example_rag.wasm}"
+   WIT="$(wasm-tools component wit "$WASM")"
+   fail=0
+   for iface in "greentic:component/node@0.6.0" "greentic:component/component-descriptor@0.6.0"; do
+     if grep -q "$iface" <<<"$WIT"; then
+       echo "ok: exports $iface"
+     else
+       echo "MISSING: $iface"; fail=1
+     fi
+   done
+   exit $fail
+   ```
+
+   Run it:
+
+   ```bash
+   ./check-exports.sh
+   ```
+
+   Expect two `ok:` lines.
+
+4. **Refresh the manifest through the CLI, with `--no-flow`**:
+
+   ```bash
+   greentic-component build --manifest ./component.manifest.json --no-flow
+   ```
+
+   `--no-flow` is required here, not optional: a plain `greentic-component build` (no flags)
+   tries to generate a default dev-flow from the operation's input schema, and fails outright
+   because `query` is a required field with no default — `greentic-component` won't invent a
+   value for a required-no-default field. `--no-flow` skips dev-flow generation and just
+   refreshes the wasm hashes in the manifest. (Because of the same harness gap above, this
+   command also prints a warning and skips emitting `dist/*.describe.cbor`/`.json` — the wasm
+   build and hash refresh still succeed.)
+
+</Steps>
+
+### Package as a pack
+
+The pack CLI binary is **`greentic-pack`** — `packc` is only the crate name, not an installable
+command.
+
+```yaml title="pack/pack.yaml"
+pack_id: greentic.example.rag
+version: 0.1.0
+kind: application
+publisher: Greentic
+capabilities: []
+components:
+  - id: ai.greentic.greentic-example-rag
+    version: 0.1.0
+    world: greentic:component/component@0.6.0
+    supports:
+      - componentconfig
+    profiles:
+      default: default
+      supported:
+        - default
+    capabilities:
+      wasi:
+        random: true
+        clocks: true
+      host:
+        secrets:
+          required:
+            - key: RAG_API_KEY
+              required: true
+              description: API key for the retrieval service
+              scope:
+                env: dev
+                tenant: default
+              format: text
+        http:
+          client: true
+          server: false
+        telemetry:
+          scope: node
+    wasm: components/greentic_example_rag.wasm
+dependencies: []
+flows: []
+assets: []
+```
+
+`profiles` and `capabilities` are required per component entry — a minimal `pack.yaml` with only
+`id`/`version`/`world`/`wasm`/`supports` fails `greentic-pack build` with `missing field
+profiles`. The `capabilities` block here mirrors what's already declared in
+`component.manifest.json`.
+
+```bash
+mkdir -p pack/components
+cp target/wasm32-wasip2/release/greentic_example_rag.wasm pack/components/
+cp component.manifest.json pack/components/
+greentic-pack build --in ./pack
+```
+
+<Aside type="note">
+`--no-flow` is a `greentic-component build` flag (used above), not a `greentic-pack build` one —
+`greentic-pack build` has no dev-flow generation step to skip.
+</Aside>
+
+That produces `pack/dist/manifest.cbor` and `pack/dist/pack.gtpack`.
+
+### Sign and verify
+
+```bash
+openssl genpkey -algorithm ed25519 -out signing.pem
+greentic-pack sign --pack ./pack --key signing.pem
+openssl pkey -in signing.pem -pubout -out signing.pub.pem
+greentic-pack verify --pack ./pack --key signing.pub.pem
+```
+
+`verify` takes the **public** key, not the private signing key you passed to `sign` — passing
+the private key fails with a PEM-type mismatch.
+
+<Aside type="caution" title="sign does not touch the .gtpack file">
+`greentic-pack sign` signs the standalone `dist/manifest.cbor`, never the `.gtpack` zip archive
+itself. `build` always writes a fresh, unsigned manifest into both `dist/manifest.cbor` and the
+`.gtpack`; `sign`/`verify` operate only on the standalone `manifest.cbor`. So after
+build → sign → verify, `dist/manifest.cbor` is signed and verified, but the `.gtpack` your
+runner actually loads remains unsigned — `greentic-pack doctor` on the `.gtpack` still reports
+"signature files missing". There is currently no CLI step that re-embeds a signed manifest back
+into the `.gtpack`. If your distribution story requires a signed archive, that's a gap to plan
+around today, not an oversight in these steps.
+</Aside>
+
+## Use it: as a flow node
+
+Flow node keys are `<component-id>.<operation>`, and the flow itself is `schema_version: 2`:
+
+```yaml title="flows/answer_with_context.ygtc"
+id: answer_with_context
+title: Answer with custom RAG context
+type: messaging
+schema_version: 2
+start: retrieve_context
+
+nodes:
+  retrieve_context:
+    ai.greentic.greentic-example-rag.retrieve:      # component=ai.greentic.greentic-example-rag, operation=retrieve
+      config:
+        rag_endpoint: "https://rag.example.com/v1/retrieve"
+      input:
+        mapping: '{"query": "{{in.text}}", "top_k": 3}'
+    routing:
+      - to: answer
+
+  answer:
+    dw.agent.support-answerer:
+      input:
+        mapping: '{"user_text": "{{in.text}}", "context": "{{retrieve_context.context}}"}'
+    routing: reply
+```
+
+<Aside type="caution" title="Three spellings must match, exactly">
+The component id in `pack.yaml` (`ai.greentic.greentic-example-rag`), the id `describe()`
+reports, and the component segment of the flow node key (everything before the final
+`.retrieve`) must be spelled **identically**. Nothing validates this across the boundary at
+authoring time — a mismatch doesn't error, it silently drops the tool, and you find out when the
+node never fires.
+</Aside>
+
+## Use it: as an agentic-worker tool
+
+Register the component in the admin console's **Component tools** tab
+(see [Component Tools & Registry Credentials](/admin/component-tools/)), with role
+`agentic_worker`, and list `retrieve` in `allowed_operations`. If the component lives in a
+private OCI registry, add a registry credential for that host in the same tab so introspection
+and pulls can authenticate.
+
+<Aside type="caution" title="Admin registration is designer-only — the runner still needs the pack">
+Registering a component tool in the admin console makes it appear as a tool in the **Designer**
+— it does not put the component anywhere the **runner** loads from. The runner never reads the
+admin's component-tools registration; it only executes components that ship inside the `.gtpack`
+it deploys. For an agentic worker to actually call your component at runtime, the component must
+be built into the pack the runner runs, in addition to being registered in admin for
+design-time tool discovery.
+</Aside>
+
+## Limits you need to know
+
+<Aside type="caution">
+- **A custom RAG component does not replace the built-in AW knowledge tier.** They're separate
+  mechanisms — the [knowledge tier](/concepts/agent-knowledge/) auto-retrieves from an attached
+  corpus before every LLM call; a custom RAG component is a tool the worker chooses to call. One
+  doesn't configure or feed the other.
+- **Admin registration is designer-only.** As above: the component must also ship inside the
+  `.gtpack` the runner loads, or the registered tool has nothing to execute at runtime.
+- **Runtime schema comes from the pack manifest, not `describe()`.** The runner reads a tool's
+  parameter schema from `component.manifest.json` inside the pack. If the manifest's
+  `input_schema`/`output_schema` drift from what `describe()` reports, the model sees a
+  different contract at runtime than whatever previewed it at design time.
+- **The Designer's test-chat playground can select a `component:` tool but cannot execute it.**
+  It has no path to run a WASM component locally; picking a component-backed tool in test chat
+  shows it as available, not as something that actually runs in that preview.
+</Aside>
+
+## Secrets
+
+Secret values never come from `config`, the invocation payload, or a host environment variable —
+only from the secrets store, via `greentic:secrets-store#get` (as shown in
+`call_retrieval_service` above). A component declares what it needs in
+`component.manifest.json`:
+
+```json
+"secret_requirements": [
+  {
+    "key": "RAG_API_KEY",
+    "required": true,
+    "description": "API key for the retrieval service",
+    "format": "text"
+  }
+]
+```
+
+To collect and apply the secrets a pack declares in one pass, use:
+
+```bash
+greentic-secrets init --pack <PATH>
+```
+
+See [Secrets](/concepts/secrets/) for the full model — scoping, rotation, and how the runtime
+enforces that a component can only reach the secrets it declared.
+
+## Dependencies
+
+`greentic-example-rag` pins:
+
+- `greentic-interfaces-guest` `1.1.1`
+- `greentic-types` `1.1.2`
+
+## See also
+
+- [Agent Knowledge (RAG)](/concepts/agent-knowledge/) — the built-in knowledge tier this page's
+  Path 3 points at
+- [Components](/concepts/components/) — the general component model
+- [Secrets](/concepts/secrets/) — the full secrets model
+- [Component Tools & Registry Credentials](/admin/component-tools/) — registering a component as
+  an agentic-worker tool
+- [`greentic-example-rag`](https://github.com/greenticai/greentic-example-rag) at
+  [`v0.1.0`](https://github.com/greenticai/greentic-example-rag/tree/v0.1.0) — the full source
+  every code block above is quoted from
