@@ -9,10 +9,11 @@ Greentic ships a built-in [knowledge tier](/concepts/agent-knowledge/) for agent
 attach documents, and the worker retrieves from them automatically. Sometimes that isn't
 enough — you already run a retrieval service, or your ranking logic doesn't fit the
 attach-and-go model. This page walks through wiring your **own** retrieval-augmented
-generation (RAG) stack into Greentic as a WASM component, using a real, published reference
-component every code block on this page is copied from verbatim:
-[`greentic-example-rag`](https://github.com/greenticai/greentic-example-rag) at tag
-[`v0.1.0`](https://github.com/greenticai/greentic-example-rag/tree/v0.1.0).
+generation (RAG) stack into Greentic as a WASM component, backed by a real, published reference
+component: [`greentic-example-rag`](https://github.com/greenticai/greentic-example-rag) at tag
+[`v0.1.0`](https://github.com/greenticai/greentic-example-rag/tree/v0.1.0). Its Rust source,
+`component.manifest.json`, `pack.yaml`, and `check-exports.sh` are quoted here verbatim; the flow
+below is an illustrative example authored for this guide, not a file in that repo.
 
 ## Choose your path
 
@@ -466,7 +467,8 @@ around today, not an oversight in these steps.
 
 Flow node keys are `<component-id>.<operation>`, and the flow itself is `schema_version: 2`:
 
-```yaml title="flows/answer_with_context.ygtc"
+```yaml
+# Example flow authored for this guide (not a file in the reference repo).
 id: answer_with_context
 title: Answer with custom RAG context
 type: messaging
@@ -491,9 +493,9 @@ nodes:
 ```
 
 <Aside type="caution" title="Three spellings must match, exactly">
-The component id in `pack.yaml` (`ai.greentic.greentic-example-rag`), the id `describe()`
-reports, and the component segment of the flow node key (everything before the final
-`.retrieve`) must be spelled **identically**. Nothing validates this across the boundary at
+The component id in `component.manifest.json` and `pack.yaml`
+(`ai.greentic.greentic-example-rag`) and the component segment of the flow node key (everything
+before the final `.retrieve`) must be spelled **identically**. Nothing validates this across the boundary at
 authoring time — a mismatch doesn't error, it silently drops the tool, and you find out when the
 node never fires.
 </Aside>
@@ -546,7 +548,8 @@ only from the secrets store, via `greentic:secrets-store#get` (as shown in
     "key": "RAG_API_KEY",
     "required": true,
     "description": "API key for the retrieval service",
-    "format": "text"
+    "format": "text",
+    "scope": { "env": "dev", "tenant": "default" }
   }
 ]
 ```
