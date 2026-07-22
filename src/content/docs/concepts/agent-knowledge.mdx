@@ -11,6 +11,13 @@ worker searches the corpus and injects the most relevant passages as a `<knowled
 the system prompt. This is **retrieval-augmented generation (RAG)** as auto pre-retrieval: the
 model always sees grounded context, without you wiring a retrieval tool by hand.
 
+<Aside type="note" title="This tier is not pluggable">
+The retrieval described on this page is Greentic's built-in knowledge backend. It is selected at
+the runner build, not through a capability, so a third-party retrieval stack cannot replace it.
+To plug in your own RAG, see [Add a custom RAG](/components/custom-rag/) — it enters as a flow
+node or an agentic-worker tool instead.
+</Aside>
+
 ## How it works
 
 1. **Attach documents** to the worker. They are extracted, chunked, and **baked into the

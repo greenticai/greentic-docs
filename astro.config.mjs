@@ -199,6 +199,7 @@ export default defineConfig({
 						{ label: 'fast2flow', slug: 'components/fast2flow' },
 						{ label: 'slot-extractor', slug: 'components/slot-extractor' },
 						{ label: 'cards2pack', slug: 'components/cards2pack' },
+						{ label: 'Custom RAG', slug: 'components/custom-rag' },
 						{ label: 'flow2flow', slug: 'components/flow2flow' },
 						{ label: 'LLM OpenAI', slug: 'components/llm-openai' },
 						{ label: 'Script (Rhai)', slug: 'components/script-rhai' },
