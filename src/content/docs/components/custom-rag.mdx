@@ -334,8 +334,8 @@ confirmed only once the pack runs in the runner.
 
    ```bash
    #!/usr/bin/env bash
-   # Both exports are required by the runner: node@0.6.0 for invoke,
-   # component-descriptor@0.6.0 for describe.
+   # Both exports are required by the runner: node@0.6.0 for invoke (pack.rs:381),
+   # component-descriptor@0.6.0 for describe (pack.rs:3186).
    set -euo pipefail
    WASM="${1:-target/wasm32-wasip2/release/greentic_example_rag.wasm}"
    WIT="$(wasm-tools component wit "$WASM")"
