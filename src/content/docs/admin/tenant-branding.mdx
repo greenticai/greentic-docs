@@ -97,14 +97,51 @@ partnership record as a starting point, then adjust from there.
   platform admin, always sees the platform's own look — there's no
   non-arbitrary way to pick between several partnerships, so the console
   doesn't try.
-- **The public login page**, via a `?partner=<slug>` link. An unrecognized
-  slug is not an error — the login page just falls back to the platform look,
-  so a stale or mistyped link never breaks sign-in.
+- **The public login page**, via a `?partner=<slug>` link, or automatically
+  when the visitor is on a partnership's own custom domain (see below). An
+  unrecognized slug is not an error — the login page just falls back to the
+  platform look, so a stale or mistyped link never breaks sign-in.
 
 <Aside type="note">
-Resolving a partnership purely from the hostname a visitor lands on — so a
-partner's own domain skins the login page without a `?partner=` link, and a
-tenant can't spoof another partner's look by guessing its slug in the query
-string — is a separate, not-yet-built piece of work. Today the `?partner=`
-link is the only way the login page picks up a partnership's look.
+If a partnership owns a custom domain **and** the link also carries a
+`?partner=` parameter for a *different* partnership, the domain wins. A
+visitor's own hostname is never overridden by a query string somebody else
+put in a link.
 </Aside>
+
+## Partnership custom domains
+
+A partnership can claim its own domain — for example `app.acme-partners.com`
+— and serve every one of its member tenants from it, each still at its own
+`/t/<slug>` address, skinned automatically with the partnership's branding.
+No `?partner=` link is needed once the domain is live: visiting the
+partnership's domain resolves its look on its own.
+
+This is the same claim flow tenants already use for their own custom
+domains — add the domain, publish the DNS records it gives you at your DNS
+provider, then verify:
+
+1. Open the partnership's **Branding** tab and find the **Custom domain**
+   card.
+2. Enter the domain and add it. The card shows the DNS records (a routing
+   record and an ownership record) you need to publish at your DNS provider.
+3. Once the records are live, click **Verify**. This can take a few minutes
+   to propagate — if it's still pending, wait and verify again.
+4. Once verified, the domain shows **Active**, and the partnership's login
+   page and member-tenant pages are served from it immediately.
+
+**Only a platform admin can claim, verify, or remove a partnership's custom
+domain** — a partnership admin can edit everything else about its own
+branding, but claiming a domain registers it with an outside provider and
+carries real DNS risk, so that one step goes through a platform admin. A
+partnership admin won't see the Custom domain card at all; a platform admin
+sees it on every partnership's Branding tab.
+
+A partnership's domain only ever serves **that partnership's own member
+tenants** — visiting `app.acme-partners.com/t/<some-other-tenant>` for a
+tenant that isn't a member of Acme Partners behaves exactly as if that
+tenant didn't exist.
+
+A domain can belong to exactly one tenant or one partnership at a time — the
+same domain can't be claimed twice, whether by two tenants, two
+partnerships, or one of each.
