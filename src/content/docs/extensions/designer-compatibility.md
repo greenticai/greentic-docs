@@ -66,6 +66,16 @@ GREENTIC_DESIGNER_BIN=../greentic-designer/target/release/greentic-designer gtdx
 
 When no Designer is found, the check reports that and moves on — it is not a failure.
 
+You do not have to remember to run it. `gtdx dev` and `gtdx install` run the same
+check the moment they finish installing, so a designer that will not load what you
+just built says so where you are already looking:
+
+```console
+$ gtdx dev --once
+✓ installed my-ext@0.1.0
+⚠ my-ext installed, but this designer cannot load it: declares greentic.ai/v2, …
+```
+
 ## The fix
 
 **Upgrade Designer to 1.2.0 or newer.** That is the supported path.
