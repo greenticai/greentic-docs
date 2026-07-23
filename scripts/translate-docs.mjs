@@ -10,6 +10,8 @@
  *   --lang <codes>   Comma-separated language codes (default: all)
  *   --force          Overwrite existing translations
  *   --dry-run        Show what would be translated without calling Codex
+ *   --only <subs>    Comma-separated path substrings; only matching docs are
+ *                    considered (e.g. --only extensions/designer-compatibility)
  *   --model <model>  Model override for Codex (default: uses codex default)
  */
 
@@ -43,6 +45,7 @@ const { values: args } = parseArgs({
     lang: { type: "string" },
     force: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
+    only: { type: "string" },
     model: { type: "string" },
   },
 });
@@ -53,6 +56,12 @@ const targetLangs = args.lang
 const force = args.force;
 const dryRun = args["dry-run"];
 const model = args.model;
+// Path-substring filter. The doc set carries a large backlog of untranslated
+// pages, so translating "everything missing" is rarely what a change wants —
+// `--only` scopes a run to the pages a PR actually touched.
+const onlyFilters = args.only
+  ? args.only.split(",").map((f) => f.trim()).filter(Boolean)
+  : null;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 async function getAllDocs(dir, base = dir) {
@@ -157,7 +166,17 @@ async function main() {
   console.log(`Force:     ${force}`);
   console.log("");
 
-  const englishFiles = await getAllDocs(DOCS_DIR);
+  let englishFiles = await getAllDocs(DOCS_DIR);
+  if (onlyFilters) {
+    englishFiles = englishFiles.filter((f) =>
+      onlyFilters.some((needle) => f.includes(needle)),
+    );
+    if (englishFiles.length === 0) {
+      console.error(`--only matched no docs: ${onlyFilters.join(", ")}`);
+      process.exit(1);
+    }
+    console.log(`Only:      ${onlyFilters.join(", ")}`);
+  }
   console.log(`Found ${englishFiles.length} English docs\n`);
 
   for (const lang of targetLangs) {
