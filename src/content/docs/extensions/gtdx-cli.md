@@ -98,7 +98,23 @@ gtdx doctor --offline    # skip network probes
 ```
 
 Diagnoses installed extensions and the local toolchain (cargo, cargo-component, the
-`wasm32-wasip2` target).
+`wasm32-wasip2` target), the configured registries, and stored credentials.
+
+It also reports **designer compatibility**: whether the Designer you have installed can
+actually load each installed extension. This is the check that catches the most common
+first-time failure — an extension built against the current contract silently skipped by
+an older Designer, so it never shows up in `/api/extensions`:
+
+```console
+designer compatibility
+  ✓ greentic-designer 1.1.7  /usr/local/bin/greentic-designer
+  ✗ my-ext 0.1.0: declares greentic.ai/v2, which designer 1.1.7 cannot load
+    — upgrade greentic-designer to >=1.2.0
+```
+
+Set `GREENTIC_DESIGNER_BIN` to check a Designer built from a checkout instead of the one
+on `PATH`. See [Designer Compatibility](/extensions/designer-compatibility/) for the full
+version matrix.
 
 ## Signing and Publishing
 
@@ -257,4 +273,6 @@ Registers a component-tool by URL against greentic-designer-admin.
 - [Writing Extensions](/extensions/writing-extensions/) — the end-to-end authoring path.
 - [Publishing Extensions](/extensions/publishing-extensions/) — packaging, signing, and
   distribution details.
+- [Designer Compatibility](/extensions/designer-compatibility/) — the Designer ↔
+  `apiVersion` ↔ SDK version matrix, and why a built extension can be invisible.
 </content>

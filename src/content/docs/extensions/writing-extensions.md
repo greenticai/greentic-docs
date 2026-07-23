@@ -73,6 +73,19 @@ gtdx dev --once   # build + install once, then exit (CI-friendly)
 `gtdx dev` runs the inner loop, reinstalling the `.gtxpack` into your local Greentic home
 on every change so you can test against a running designer/runtime.
 
+Confirm Designer actually picked it up before going further:
+
+```bash
+gtdx doctor                                          # does this Designer support it?
+greentic-designer                                    # binds :8080 by default
+curl -s localhost:8080/api/extensions | jq '.[].id'  # your id should be listed
+```
+
+If your extension is not in that list, read
+[Designer Compatibility](/extensions/designer-compatibility/) first — a Designer older
+than 1.2.0 silently skips extensions built against the current contract, which is the
+single most common reason a correctly built extension never appears.
+
 ## 4. Validate Before Shipping
 
 Run the manifest and toolchain checks — these catch a broken `describe.json` that

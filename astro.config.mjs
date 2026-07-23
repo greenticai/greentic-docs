@@ -143,6 +143,7 @@ export default defineConfig({
 						{ label: 'Overview', slug: 'concepts/extensions' },
 						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
 						{ label: 'Writing Extension Packs', slug: 'extensions/writing-extensions' },
+						{ label: 'Designer Compatibility', slug: 'extensions/designer-compatibility' },
 						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
 						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },
 						{ label: 'Deployer Extensions', slug: 'extensions/deploy-extensions' },
@@ -155,6 +156,7 @@ export default defineConfig({
 					label: 'Admin & Operations',
 					items: [
 						{ label: 'Operator Roles (RBAC)', slug: 'admin/operator-roles' },
+						{ label: 'Tenant & Partnership Branding', slug: 'admin/tenant-branding' },
 						{ label: 'Admin Access', slug: 'admin/admin-access' },
 						{ label: 'Designer SSO Login', slug: 'admin/designer-sso-login' },
 						{ label: 'Cloud Deploy Environments', slug: 'admin/cloud-deploy-environments' },

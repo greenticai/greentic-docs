@@ -1,0 +1,110 @@
+---
+title: Tenant & Partnership Branding
+description: How a tenant's visual identity is set, how a partnership can supply a default for its member tenants, and how the two combine.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Tenant & Partnership Branding
+
+Every tenant has a **branding** record — logo, colors, skin, font, custom CSS,
+and a white-label toggle — that skins the Designer, the tenant's public login
+page, and its deployed packs. A **partnership** (see
+[Operator Roles](/admin/operator-roles)) can also carry its own branding
+record, which its member tenants use as their default look.
+
+## The nine fields
+
+| Field | What it controls |
+| --- | --- |
+| Logo kind, logo image, logo background | The mark shown in the header — a default mark, an uploaded image, or the tenant's initials on a chosen background color |
+| Primary color, accent color | The two brand colors used across the UI |
+| Skin | Light or dark base theme |
+| Font | The typeface used across the UI |
+| Custom CSS | Free-form CSS injected on top of everything else |
+| White-label | Hides Greentic's own branding from the shell |
+
+## Setting a tenant's branding
+
+Open a tenant's **Branding** tab in the admin console and edit any field.
+Each field is independent — you can set a logo without touching colors, or
+change the font without touching anything else.
+
+## Partnership branding and inheritance
+
+If a tenant belongs to a partnership, and the partnership has set its own
+branding, the tenant inherits **any field the tenant itself hasn't set**.
+Resolution runs **field by field**, in this order for every one of the nine
+fields: **tenant's own value → the partnership's value → the platform
+default.**
+
+Field-by-field is the important part. A partnership that has only set its two
+colors does not blank out the platform's font for its tenants — they keep
+the platform font until either the partnership or the tenant sets one. And a
+tenant that overrides only its logo still shows the partnership's colors
+underneath it, not the platform's.
+
+<Aside type="tip">
+Think of "unset" as *"I have no opinion, keep asking the layer below"* rather
+than *"empty"*. A field is only ever really empty — logo cleared, custom CSS
+cleared — if you explicitly clear it; see below.
+</Aside>
+
+Two fields — **logo image** and **custom CSS** — support an explicit
+**cleared** state in addition to "not set": clearing a logo or the custom CSS
+at a given level means *"show nothing here,"* and that decision is final at
+that level — it is not overridden by whatever the partnership or platform
+would otherwise supply. The other seven fields (colors, skin, font, logo
+kind, logo background, white-label) have no such state, because there's no
+value for them that means "blank" the way an absent logo or absent CSS does;
+for those, not setting a field always means "keep inheriting."
+
+Custom CSS is also the one field that is never combined across layers — the
+value that wins (tenant, partnership, or platform) is used whole, rather than
+having each layer's CSS stacked on top of the others in an order you can't
+predict from the form.
+
+### Locking partnership branding
+
+A partnership admin (or platform admin) can set a partnership's branding to
+**locked**. A locked partnership's member tenants can no longer set their own
+branding overrides — every field falls straight through to the partnership's
+(or, where the partnership hasn't set it, the platform's) value. Locking does
+**not** restrict the partnership itself: the partnership admin can still edit
+the partnership's branding at any time, locked or not — it only closes the
+door to tenant-level overrides underneath it.
+
+A **disabled** partnership cannot have its branding edited by its partnership
+admin (matching the rest of the disabled-partnership freeze — platform admins
+are unaffected), but a disabled partnership's existing branding still applies
+to its member tenants; disabling a partnership is not the way to reset its
+tenants back to the platform look.
+
+### Seeding partnership branding from a tenant
+
+Rather than filling in a partnership's branding field by field, an admin can
+copy one member tenant's current (already-resolved) look into the
+partnership record as a starting point, then adjust from there.
+
+## Where partnership branding shows up
+
+- **Every member tenant** — the Designer, the tenant's deployed pack, and its
+  public tenant page all use the resolved branding automatically; nothing
+  about them needs to know a partnership is involved.
+- **The admin console itself** — an operator who administers **exactly one**
+  partnership sees that partnership's colors, logo, skin, and font in the
+  console shell. An operator who administers two or more partnerships, or a
+  platform admin, always sees the platform's own look — there's no
+  non-arbitrary way to pick between several partnerships, so the console
+  doesn't try.
+- **The public login page**, via a `?partner=<slug>` link. An unrecognized
+  slug is not an error — the login page just falls back to the platform look,
+  so a stale or mistyped link never breaks sign-in.
+
+<Aside type="note">
+Resolving a partnership purely from the hostname a visitor lands on — so a
+partner's own domain skins the login page without a `?partner=` link, and a
+tenant can't spoof another partner's look by guessing its slug in the query
+string — is a separate, not-yet-built piece of work. Today the `?partner=`
+link is the only way the login page picks up a partnership's look.
+</Aside>
