@@ -16,7 +16,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.join(__dirname, "..");
 const REFERENCE_DIR = path.join(ROOT_DIR, "src", "content", "docs", "reference");
-const LOCALES = ["de", "es", "id", "ja", "zh"];
+const LOCALES = ["ar", "de", "es", "fr", "id", "ja", "zh"];
 
 const SOURCES = {
   flowSchema: path.resolve(
@@ -60,6 +60,24 @@ const SOURCES = {
     "interfaces_inventory.md",
   ),
   interfacesWitRoot: path.resolve(ROOT_DIR, "..", "greentic-interfaces", "wit"),
+  describeSchema: path.resolve(
+    ROOT_DIR,
+    "..",
+    "greentic-designer-sdk",
+    "crates",
+    "greentic-extension-sdk-contract",
+    "schemas",
+    "describe-v2.json",
+  ),
+  describeMcpSchema: path.resolve(
+    ROOT_DIR,
+    "..",
+    "greentic-designer-sdk",
+    "crates",
+    "greentic-extension-sdk-contract",
+    "schemas",
+    "describe-mcp-v1.json",
+  ),
 };
 
 function frontmatter(title, description) {
@@ -370,6 +388,193 @@ async function renderWitInterfaces() {
   return lines.join("\n");
 }
 
+/**
+ * Type rendering for the describe.json schema.
+ *
+ * Kept separate from `schemaType` because this schema uses `const`, `$ref`
+ * arrays, and `additionalProperties` maps that the flow schema does not.
+ * Changing the shared helper would rewrite the flow schema page.
+ */
+function describeType(definition) {
+  if (!definition) return "";
+  if (Object.keys(definition).length === 0) return "any";
+  if (definition.const !== undefined) return `\`${definition.const}\``;
+  if (definition.enum) return definition.enum.map((entry) => `\`${entry}\``).join(", ");
+  if (definition.$ref) return `\`${definition.$ref.replace(/^#\/\$defs\//, "")}\``;
+  if (definition.type === "array") {
+    const items = describeType(definition.items);
+    return items && items !== "any" ? `\`array\` of ${items}` : "`array`";
+  }
+  if (
+    definition.type === "object" &&
+    definition.additionalProperties &&
+    typeof definition.additionalProperties === "object"
+  ) {
+    const values = describeType(definition.additionalProperties);
+    return values ? `\`object\` of ${values}` : "`object`";
+  }
+  if (Array.isArray(definition.type)) return definition.type.map((entry) => `\`${entry}\``).join(", ");
+  if (definition.type) return `\`${definition.type}\``;
+  if (definition.anyOf) return definition.anyOf.map(describeType).filter(Boolean).join(" or ");
+  return "";
+}
+
+/** Everything this schema says about a property, beyond its type. */
+function describeDetail(definition) {
+  const parts = [];
+  if (definition?.description) parts.push(definition.description.trim().replace(/\.?$/, "."));
+  if (definition?.pattern) parts.push(`Pattern: \`${definition.pattern}\`.`);
+  if (definition?.format) parts.push(`Format: \`${definition.format}\`.`);
+  if (definition?.minLength !== undefined) parts.push(`Minimum length: ${definition.minLength}.`);
+  if (definition?.minProperties !== undefined) {
+    parts.push(`Minimum properties: ${definition.minProperties}.`);
+  }
+  if (definition?.minimum !== undefined) parts.push(`Minimum: ${definition.minimum}.`);
+  if (definition?.maximum !== undefined) parts.push(`Maximum: ${definition.maximum}.`);
+  return parts.join(" ");
+}
+
+/** Field / Required / Type / Description rows for one object definition. */
+function describeRows(definition) {
+  const required = new Set(definition?.required ?? []);
+  return Object.entries(definition?.properties ?? {}).map(([name, property]) => [
+    `\`${name}\``,
+    required.has(name) ? "yes" : "no",
+    escapeCell(describeType(property)),
+    escapeCell(describeDetail(property)),
+  ]);
+}
+
+const DESCRIBE_COLUMNS = ["Field", "Required", "Type", "Description"];
+
+async function renderDescribeJson() {
+  const [raw, mcpRaw] = await Promise.all([
+    fs.readFile(SOURCES.describeSchema, "utf8"),
+    fs.readFile(SOURCES.describeMcpSchema, "utf8"),
+  ]);
+  const schema = JSON.parse(raw);
+  const mcpSchema = JSON.parse(mcpRaw);
+
+  const defs = schema.$defs ?? {};
+  const contributions = schema.properties?.contributions ?? {};
+  const kinds = schema.properties?.kind?.enum ?? [];
+  const mcpKind = mcpSchema.properties?.kind?.const;
+
+  const lines = [
+    frontmatter(
+      "describe.json Manifest",
+      "Auto-generated reference for the Greentic extension describe.json manifest.",
+    ),
+    `Source schema: \`${path.relative(ROOT_DIR, SOURCES.describeSchema)}\``,
+    "",
+    `Schema id: \`${schema.$id}\``,
+    "",
+    "`describe.json` is the manifest every Greentic extension ships. It is the source of truth for the extension's identity, the capabilities it offers and requires, the WASM components it loads, and what it contributes to the Designer. `gtdx` validates it against this JSON Schema, and the publisher's Ed25519 signature is written back into the same file.",
+    "",
+    `This schema covers the ${kinds.length} Designer extension kinds (${kinds.map((kind) => `\`${kind}\``).join(", ")}). Artifacts of kind \`${mcpKind}\` are validated against a separate manifest schema, \`${path.relative(ROOT_DIR, SOURCES.describeMcpSchema)}\`, which declares a different required set and a different secret-requirement field. Do not read this page as describing that kind.`,
+    "",
+    `The top-level object sets \`additionalProperties: ${schema.additionalProperties}\`, so ${schema.additionalProperties === false ? "any field not listed below is rejected" : "unlisted fields are permitted"}.`,
+    "",
+    "## Top-level document",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(schema)),
+    "",
+    "## compat",
+    "",
+    "Version floors the extension declares against the Designer, the runner, and the extension contract itself. Referenced as `#/$defs/compat`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.compat)),
+    "",
+    "## metadata",
+    "",
+    "Identity and store-listing fields. Referenced as `#/$defs/metadata`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.metadata)),
+    "",
+    "### metadata.author",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.metadata?.properties?.author)),
+    "",
+    "## engine",
+    "",
+    "Optional engine pins. Referenced as `#/$defs/engine`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.engine)),
+    "",
+    "## capabilities",
+    "",
+    "Capabilities the extension offers to the platform and requires from it. Referenced as `#/$defs/capabilities`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.capabilities)),
+    "",
+    "### capRef",
+    "",
+    "Each entry of `capabilities.offered` and `capabilities.required` is a capability reference.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.capRef)),
+    "",
+    "## runtime",
+    "",
+    "The WASM components the extension loads and the host permissions they may use. Referenced as `#/$defs/runtime`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.runtime)),
+    "",
+    "### runtime.permissions",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.runtime?.properties?.permissions)),
+    "",
+    "### runtimeComponent",
+    "",
+    "Each key of `runtime.components` is a component id; each value has this shape.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.runtimeComponent)),
+    "",
+    "## contributions",
+    "",
+    "What the extension adds to the Designer. Most contribution arrays are declared as untyped arrays in this schema, so their element shapes are not constrained here; `gtdx lint` checks the cross-field invariants that the schema cannot express.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(contributions)),
+    "",
+    "### contributions.guardrails entries",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(contributions.properties?.guardrails?.items)),
+    "",
+    "### contributions.connection_test",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(contributions.properties?.connection_test)),
+    "",
+    "## secretRequirement",
+    "",
+    "Each entry of the top-level `requiredSecrets` array. Referenced as `#/$defs/secretRequirement`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.secretRequirement)),
+    "",
+    "## signature",
+    "",
+    "The publisher's detached signature, written back into `describe.json` in place by `gtdx sign`. Referenced as `#/$defs/signature`.",
+    "",
+    mdTable(DESCRIBE_COLUMNS, describeRows(defs.signature)),
+    "",
+    "## Generated JSON Schema",
+    "",
+    "<details>",
+    "<summary>Full schema</summary>",
+    "",
+    fenced(JSON.stringify(schema, null, 2), "json"),
+    "",
+    "</details>",
+    "",
+    "## Related commands",
+    "",
+    "- `gtdx validate` checks an extension directory's `describe.json` against this JSON Schema.",
+    "- `gtdx lint` checks cross-field invariants beyond the schema; `gtdx lint --publish` adds publish-only rules.",
+    "- `gtdx sign` signs `describe.json` in place and fills the `signature` block.",
+    "- `gtdx publish` uploads the signed `.gtxpack` built around this manifest.",
+    "",
+  ];
+  return lines.join("\n");
+}
+
 async function writeReference(relativePath, content) {
   const target = path.join(REFERENCE_DIR, relativePath);
   await fs.mkdir(path.dirname(target), { recursive: true });
@@ -397,6 +602,7 @@ async function main() {
   await writeReference("pack-format.md", await renderPackFormat());
   await writeReference("bundle-format.md", await renderBundleFormat());
   await writeReference("wit-interfaces.md", await renderWitInterfaces());
+  await writeReference("describe-json.md", await renderDescribeJson());
 }
 
 main().catch((error) => {

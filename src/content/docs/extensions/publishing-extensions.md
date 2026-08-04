@@ -81,7 +81,7 @@ When an extension is registered, the store and admin verify the published `.gtxp
 
 - The artifact `sha256` is checked against what was published.
 - The Ed25519 signature is verified against the trusted publisher keys.
-- The `describe.json` is the single source of truth for the extension's metadata; the store validates it against its schema (for example, `describe-mcp-v1` for `wasix:mcp/router` components).
+- The `describe.json` is the single source of truth for the extension's metadata; the store validates it against its schema (for example, `describe-mcp-v1` for `wasix:mcp/router` components). See [describe.json Manifest](/reference/describe-json/) for the field list.
 
 A pack that fails signature or hash verification is rejected.
 

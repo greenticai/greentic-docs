@@ -50,7 +50,8 @@ be hand-edited.
 
 ## 2. Edit describe.json and the Component
 
-`describe.json` is the manifest the runtime and store read. Keep the extension id and its
+`describe.json` is the manifest the runtime and store read — see
+[describe.json Manifest](/reference/describe-json/) for the full field list. Keep the extension id and its
 WIT-package form in sync across `describe.json`, `Cargo.toml`
 (`package.metadata.component.package`), and `wit/world.wit`. Implement the extension's
 surface in `src/lib.rs` against the vendored WIT contract.

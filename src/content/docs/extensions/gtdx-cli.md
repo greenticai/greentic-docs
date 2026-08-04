@@ -6,7 +6,8 @@ description: The Greentic Designer Extensions CLI for scaffolding, building, sig
 `gtdx` (Greentic Designer Extensions CLI) is the current authoring tool for Greentic
 extensions. An extension is a WebAssembly component (target `wasm32-wasip2`) packaged
 as a signed `.gtxpack` archive that the runtime and store load. `describe.json` is the
-extension manifest and the single source of truth for its metadata; signing uses
+extension manifest and the single source of truth for its metadata (see
+[describe.json Manifest](/reference/describe-json/) for the full field list); signing uses
 ed25519.
 
 ```bash
