@@ -4,9 +4,18 @@ name: Nightly Docs Sync
 # so docs don't go stale between releases. Runs nightly at 03:00 UTC (15 min
 # after greentic-messaging-providers' nightly cron to avoid clashing).
 #
-# The job installs the latest Greentic CLI binaries via `cargo binstall`, runs
-# `scripts/sync-cli-help.mjs` for each, and opens a PR if the generated
-# reference pages under `src/content/docs/reference/cli/` changed.
+# Two independent jobs, one per generator:
+#
+# - `sync` installs the latest Greentic CLI binaries via `cargo binstall`, runs
+#   `scripts/sync-cli-help.mjs` for each, and opens a PR if the generated
+#   reference pages under `src/content/docs/reference/cli/` changed.
+# - `sync-schemas` checks out the sibling repositories the schema generator
+#   reads from, runs `scripts/sync-reference-schemas.mjs`, and opens a PR if the
+#   generated schema pages changed in any locale.
+#
+# They are deliberately separate jobs with separate PR branches: the CLI job
+# tolerates a crate failing to install, while the schema job must fail loudly
+# when a source is unreachable, and neither should be able to block the other.
 
 on:
   schedule:
@@ -158,4 +167,156 @@ jobs:
           labels: |
             docs
             automation
+          delete-branch: true
+
+  sync-schemas:
+    name: Sync generated schema reference pages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # `scripts/sync-reference-schemas.mjs` reads files out of five sibling
+      # repositories; a runner has only this one. Check them out under
+      # `_siblings/` and point the generator there via GREENTIC_WORKSPACE_DIR.
+      #
+      # `fetch-depth: 1` — the generator reads a worktree, never history.
+      #
+      # The `ref:` values are the lane each repo is actually developed on, not
+      # `main`. greentic-designer-sdk lives on `research`: its `main` carries
+      # describe-v2.json with 12 field descriptions where `research` has 71, so
+      # a nightly reading `main` would blank most of the describe.json page and
+      # keep re-proposing that as an update. The other four are byte-identical
+      # between `main` and `develop` today, but `main` trails them by 13-34
+      # commits, so pinning `main` only defers the same drift.
+      #
+      # All five repositories are public, so the default GITHUB_TOKEN can clone
+      # them. If any becomes private this job needs a PAT or GitHub App token
+      # with read access passed as `token:` here — it will otherwise fail
+      # nightly at checkout.
+      - name: Check out greentic-flow
+        uses: actions/checkout@v4
+        with:
+          repository: greenticai/greentic-flow
+          ref: develop
+          path: _siblings/greentic-flow
+          fetch-depth: 1
+
+      - name: Check out greentic-pack
+        uses: actions/checkout@v4
+        with:
+          repository: greenticai/greentic-pack
+          ref: develop
+          path: _siblings/greentic-pack
+          fetch-depth: 1
+
+      - name: Check out greentic-bundle
+        uses: actions/checkout@v4
+        with:
+          repository: greenticai/greentic-bundle
+          ref: develop
+          path: _siblings/greentic-bundle
+          fetch-depth: 1
+
+      - name: Check out greentic-interfaces
+        uses: actions/checkout@v4
+        with:
+          repository: greenticai/greentic-interfaces
+          ref: develop
+          path: _siblings/greentic-interfaces
+          fetch-depth: 1
+
+      - name: Check out greentic-designer-sdk
+        uses: actions/checkout@v4
+        with:
+          repository: greenticai/greentic-designer-sdk
+          ref: research
+          path: _siblings/greentic-designer-sdk
+          fetch-depth: 1
+
+      - name: Bootstrap Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # The script fails with a non-zero exit and names every missing path if a
+      # sibling checkout is absent, so a silent regeneration from half the
+      # sources is not possible.
+      - name: Generate schema reference pages
+        shell: bash
+        env:
+          GREENTIC_WORKSPACE_DIR: ${{ github.workspace }}/_siblings
+        run: |
+          set -euo pipefail
+          node scripts/sync-reference-schemas.mjs
+
+      # Remove the sibling checkouts before anything looks at the worktree, so
+      # they can never end up inside the pull request.
+      - name: Drop sibling checkouts
+        shell: bash
+        run: rm -rf _siblings
+
+      - name: Validate docs build
+        shell: bash
+        run: npm run build
+
+      - name: Detect changes
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only this job's generator ran, so any change under the reference
+          # trees is a schema page; the CLI pages cannot move here.
+          PAGES=(src/content/docs/reference src/content/docs/*/reference)
+          if git diff --quiet -- "${PAGES[@]}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- "${PAGES[@]}"
+          fi
+
+      - name: Open pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automated/docs-sync-schemas
+          base: main
+          commit-message: "docs: refresh generated schema reference pages"
+          title: "docs: refresh generated schema reference pages"
+          body: |
+            Automated refresh of the generated reference pages produced by
+            `scripts/sync-reference-schemas.mjs`, across all eight locales:
+            `flow-schema`, `pack-format`, `bundle-format`, `wit-interfaces`,
+            `describe-json`.
+
+            Sources read this run:
+
+            | Repository | Ref |
+            | --- | --- |
+            | `greentic-flow` | `develop` |
+            | `greentic-pack` | `develop` |
+            | `greentic-bundle` | `develop` |
+            | `greentic-interfaces` | `develop` |
+            | `greentic-designer-sdk` | `research` |
+
+            Raised by the nightly `docs-sync.yml` workflow. These pages are
+            generated — do not hand-edit them in this PR or anywhere else. If
+            wording needs to change, change it in the upstream source file and
+            let the next run carry it over; an edit made here is reverted by
+            the following nightly.
+          labels: |
+            docs
+            automation
+          add-paths: |
+            src/content/docs/reference
+            src/content/docs/ar/reference
+            src/content/docs/de/reference
+            src/content/docs/es/reference
+            src/content/docs/fr/reference
+            src/content/docs/id/reference
+            src/content/docs/ja/reference
+            src/content/docs/zh/reference
           delete-branch: true

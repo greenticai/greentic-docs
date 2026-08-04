@@ -5,11 +5,17 @@
  * formats. The generated pages are intentionally derived from neighboring
  * Greentic repositories so docs drift is easier to spot and refresh.
  *
+ * Sources are read from sibling Greentic repositories. By default they are
+ * looked up one directory above this repo; set GREENTIC_WORKSPACE_DIR to point
+ * the lookup somewhere else (CI checks the siblings out into its own path).
+ *
  * Usage:
  *   node scripts/sync-reference-schemas.mjs
+ *   GREENTIC_WORKSPACE_DIR=/path/to/siblings node scripts/sync-reference-schemas.mjs
  */
 
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -18,67 +24,121 @@ const ROOT_DIR = path.join(__dirname, "..");
 const REFERENCE_DIR = path.join(ROOT_DIR, "src", "content", "docs", "reference");
 const LOCALES = ["ar", "de", "es", "fr", "id", "ja", "zh"];
 
-const SOURCES = {
-  flowSchema: path.resolve(
-    ROOT_DIR,
-    "..",
-    "greentic-flow",
-    "docs",
-    "schemas",
-    "ygtc.flow.schema.json",
-  ),
-  packFormat: path.resolve(
-    ROOT_DIR,
-    "..",
-    "greentic-pack",
-    "docs",
-    "pack-format.md",
-  ),
-  bundleReader: path.resolve(
-    ROOT_DIR,
-    "..",
+/** Sibling repositories this generator reads, keyed by the repo directory name. */
+const SOURCE_REPOS = [
+  "greentic-flow",
+  "greentic-pack",
+  "greentic-bundle",
+  "greentic-interfaces",
+  "greentic-designer-sdk",
+];
+
+/**
+ * Locate the directory that holds the sibling repositories.
+ *
+ * `ROOT_DIR/..` is right for a normal checkout, but not for a git worktree:
+ * there ROOT_DIR is nested (e.g. `<repo>/.claude/worktrees/<name>`) and the
+ * sibling lookup lands inside the worktree container instead of the workspace.
+ * So walk up until a directory contains the repos, and let
+ * GREENTIC_WORKSPACE_DIR override the search outright.
+ */
+function resolveWorkspaceDir() {
+  const override = process.env.GREENTIC_WORKSPACE_DIR;
+  if (override) return path.resolve(override);
+
+  const hasRepos = (dir) =>
+    SOURCE_REPOS.every((repo) => fsSync.existsSync(path.join(dir, repo)));
+
+  let candidate = path.resolve(ROOT_DIR, "..");
+  for (;;) {
+    if (hasRepos(candidate)) return candidate;
+    const parent = path.dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
+  }
+  // Nothing matched: fall back to the plain sibling directory so the failure
+  // surfaces as a missing-source error naming a path a reader recognizes.
+  return path.resolve(ROOT_DIR, "..");
+}
+
+const WORKSPACE_DIR = resolveWorkspaceDir();
+
+/**
+ * Path segments per source, relative to the workspace directory.
+ *
+ * Generated pages cite sources as `../<repo>/<path>` regardless of where the
+ * workspace actually sits, so relocating the checkout never rewrites a page.
+ */
+const SOURCE_SEGMENTS = {
+  flowSchema: ["greentic-flow", "docs", "schemas", "ygtc.flow.schema.json"],
+  packFormat: ["greentic-pack", "docs", "pack-format.md"],
+  bundleReader: [
     "greentic-bundle",
     "crates",
     "greentic-bundle-reader",
     "src",
     "lib.rs",
-  ),
-  bundleReaderReadme: path.resolve(
-    ROOT_DIR,
-    "..",
+  ],
+  bundleReaderReadme: [
     "greentic-bundle",
     "crates",
     "greentic-bundle-reader",
     "README.md",
-  ),
-  bundleCliDoc: path.resolve(ROOT_DIR, "..", "greentic-bundle", "docs", "cli.md"),
-  interfacesInventory: path.resolve(
-    ROOT_DIR,
-    "..",
+  ],
+  bundleCliDoc: ["greentic-bundle", "docs", "cli.md"],
+  interfacesInventory: [
     "greentic-interfaces",
     "docs",
     "interfaces_inventory.md",
-  ),
-  interfacesWitRoot: path.resolve(ROOT_DIR, "..", "greentic-interfaces", "wit"),
-  describeSchema: path.resolve(
-    ROOT_DIR,
-    "..",
+  ],
+  interfacesWitRoot: ["greentic-interfaces", "wit"],
+  describeSchema: [
     "greentic-designer-sdk",
     "crates",
     "greentic-extension-sdk-contract",
     "schemas",
     "describe-v2.json",
-  ),
-  describeMcpSchema: path.resolve(
-    ROOT_DIR,
-    "..",
+  ],
+  describeMcpSchema: [
     "greentic-designer-sdk",
     "crates",
     "greentic-extension-sdk-contract",
     "schemas",
     "describe-mcp-v1.json",
-  ),
+  ],
 };
+
+/** Absolute path per source, under the resolved workspace directory. */
+const SOURCES = Object.fromEntries(
+  Object.entries(SOURCE_SEGMENTS).map(([key, segments]) => [
+    key,
+    path.join(WORKSPACE_DIR, ...segments),
+  ]),
+);
+
+/** Path per source as cited in the generated pages. */
+const SOURCE_LABELS = Object.fromEntries(
+  Object.entries(SOURCE_SEGMENTS).map(([key, segments]) => [
+    key,
+    ["..", ...segments].join("/"),
+  ]),
+);
+
+/** Fail with one actionable message instead of a bare ENOENT per source. */
+function assertSourcesPresent() {
+  const missing = Object.entries(SOURCES)
+    .filter(([, target]) => !fsSync.existsSync(target))
+    .map(([key]) => `${key} (${SOURCES[key]})`);
+  if (missing.length === 0) return;
+  throw new Error(
+    [
+      `missing ${missing.length} source path(s) under ${WORKSPACE_DIR}:`,
+      ...missing.map((entry) => `  - ${entry}`),
+      "Check out the sibling Greentic repositories next to this repo, or set",
+      "GREENTIC_WORKSPACE_DIR to the directory that holds them.",
+    ].join("\n"),
+  );
+}
 
 function frontmatter(title, description) {
   return [
@@ -205,7 +265,7 @@ async function renderFlowSchema() {
 
   const lines = [
     frontmatter("Flow YAML Schema", "Auto-generated reference for the Greentic flow YAML schema."),
-    `Source schema: \`${path.relative(ROOT_DIR, SOURCES.flowSchema)}\``,
+    `Source schema: \`${SOURCE_LABELS.flowSchema}\``,
     "",
     `Schema id: \`${schema.$id}\``,
     "",
@@ -248,7 +308,7 @@ async function renderPackFormat() {
   const source = await fs.readFile(SOURCES.packFormat, "utf8");
   return [
     frontmatter("Pack Format", "Auto-generated reference for the Greentic .gtpack format."),
-    `Source document: \`${path.relative(ROOT_DIR, SOURCES.packFormat)}\``,
+    `Source document: \`${SOURCE_LABELS.packFormat}\``,
     "",
     stripH1(source),
     "",
@@ -281,9 +341,9 @@ async function renderBundleFormat() {
     frontmatter("Bundle Format", "Auto-generated reference for the Greentic .gtbundle format."),
     "Source inputs:",
     "",
-    `- \`${path.relative(ROOT_DIR, SOURCES.bundleReader)}\``,
-    `- \`${path.relative(ROOT_DIR, SOURCES.bundleReaderReadme)}\``,
-    `- \`${path.relative(ROOT_DIR, SOURCES.bundleCliDoc)}\``,
+    `- \`${SOURCE_LABELS.bundleReader}\``,
+    `- \`${SOURCE_LABELS.bundleReaderReadme}\``,
+    `- \`${SOURCE_LABELS.bundleCliDoc}\``,
     "",
     `Current format version: \`${versionMatch?.[1] ?? "unknown"}\``,
     "",
@@ -363,8 +423,8 @@ async function renderWitInterfaces() {
     frontmatter("WIT Interfaces", "Auto-generated inventory of Greentic WIT interfaces."),
     "Source inputs:",
     "",
-    `- \`${path.relative(ROOT_DIR, SOURCES.interfacesInventory)}\``,
-    `- \`${path.relative(ROOT_DIR, SOURCES.interfacesWitRoot)}\``,
+    `- \`${SOURCE_LABELS.interfacesInventory}\``,
+    `- \`${SOURCE_LABELS.interfacesWitRoot}\``,
     "",
     stripH1(inventory),
     "",
@@ -465,13 +525,13 @@ async function renderDescribeJson() {
       "describe.json Manifest",
       "Auto-generated reference for the Greentic extension describe.json manifest.",
     ),
-    `Source schema: \`${path.relative(ROOT_DIR, SOURCES.describeSchema)}\``,
+    `Source schema: \`${SOURCE_LABELS.describeSchema}\``,
     "",
     `Schema id: \`${schema.$id}\``,
     "",
     "`describe.json` is the manifest every Greentic extension ships. It is the source of truth for the extension's identity, the capabilities it offers and requires, the WASM components it loads, and what it contributes to the Designer. `gtdx` validates it against this JSON Schema, and the publisher's Ed25519 signature is written back into the same file.",
     "",
-    `This schema covers the ${kinds.length} Designer extension kinds (${kinds.map((kind) => `\`${kind}\``).join(", ")}). Artifacts of kind \`${mcpKind}\` are validated against a separate manifest schema, \`${path.relative(ROOT_DIR, SOURCES.describeMcpSchema)}\`, which declares a different required set and a different secret-requirement field. Do not read this page as describing that kind.`,
+    `This schema covers the ${kinds.length} Designer extension kinds (${kinds.map((kind) => `\`${kind}\``).join(", ")}). Artifacts of kind \`${mcpKind}\` are validated against a separate manifest schema, \`${SOURCE_LABELS.describeMcpSchema}\`, which declares a different required set and a different secret-requirement field. Do not read this page as describing that kind.`,
     "",
     `The top-level object sets \`additionalProperties: ${schema.additionalProperties}\`, so ${schema.additionalProperties === false ? "any field not listed below is rejected" : "unlisted fields are permitted"}.`,
     "",
@@ -598,6 +658,8 @@ async function writeReference(relativePath, content) {
 }
 
 async function main() {
+  assertSourcesPresent();
+  console.log(`[sync-reference-schemas] reading sources from ${WORKSPACE_DIR}`);
   await writeReference("flow-schema.md", await renderFlowSchema());
   await writeReference("pack-format.md", await renderPackFormat());
   await writeReference("bundle-format.md", await renderBundleFormat());

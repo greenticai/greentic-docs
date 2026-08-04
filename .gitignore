@@ -37,5 +37,8 @@ SEMVER_FIX_REPORT.md
 # git worktrees
 .worktrees/
 
+# sibling repositories checked out by scripts/sync-reference-schemas.mjs in CI
+_siblings/
+
 # SDD scratch
 .superpowers/
