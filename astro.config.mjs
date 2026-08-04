@@ -237,6 +237,7 @@ export default defineConfig({
 						{ label: 'Pack Format', slug: 'reference/pack-format' },
 						{ label: 'Bundle Format', slug: 'reference/bundle-format' },
 						{ label: 'WIT Interfaces', slug: 'reference/wit-interfaces' },
+						{ label: 'describe.json Manifest', slug: 'reference/describe-json' },
 						{ label: 'Configuration', slug: 'reference/configuration' },
 						{
 							label: 'CLI --help (auto-generated)',
