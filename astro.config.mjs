@@ -143,6 +143,7 @@ export default defineConfig({
 						{ label: 'Overview', slug: 'concepts/extensions' },
 						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
 						{ label: 'Writing Extension Packs', slug: 'extensions/writing-extensions' },
+						{ label: 'Extension Tools & Node Types', slug: 'extensions/extension-tools' },
 						{ label: 'Designer Compatibility', slug: 'extensions/designer-compatibility' },
 						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
 						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },

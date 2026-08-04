@@ -64,6 +64,24 @@ Do not hand-edit generated or managed files: the `sha256` placeholders in `descr
 (filled in by `gtdx publish`), `.gtdx-contract.lock`, `wit/deps/`, and the generated
 `src/bindings.rs`.
 
+### What the extension contributes
+
+For `apiVersion: greentic.ai/v2`, what the platform offers to users is declared in
+`describe.json` under `contributions` — not derived from the component's exports:
+
+- `contributions.tools[]` — callable tools, surfaced to agentic workers and/or to flows.
+  Each tool's `capabilities` list decides which surface offers it; when absent it defaults
+  to `["flow"]`, so a tool meant for an agentic worker must say so explicitly.
+- `contributions.nodeTypes[]` — node types the flow editor shows as draggable blocks.
+
+Building a `ToolMeta` with a `capabilities` vector in `src/lib.rs` has **no effect** under
+v2: the tool list is read from the manifest and the component's `list-tools` export is never
+called. See [Extension Tools and Node Types](/extensions/extension-tools/) for the field
+reference, the two capability surfaces, and why a tool can be invocable but invisible.
+
+Note that this per-tool `capabilities` list is unrelated to
+`greentic.ext.capabilities.v1`, the offer list a provider or deployer pack publishes.
+
 ## 3. Build and Iterate
 
 ```bash
