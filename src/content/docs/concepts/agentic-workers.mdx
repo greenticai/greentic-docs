@@ -74,28 +74,47 @@ Save it as `<agent_id>.json` in `GREENTIC_AGENT_MANIFESTS_DIR` (default `~/.gree
   [`memory`](/concepts/agent-memory/), and [`knowledge`](/concepts/agent-knowledge/) blocks.
   Omit them to start simple.
 
-<Aside type="tip" title="Spell out tool arguments in the prompt">
-At the current runtime, extension tools reach the model by **name** with an empty argument
-schema, so the model learns each tool's arguments from your **system prompt**. List each
-tool's exact JSON arguments there (e.g. `tx_resolve_prefix: {"query": "<prefix>"}`).
+<Aside type="tip" title="Declare each tool's argument schema">
+The runtime resolves every allow-listed tool against its extension at call time and passes
+the tool's declared `input_schema` to the model as the function parameters. Declare that
+schema in the extension's `describe.json` — a tool that ships without one reaches the model
+with an empty parameter object, and you are then forced to spell its arguments out in the
+system prompt.
 </Aside>
 
 ## 2. The tool extension
 
 Package your tools as a design-extension `.gtxpack`. The quickest start is to copy
-[`component-tavily-ext`](/extensions/writing-extensions/) and replace the tool logic. Each
-tool must declare the `agentic_worker` capability in its `tool_meta`:
+[`component-tavily-ext`](/extensions/writing-extensions/) and replace the tool logic.
 
-```rust
-ToolMeta {
-    name: "tx_resolve_prefix",
-    description: "Resolve a network prefix to its canonical id.",
-    input_schema_json: RESOLVE_PREFIX_INPUT,
-    output_schema_json: RESOLVE_PREFIX_OUTPUT,
-    capabilities: vec!["agentic_worker".into()],   // ← required to be an agent tool
-    agentic_worker_metadata: RESOLVE_PREFIX_AW_META,
+Tools are declared in the extension's `describe.json`, and each one must declare the
+`agentic_worker` capability to be usable by a worker:
+
+```jsonc title="describe.json"
+{
+  "apiVersion": "greentic.ai/v2",
+  "contributions": {
+    "tools": [
+      {
+        "name": "tx_resolve_prefix",
+        "export": "greentic:extension-design/tools.invoke-tool",
+        "runtime_ref": "telco-x-tools",
+        "capabilities": ["agentic_worker"],
+        "description": "Resolve a network prefix to its canonical id.",
+        "input_schema": "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\"}}}"
+      }
+    ]
+  }
 }
 ```
+
+<Aside type="caution" title="A capabilities list in Rust is ignored">
+For `apiVersion: greentic.ai/v2` the tool list is read from `describe.json` only — the
+component's `list-tools` export is never called. A `ToolMeta { capabilities: … }` built in
+`src/lib.rs` has no effect. Note also that omitting `capabilities` does **not** mean "all
+surfaces": it defaults to `["flow"]`, which makes the tool invisible to every agentic
+worker. See [Extension Tools and Node Types](/extensions/extension-tools/).
+</Aside>
 
 Build and stage it where the runtime discovers extensions:
 
