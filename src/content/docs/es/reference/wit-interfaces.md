@@ -52,8 +52,6 @@ Legacy/compatibility surfaces are documented in `docs/vision/legacy.md` with rep
 - `greentic/codec@0.6.0/package.wit`
 - `greentic/common-types@0.1.0/package.wit`
 - `greentic/component-v1@0.1.0/package.wit`
-- `greentic/component@0.4.0/package.wit`
-- `greentic/component@0.5.0/package.wit`
 - `greentic/component@0.6.0/package.wit`
 - `greentic/component@1.0.0/package.wit`
 - `greentic/deploy-plan@1.0.0/package.wit`
@@ -70,13 +68,13 @@ Legacy/compatibility surfaces are documented in `docs/vision/legacy.md` with rep
 - `greentic/oci@1.0.0/package.wit`
 - `greentic/operator@1.0.0/package.wit`
 - `greentic/pack-export-v1@0.1.0/package.wit`
-- `greentic/pack-export@0.2.0/package.wit`
-- `greentic/pack-export@0.4.0/package.wit`
 - `greentic/pack-validate@0.1.0/package.wit`
 - `greentic/policy@1.0.0/package.wit`
+- `greentic/provider/instance-identity@0.1.0/package.wit`
 - `greentic/provider/schema-core@1.0.0/package.wit`
 - `greentic/provision@0.1.0/package.wit`
 - `greentic/repo-ui-actions@1.0.0/package.wit`
+- `greentic/runtime-config@1.0.0/package.wit`
 - `greentic/scan@1.0.0/package.wit`
 - `greentic/secrets-store@1.0.0/package.wit`
 - `greentic/secrets-store@1.1.0/package.wit`
@@ -85,8 +83,6 @@ Legacy/compatibility surfaces are documented in `docs/vision/legacy.md` with rep
 - `greentic/source@1.0.0/package.wit`
 - `greentic/state-store@1.0.0/package.wit`
 - `greentic/telemetry-logger@1.0.0/package.wit`
-- `greentic/types-core@0.2.0/package.wit`
-- `greentic/types-core@0.4.0/package.wit`
 - `greentic/types-core@0.6.0/package.wit`
 - `greentic/worker@1.0.0/package.wit`
 - `host_imports.wit`

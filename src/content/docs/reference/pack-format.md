@@ -136,14 +136,15 @@ Components may carry an optional `kind` (e.g. `software`), optional `artifact_ty
 
 ## Capabilities
 
-The compiled `manifest.capabilities` array is two layers of meaning over a single wire shape (`ComponentCapability { name, description? }`):
+Each compiled `manifest.capabilities` entry is a `ComponentCapability { name, description? }`. The array has two layers of meaning that share the wire format:
 
 - **Per-component derived** (auto): `derive_pack_capabilities` walks every component's host/WASI permission set and emits entries like `host:http`, `host:state:read`, `wasi:random`. These describe *what host APIs the WASM needs at runtime*. Authors do not write them by hand.
-- **Pack-declared opt-ins** (author-supplied): a top-level `capabilities:` block in `pack.yaml`. These are *feature switches the pack opts into* (e.g. fast2flow free-text routing, observer hooks). The runtime gates downstream behaviour on matching the exact string.
+- **Pack-declared opt-ins** (author-supplied): write a top-level `capabilities:` block in `pack.yaml`. These are *feature switches the pack opts into* (e.g. fast2flow free-text routing, observer hooks). The runtime gates downstream behaviour on matching exact strings.
 
 The two layers are distinguished by name convention: `greentic.cap.*` for pack-level opt-ins, `host:*` / `wasi:*` for derived permissions.
 
-```yaml title="pack.yaml"
+```yaml
+# pack.yaml
 pack_id: example.pack
 version: 0.1.0
 kind: application
@@ -154,8 +155,6 @@ capabilities:
 ```
 
 At build time, author-declared entries union with the derived entries — author entries land first so their descriptions survive a collision.
-
-At deploy time the runtime's `BundleCapabilityGate` matches the exact `greentic.cap.fast2flow.v1` string and enables the routing pipeline. The pack may also ship a pre-seeded routing index at `assets/intent-index.json`; the runtime materializes it under the indexes path automatically, so no environment configuration is required for a local run. See [fast2flow / Opting In](/components/fast2flow/#opting-in-from-a-pack).
 
 ## Verification Semantics
 

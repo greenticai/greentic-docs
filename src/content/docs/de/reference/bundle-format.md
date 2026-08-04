@@ -39,6 +39,8 @@ It currently supports:
 - validating the basic manifest/lock structure
 - exposing a stable typed runtime surface for bundle metadata, app packs, extension providers, catalogs, resolved files, and setup state files
 
+Artifact reads use the Rust-native `backhand` SquashFS reader and do not require `unsquashfs` or `squashfs-tools`.
+
 The crate is kept inside the workspace for now so operator/runtime consumers can adopt a stable bundle-reading API before it is split or published independently.
 
 The reader validates basic manifest/lock structure before exposing the runtime surface. Validation checks include format version, matching `bundle_id`, matching `requested_mode`, `.gtbundle` artifact extension, expected root file names, and setup-state consistency between manifest and lock.

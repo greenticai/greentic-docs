@@ -19,20 +19,20 @@ The top-level object sets `additionalProperties: false`, so any field not listed
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `$schema` | no | `string` |  |
-| `apiVersion` | yes | `greentic.ai/v2` |  |
-| `kind` | yes | `DesignExtension`, `BundleExtension`, `DeployExtension`, `ProviderExtension` |  |
-| `compat` | yes | `compat` |  |
-| `metadata` | yes | `metadata` |  |
-| `engine` | no | `engine` |  |
-| `capabilities` | yes | `capabilities` |  |
-| `runtime` | yes | `runtime` |  |
+| `$schema` | no | `string` | Must be exactly `https://store.greentic.cloud/schemas/describe-v2.json`. `gtdx lint` reports `E_SCHEMA_HOST` for any other value (including the legacy `store.greentic.ai` host) and for a missing key. |
+| `apiVersion` | yes | `greentic.ai/v2` | Describe-contract discriminator, fixed at `greentic.ai/v2`. A designer older than 1.2.0 does not understand this contract and skips the extension at boot, so it never appears in `/api/extensions` and nothing in the logs points at the version. |
+| `kind` | yes | `DesignExtension`, `BundleExtension`, `DeployExtension`, `ProviderExtension` | Which extension family this artifact belongs to; selects the on-disk install directory (`design`, `bundle`, `deploy`, `provider`). A fifth kind, `wasix:mcp/router`, is deliberately absent from this enum: those artifacts are validated against describe-mcp-v1.json instead. |
+| `compat` | yes | `compat` | Minimum designer/runner versions plus the literal contract version the descriptor was authored against. Parsed eagerly, so an invalid descriptor fails at deserialize time rather than when an installer tries to match. |
+| `metadata` | yes | `metadata` | Identity and catalogue information for the extension. `metadata.id` and `metadata.version` together form the identity key (`<id>@<version>`) the store and installer address the artifact by. |
+| `engine` | no | `engine` | Deprecated. `gtdx lint` rejects any describe that still carries this block (`E_ENGINE_DEPRECATED`); `compat.min_designer_version` / `compat.min_runner_version` are the sole source of version constraints. Still accepted here so pre-deprecation artifacts keep validating. |
+| `capabilities` | yes | `capabilities` | Capability contracts this extension offers to others and requires from its host. An id that appears in both lists is a self-cycle and is rejected by `gtdx lint` (`E_CAP_CYCLE`). |
+| `runtime` | yes | `runtime` | The WASM components that back this extension, plus the sandbox limits and host permissions they run under. |
 | `execution` | no | `object` | BundleExtension dispatch config (builtin vs wasm). Ignored for other kinds. |
-| `contributions` | yes | `object` |  |
-| `localization` | no | `object` |  |
-| `signature` | no | `signature` |  |
-| `manifestSha256` | no | `string` | Pattern: `^[0-9a-f]{64}$`. |
-| `requiredSecrets` | no | `array` of `secretRequirement` | Canonical list of credential secrets the operator must supply before this extension can function. |
+| `contributions` | yes | `object` | What the extension adds to the designer. This schema lists `contributions` as required; the sibling describe-mcp-v1.json omits it entirely, because `kind: wasix:mcp/router` artifacts carry no contributions - a router's tools are discovered at runtime via `list-tools`. The conditionality therefore lives in the two-schema split, not in a conditional inside v2. |
+| `localization` | no | `object` | Top-level translation table `{ default_locale, strings }`, where `strings` maps a flat key (e.g. `node.adaptive_card.label`) to a per-locale string map. Designer reads this when a localized string does not carry inline locales. |
+| `signature` | no | `signature` | Detached ed25519 signature over this describe. The signed payload is the RFC 8785 (JCS) canonicalization of this document with `signature` removed, so signing is idempotent and independent of key order or serde version. It does not cover the rest of the archive - that binding is `manifestSha256`. |
+| `manifestSha256` | no | `string` | SHA-256 (lowercase hex) of the canonical `manifest.json`. Binds the whole-archive ledger into the signed describe (audit C2/H7). Optional only for backward compatibility during migration; production packs MUST set it. Pattern: `^[0-9a-f]{64}$`. |
+| `requiredSecrets` | no | `array` of `secretRequirement` | Canonical list of credential secrets the operator must supply before this extension can function. This is the v2 spelling; `kind: wasix:mcp/router` artifacts instead emit snake_case `secret_requirements`, which only describe-mcp-v1.json accepts. Both schemas set `additionalProperties: false`, so each rejects the other's field name. |
 
 ## compat
 
@@ -40,9 +40,9 @@ Version floors the extension declares against the Designer, the runner, and the 
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `min_designer_version` | yes | `string` |  |
-| `min_runner_version` | yes | `string` |  |
-| `contract_version` | yes | `string` | Pattern: `^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`. |
+| `min_designer_version` | yes | `string` | Semver range for the oldest designer that can load this extension - the contract floor (`>=1.2.0` for v2), NOT the version of the SDK that generated the artifact. Those are different axes: an extension built by SDK 1.3.x still loads on any designer that speaks v2, so pinning this to the generating SDK would declare a constraint far stricter than the extension actually has. |
+| `min_runner_version` | yes | `string` | Semver range for the oldest Greentic runner this extension supports, e.g. `^1.2.0`. Parsed as a version requirement, not an exact version. |
+| `contract_version` | yes | `string` | Exact semver version of the describe contract this artifact was authored against. This is the field that tracks the SDK, unlike `min_designer_version`, and it is parsed as a concrete version rather than a range. Pattern: `^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`. |
 
 ## metadata
 
@@ -50,17 +50,17 @@ Identity and store-listing fields. Referenced as `#/$defs/metadata`.
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `id` | yes | `string` | Pattern: `^[a-z][a-z0-9.-]*\.[a-z0-9.-]+$`. |
-| `name` | yes | `string` | Minimum length: 1. |
-| `version` | yes | `string` | Pattern: `^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`. |
-| `summary` | yes | any |  |
-| `description` | no | any |  |
-| `author` | yes | `object` |  |
-| `license` | yes | `string` |  |
+| `id` | yes | `string` | Reverse-DNS extension id, e.g. `greentic.telco-x`. `gtdx lint` enforces a stricter form than the pattern here: `E_ID_PATTERN` requires `^greentic\.[a-z0-9][a-z0-9-]*$`. Pattern: `^[a-z][a-z0-9.-]*\.[a-z0-9.-]+$`. |
+| `name` | yes | `string` | Human-readable display name shown in the store and designer catalogue. Must be non-empty. Minimum length: 1. |
+| `version` | yes | `string` | Exact semver version of this extension release, e.g. `1.3.0-research.2`. Pattern: `^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`. |
+| `summary` | yes |  | One-line summary used in catalogue listings. Deliberately untyped: it accepts either a plain string or a localized object `{ default, locales }`. |
+| `description` | no |  | Long-form description. Same shape as `summary` - a plain string or `{ default, locales }`. |
+| `author` | yes | `object` | Publisher of the extension. Only `name` is required. |
+| `license` | yes | `string` | License identifier for the extension, e.g. `MIT` or `Apache-2.0`. Required, but neither this schema nor `gtdx lint` checks the value against the SPDX list. |
 | `homepage` | no | `string` | Format: `uri`. |
 | `repository` | no | `string` | Format: `uri`. |
 | `keywords` | no | `array` of `string` |  |
-| `icon` | no | `string` |  |
+| `icon` | no | `string` | Pack-relative path to the extension icon, e.g. `assets/icon.svg`. `gtdx new --icon` and `gtdx publish` write this field after copying the file into `assets/`; accepted formats are svg, png, jpg, jpeg and webp, capped at 1 MiB to match the store-server icon limit. |
 | `screenshots` | no | `array` of `string` |  |
 
 ### metadata.author
@@ -77,8 +77,8 @@ Optional engine pins. Referenced as `#/$defs/engine`.
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `greenticDesigner` | yes | `string` |  |
-| `extRuntime` | yes | `string` |  |
+| `greenticDesigner` | yes | `string` | Deprecated together with the rest of the `engine` block; superseded by `compat.min_designer_version`. Semver range for the designer, e.g. `>=1.2.0`. `gtdx doctor` reads it as the designer bound on a v1 describe. |
+| `extRuntime` | yes | `string` | Deprecated together with the rest of the `engine` block. Semver range for the extension runtime, e.g. `^1.2.0`. Not interchangeable with `compat.min_runner_version`, which bounds the Greentic runner - shipped artifacts set the two to different ranges. |
 
 ## capabilities
 
@@ -86,8 +86,8 @@ Capabilities the extension offers to the platform and requires from it. Referenc
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `offered` | no | `array` of `capRef` |  |
-| `required` | no | `array` of `capRef` |  |
+| `offered` | no | `array` of `capRef` | Capability contracts this extension provides to others, e.g. `greentic:guardrail/topic`. `gtdx publish` requires each `version` here to parse as an exact semver, and dropping an entry without a version bump is flagged by `gtdx lint` (`W_DESCRIBE_DIFF_BREAKING`). |
+| `required` | no | `array` of `capRef` | Capability contracts this extension needs its host or another extension to provide. An id present in both `required` and `offered` is a self-cycle and is rejected by `gtdx lint` (`E_CAP_CYCLE`). |
 
 ### capRef
 
@@ -95,9 +95,9 @@ Each entry of `capabilities.offered` and `capabilities.required` is a capability
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `id` | yes | `string` | Pattern: `^[a-z][a-z0-9-]*:[a-z][a-z0-9/._-]*$`. |
-| `version` | yes | `string` |  |
-| `deprecated` | no | any |  |
+| `id` | yes | `string` | Capability id in `<namespace>:<path>` form, e.g. `greentic:guardrail/topic`. The namespace is the segment before the first colon. Pattern: `^[a-z][a-z0-9-]*:[a-z][a-z0-9/._-]*$`. |
+| `version` | yes | `string` | Version constraint for the capability, parsed as a semver requirement. Parsing fails closed - a malformed string is an error, never a silent match-everything. Entries under `capabilities.offered` are additionally required by `gtdx publish` to be an exact version such as `1.0.0`. |
+| `deprecated` | no |  | Deprecation marker `{ since, replaced_by?, removal_in? }`. Designer renders a warning chip in the palette; the runner refuses to install once the current contract version is past `removal_in`. |
 
 ## runtime
 
@@ -105,17 +105,17 @@ The WASM components the extension loads and the host permissions they may use. R
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `memoryLimitMB` | no | `integer` | Minimum: 1. Maximum: 1024. |
-| `permissions` | yes | `object` |  |
-| `components` | yes | `object` of `runtimeComponent` | Minimum properties: 1. |
+| `memoryLimitMB` | no | `integer` | Memory ceiling for the extension's components. Defaults to 64 when omitted. The `[1, 1024]` bound is enforced twice - by this schema and again by the Rust deserializer - so a document that skips schema validation still cannot carry 0 or a multi-gigabyte value. Minimum: 1. Maximum: 1024. |
+| `permissions` | yes | `object` | Host permissions the extension requests. `gtdx install` prints the network, secrets and cross-extension requests and asks for confirmation before installing, unless the install was pre-approved (`--yes` / CI). |
+| `components` | yes | `object` of `runtimeComponent` | The WASM components the extension ships, keyed by component id - a kebab-case identifier limited to lowercase letters, digits, `-`, `_` and `.`. At least one entry is required, and every `runtime_ref` under `contributions.nodeTypes` and `contributions.tools` must name a key that exists here (`gtdx lint` reports a dangling one as `E_RUNTIME_REF`). Minimum properties: 1. |
 
 ### runtime.permissions
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `network` | no | `array` of `string` |  |
-| `secrets` | no | `array` of `string` |  |
-| `callExtensionKinds` | no | `array` of `string` |  |
+| `network` | no | `array` of `string` | URL patterns the extension may reach, e.g. `https://api.example.com/*`. `gtdx publish` requires `https://`, with one exception: plain `http://` is accepted for loopback hosts (`127.0.0.1`, `localhost`, `[::1]`) only. This mirrors the extension runtime, which honours plain http for loopback hosts and drops non-loopback http patterns. |
+| `secrets` | no | `array` of `string` | Secret keys the extension declares it needs to read. Listed in the `gtdx install` consent prompt. |
+| `callExtensionKinds` | no | `array` of `string` | Extension kinds this extension may call into. Surfaced in the `gtdx install` consent prompt as a cross-extension request. |
 | `llmRoles` | no | `array` of `string` | LLM roles (wire names, e.g. sorla_composer) this extension may request from the host greentic:extension-host/llm import. |
 
 ### runtimeComponent
@@ -124,10 +124,10 @@ Each key of `runtime.components` is a component id; each value has this shape.
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `oci_ref` | no | `string` |  |
-| `gtpack` | no | `object` |  |
-| `sha256` | yes | `string` | Pattern: `^[0-9a-f]{64}$`. |
-| `world` | yes | `string` |  |
+| `oci_ref` | no | `string` | OCI reference to the component image, e.g. `ghcr.io/greentic/my-ext:0.1.0`. The preferred distribution channel; `gtpack` is the offline fallback. |
+| `gtpack` | no | `object` | Offline fallback payload shipped inside the archive, shaped `{ file, sha256, pack_id, component_version }`. The nested `sha256` is validated as lowercase hex at parse time, so an uppercase digest passes this untyped schema yet fails on load. |
+| `sha256` | yes | `string` | Lowercase-hex SHA-256 of the component artifact; uppercase hex is rejected. `gtdx lint --publish` additionally rejects the all-zeros placeholder that scaffolds ship with (`E_SHA256_ZERO`). Pattern: `^[0-9a-f]{64}$`. |
+| `world` | yes | `string` | WIT world the component exports, e.g. `greentic:extension-design/guardrail@0.3.0`. |
 
 ## contributions
 
@@ -135,29 +135,29 @@ What the extension adds to the Designer. Most contribution arrays are declared a
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `nodeTypes` | no | `array` |  |
-| `dwProviders` | no | `array` |  |
-| `tools` | no | `array` |  |
-| `recipes` | no | `array` |  |
-| `knowledge` | no | `array` |  |
-| `prompts` | no | `array` |  |
-| `schemas` | no | `array` |  |
-| `guardrails` | no | `array` of `object` |  |
-| `connection_test` | no | `object` |  |
+| `nodeTypes` | no | `array` | Palette entries contributed by a design extension. Each entry's optional `runtime_ref` is what the designer's flow compiler reads, rather than the pinned ref in `flow_generator/catalog.baseline.yaml`. |
+| `dwProviders` | no | `array` | DW Composer provider cards the extension offers. Mirrors the fields the designer's `/api/dw/providers` serves, so an installed extension can publish a provider choice (e.g. an LLM backend) without the designer carrying a static catalogue entry for it. |
+| `tools` | no | `array` | Design-time tools the extension exposes. A tool's `runtime_ref` selects a single component to dispatch through; if absent the runtime selects the only component declared in `runtime.components`. `gtdx lint` requires each `export` to be a fully-qualified `greentic:extension-design/<interface>.<member>` reference (`E_EXPORT_FORM`), never a bare member name. |
+| `recipes` | no | `array` | Packaging recipes contributed by a bundle extension. Each carries an `id`, a localized `display_name`, an optional `description`, and a `config_schema`. |
+| `knowledge` | no | `array` | Knowledge-base artifacts shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root. |
+| `prompts` | no | `array` | Markdown prompt fragments shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root. |
+| `schemas` | no | `array` | JSON Schema documents shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root. |
+| `guardrails` | no | `array` of `object` | Content-moderation guardrails contributed by the extension. |
+| `connection_test` | no | `object` | Optional self-test the extension declares so a consumer (designer, gtdx, store) can verify a live connection or credential by invoking one of the extension's own tools. Snake-case on the wire, unlike the camelCase siblings in this block - that spelling matches how extensions and the designer already read `contributions.connection_test`. |
 
 ### contributions.guardrails entries
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `export` | yes | `string` |  |
-| `runtime_ref` | no | `string` |  |
+| `export` | yes | `string` | Fully-qualified WIT export implementing the guardrail, e.g. `greentic:extension-design/guardrail.evaluate`. |
+| `runtime_ref` | no | `string` | The runtime component (by its key in `runtime.components`) that provides the guardrail. Absent means the runtime selects the sole declared component. |
 
 ### contributions.connection_test
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `tool` | yes | `string` |  |
-| `args` | no | `object` |  |
+| `tool` | yes | `string` | Name of the contributed tool (matching a `contributions.tools[].name`) to invoke to exercise the connection. |
+| `args` | no | `object` | Arguments to pass to the tool. Absent is treated as `{}`. |
 
 ## secretRequirement
 
@@ -179,10 +179,10 @@ The publisher's detached signature, written back into `describe.json` in place b
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `algorithm` | yes | `ed25519` |  |
-| `publicKey` | yes | `string` |  |
-| `value` | yes | `string` |  |
-| `keyId` | no | `string` |  |
+| `algorithm` | yes | `ed25519` | Signature algorithm. ed25519 is the only algorithm the contract implements; any other value is rejected. |
+| `publicKey` | yes | `string` | Base64-encoded 32-byte ed25519 public key of the signer (44 characters). An `ed25519:` prefix is stripped if present. This is the key verification uses, and the one `gtdx keygen` tells authors to distribute here. |
+| `value` | yes | `string` | Base64-encoded 64-byte ed25519 signature over the JCS canonicalization of this document with `signature` removed. An `ed25519:` prefix is stripped if present. |
+| `keyId` | no | `string` | Optional label naming which publisher key signed, carried through from `gtdx publish --key-id`. Advisory only - verification uses `publicKey` and never reads this field. |
 
 ## Generated JSON Schema
 
@@ -207,12 +207,15 @@ The publisher's detached signature, written back into `describe.json` in place b
   "additionalProperties": false,
   "properties": {
     "$schema": {
+      "description": "Must be exactly `https://store.greentic.cloud/schemas/describe-v2.json`. `gtdx lint` reports `E_SCHEMA_HOST` for any other value (including the legacy `store.greentic.ai` host) and for a missing key.",
       "type": "string"
     },
     "apiVersion": {
+      "description": "Describe-contract discriminator, fixed at `greentic.ai/v2`. A designer older than 1.2.0 does not understand this contract and skips the extension at boot, so it never appears in `/api/extensions` and nothing in the logs points at the version.",
       "const": "greentic.ai/v2"
     },
     "kind": {
+      "description": "Which extension family this artifact belongs to; selects the on-disk install directory (`design`, `bundle`, `deploy`, `provider`). A fifth kind, `wasix:mcp/router`, is deliberately absent from this enum: those artifacts are validated against describe-mcp-v1.json instead.",
       "enum": [
         "DesignExtension",
         "BundleExtension",
@@ -221,18 +224,23 @@ The publisher's detached signature, written back into `describe.json` in place b
       ]
     },
     "compat": {
+      "description": "Minimum designer/runner versions plus the literal contract version the descriptor was authored against. Parsed eagerly, so an invalid descriptor fails at deserialize time rather than when an installer tries to match.",
       "$ref": "#/$defs/compat"
     },
     "metadata": {
+      "description": "Identity and catalogue information for the extension. `metadata.id` and `metadata.version` together form the identity key (`<id>@<version>`) the store and installer address the artifact by.",
       "$ref": "#/$defs/metadata"
     },
     "engine": {
+      "description": "Deprecated. `gtdx lint` rejects any describe that still carries this block (`E_ENGINE_DEPRECATED`); `compat.min_designer_version` / `compat.min_runner_version` are the sole source of version constraints. Still accepted here so pre-deprecation artifacts keep validating.",
       "$ref": "#/$defs/engine"
     },
     "capabilities": {
+      "description": "Capability contracts this extension offers to others and requires from its host. An id that appears in both lists is a self-cycle and is rejected by `gtdx lint` (`E_CAP_CYCLE`).",
       "$ref": "#/$defs/capabilities"
     },
     "runtime": {
+      "description": "The WASM components that back this extension, plus the sandbox limits and host permissions they run under.",
       "$ref": "#/$defs/runtime"
     },
     "execution": {
@@ -240,38 +248,47 @@ The publisher's detached signature, written back into `describe.json` in place b
       "description": "BundleExtension dispatch config (builtin vs wasm). Ignored for other kinds."
     },
     "contributions": {
+      "description": "What the extension adds to the designer. This schema lists `contributions` as required; the sibling describe-mcp-v1.json omits it entirely, because `kind: wasix:mcp/router` artifacts carry no contributions - a router's tools are discovered at runtime via `list-tools`. The conditionality therefore lives in the two-schema split, not in a conditional inside v2.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "nodeTypes": {
+          "description": "Palette entries contributed by a design extension. Each entry's optional `runtime_ref` is what the designer's flow compiler reads, rather than the pinned ref in `flow_generator/catalog.baseline.yaml`.",
           "type": "array",
           "items": {}
         },
         "dwProviders": {
+          "description": "DW Composer provider cards the extension offers. Mirrors the fields the designer's `/api/dw/providers` serves, so an installed extension can publish a provider choice (e.g. an LLM backend) without the designer carrying a static catalogue entry for it.",
           "type": "array",
           "items": {}
         },
         "tools": {
+          "description": "Design-time tools the extension exposes. A tool's `runtime_ref` selects a single component to dispatch through; if absent the runtime selects the only component declared in `runtime.components`. `gtdx lint` requires each `export` to be a fully-qualified `greentic:extension-design/<interface>.<member>` reference (`E_EXPORT_FORM`), never a bare member name.",
           "type": "array",
           "items": {}
         },
         "recipes": {
+          "description": "Packaging recipes contributed by a bundle extension. Each carries an `id`, a localized `display_name`, an optional `description`, and a `config_schema`.",
           "type": "array",
           "items": {}
         },
         "knowledge": {
+          "description": "Knowledge-base artifacts shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root.",
           "type": "array",
           "items": {}
         },
         "prompts": {
+          "description": "Markdown prompt fragments shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root.",
           "type": "array",
           "items": {}
         },
         "schemas": {
+          "description": "JSON Schema documents shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root.",
           "type": "array",
           "items": {}
         },
         "guardrails": {
+          "description": "Content-moderation guardrails contributed by the extension.",
           "type": "array",
           "items": {
             "type": "object",
@@ -281,15 +298,18 @@ The publisher's detached signature, written back into `describe.json` in place b
             ],
             "properties": {
               "export": {
+                "description": "Fully-qualified WIT export implementing the guardrail, e.g. `greentic:extension-design/guardrail.evaluate`.",
                 "type": "string"
               },
               "runtime_ref": {
+                "description": "The runtime component (by its key in `runtime.components`) that provides the guardrail. Absent means the runtime selects the sole declared component.",
                 "type": "string"
               }
             }
           }
         },
         "connection_test": {
+          "description": "Optional self-test the extension declares so a consumer (designer, gtdx, store) can verify a live connection or credential by invoking one of the extension's own tools. Snake-case on the wire, unlike the camelCase siblings in this block - that spelling matches how extensions and the designer already read `contributions.connection_test`.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -297,9 +317,11 @@ The publisher's detached signature, written back into `describe.json` in place b
           ],
           "properties": {
             "tool": {
+              "description": "Name of the contributed tool (matching a `contributions.tools[].name`) to invoke to exercise the connection.",
               "type": "string"
             },
             "args": {
+              "description": "Arguments to pass to the tool. Absent is treated as `{}`.",
               "type": "object"
             }
           }
@@ -307,18 +329,21 @@ The publisher's detached signature, written back into `describe.json` in place b
       }
     },
     "localization": {
+      "description": "Top-level translation table `{ default_locale, strings }`, where `strings` maps a flat key (e.g. `node.adaptive_card.label`) to a per-locale string map. Designer reads this when a localized string does not carry inline locales.",
       "type": "object"
     },
     "signature": {
+      "description": "Detached ed25519 signature over this describe. The signed payload is the RFC 8785 (JCS) canonicalization of this document with `signature` removed, so signing is idempotent and independent of key order or serde version. It does not cover the rest of the archive - that binding is `manifestSha256`.",
       "$ref": "#/$defs/signature"
     },
     "manifestSha256": {
+      "description": "SHA-256 (lowercase hex) of the canonical `manifest.json`. Binds the whole-archive ledger into the signed describe (audit C2/H7). Optional only for backward compatibility during migration; production packs MUST set it.",
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
     "requiredSecrets": {
       "type": "array",
-      "description": "Canonical list of credential secrets the operator must supply before this extension can function.",
+      "description": "Canonical list of credential secrets the operator must supply before this extension can function. This is the v2 spelling; `kind: wasix:mcp/router` artifacts instead emit snake_case `secret_requirements`, which only describe-mcp-v1.json accepts. Both schemas set `additionalProperties: false`, so each rejects the other's field name.",
       "items": {
         "$ref": "#/$defs/secretRequirement"
       }
@@ -379,12 +404,15 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "min_designer_version": {
+          "description": "Semver range for the oldest designer that can load this extension - the contract floor (`>=1.2.0` for v2), NOT the version of the SDK that generated the artifact. Those are different axes: an extension built by SDK 1.3.x still loads on any designer that speaks v2, so pinning this to the generating SDK would declare a constraint far stricter than the extension actually has.",
           "type": "string"
         },
         "min_runner_version": {
+          "description": "Semver range for the oldest Greentic runner this extension supports, e.g. `^1.2.0`. Parsed as a version requirement, not an exact version.",
           "type": "string"
         },
         "contract_version": {
+          "description": "Exact semver version of the describe contract this artifact was authored against. This is the field that tracks the SDK, unlike `min_designer_version`, and it is parsed as a concrete version rather than a range.",
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?(\\+[a-zA-Z0-9.-]+)?$"
         }
@@ -402,20 +430,28 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "id": {
+          "description": "Reverse-DNS extension id, e.g. `greentic.telco-x`. `gtdx lint` enforces a stricter form than the pattern here: `E_ID_PATTERN` requires `^greentic\\.[a-z0-9][a-z0-9-]*$`.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9.-]*\\.[a-z0-9.-]+$"
         },
         "name": {
+          "description": "Human-readable display name shown in the store and designer catalogue. Must be non-empty.",
           "type": "string",
           "minLength": 1
         },
         "version": {
+          "description": "Exact semver version of this extension release, e.g. `1.3.0-research.2`.",
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?(\\+[a-zA-Z0-9.-]+)?$"
         },
-        "summary": {},
-        "description": {},
+        "summary": {
+          "description": "One-line summary used in catalogue listings. Deliberately untyped: it accepts either a plain string or a localized object `{ default, locales }`."
+        },
+        "description": {
+          "description": "Long-form description. Same shape as `summary` - a plain string or `{ default, locales }`."
+        },
         "author": {
+          "description": "Publisher of the extension. Only `name` is required.",
           "type": "object",
           "required": [
             "name"
@@ -433,6 +469,7 @@ The publisher's detached signature, written back into `describe.json` in place b
           }
         },
         "license": {
+          "description": "License identifier for the extension, e.g. `MIT` or `Apache-2.0`. Required, but neither this schema nor `gtdx lint` checks the value against the SPDX list.",
           "type": "string"
         },
         "homepage": {
@@ -450,6 +487,7 @@ The publisher's detached signature, written back into `describe.json` in place b
           }
         },
         "icon": {
+          "description": "Pack-relative path to the extension icon, e.g. `assets/icon.svg`. `gtdx new --icon` and `gtdx publish` write this field after copying the file into `assets/`; accepted formats are svg, png, jpg, jpeg and webp, capped at 1 MiB to match the store-server icon limit.",
           "type": "string"
         },
         "screenshots": {
@@ -468,9 +506,11 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "greenticDesigner": {
+          "description": "Deprecated together with the rest of the `engine` block; superseded by `compat.min_designer_version`. Semver range for the designer, e.g. `>=1.2.0`. `gtdx doctor` reads it as the designer bound on a v1 describe.",
           "type": "string"
         },
         "extRuntime": {
+          "description": "Deprecated together with the rest of the `engine` block. Semver range for the extension runtime, e.g. `^1.2.0`. Not interchangeable with `compat.min_runner_version`, which bounds the Greentic runner - shipped artifacts set the two to different ranges.",
           "type": "string"
         }
       }
@@ -479,12 +519,14 @@ The publisher's detached signature, written back into `describe.json` in place b
       "type": "object",
       "properties": {
         "offered": {
+          "description": "Capability contracts this extension provides to others, e.g. `greentic:guardrail/topic`. `gtdx publish` requires each `version` here to parse as an exact semver, and dropping an entry without a version bump is flagged by `gtdx lint` (`W_DESCRIBE_DIFF_BREAKING`).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/capRef"
           }
         },
         "required": {
+          "description": "Capability contracts this extension needs its host or another extension to provide. An id present in both `required` and `offered` is a self-cycle and is rejected by `gtdx lint` (`E_CAP_CYCLE`).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/capRef"
@@ -493,6 +535,7 @@ The publisher's detached signature, written back into `describe.json` in place b
       }
     },
     "capRef": {
+      "description": "A reference to a capability contract: an id plus the version constraint the referrer expects.",
       "type": "object",
       "required": [
         "id",
@@ -500,13 +543,17 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "id": {
+          "description": "Capability id in `<namespace>:<path>` form, e.g. `greentic:guardrail/topic`. The namespace is the segment before the first colon.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9/._-]*$"
         },
         "version": {
+          "description": "Version constraint for the capability, parsed as a semver requirement. Parsing fails closed - a malformed string is an error, never a silent match-everything. Entries under `capabilities.offered` are additionally required by `gtdx publish` to be an exact version such as `1.0.0`.",
           "type": "string"
         },
-        "deprecated": {}
+        "deprecated": {
+          "description": "Deprecation marker `{ since, replaced_by?, removal_in? }`. Designer renders a warning chip in the palette; the runner refuses to install once the current contract version is past `removal_in`."
+        }
       }
     },
     "runtime": {
@@ -517,26 +564,31 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "memoryLimitMB": {
+          "description": "Memory ceiling for the extension's components. Defaults to 64 when omitted. The `[1, 1024]` bound is enforced twice - by this schema and again by the Rust deserializer - so a document that skips schema validation still cannot carry 0 or a multi-gigabyte value.",
           "type": "integer",
           "minimum": 1,
           "maximum": 1024
         },
         "permissions": {
+          "description": "Host permissions the extension requests. `gtdx install` prints the network, secrets and cross-extension requests and asks for confirmation before installing, unless the install was pre-approved (`--yes` / CI).",
           "type": "object",
           "properties": {
             "network": {
+              "description": "URL patterns the extension may reach, e.g. `https://api.example.com/*`. `gtdx publish` requires `https://`, with one exception: plain `http://` is accepted for loopback hosts (`127.0.0.1`, `localhost`, `[::1]`) only. This mirrors the extension runtime, which honours plain http for loopback hosts and drops non-loopback http patterns.",
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "secrets": {
+              "description": "Secret keys the extension declares it needs to read. Listed in the `gtdx install` consent prompt.",
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "callExtensionKinds": {
+              "description": "Extension kinds this extension may call into. Surfaced in the `gtdx install` consent prompt as a cross-extension request.",
               "type": "array",
               "items": {
                 "type": "string"
@@ -552,6 +604,7 @@ The publisher's detached signature, written back into `describe.json` in place b
           }
         },
         "components": {
+          "description": "The WASM components the extension ships, keyed by component id - a kebab-case identifier limited to lowercase letters, digits, `-`, `_` and `.`. At least one entry is required, and every `runtime_ref` under `contributions.nodeTypes` and `contributions.tools` must name a key that exists here (`gtdx lint` reports a dangling one as `E_RUNTIME_REF`).",
           "type": "object",
           "minProperties": 1,
           "additionalProperties": {
@@ -561,6 +614,7 @@ The publisher's detached signature, written back into `describe.json` in place b
       }
     },
     "runtimeComponent": {
+      "description": "One entry in `runtime.components`. At least one of `oci_ref` or `gtpack` must be present, and both may be. This schema does not enforce that; the Rust deserializer does, so a document that passes validation here can still be rejected on load.",
       "type": "object",
       "required": [
         "sha256",
@@ -568,16 +622,20 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "oci_ref": {
+          "description": "OCI reference to the component image, e.g. `ghcr.io/greentic/my-ext:0.1.0`. The preferred distribution channel; `gtpack` is the offline fallback.",
           "type": "string"
         },
         "gtpack": {
+          "description": "Offline fallback payload shipped inside the archive, shaped `{ file, sha256, pack_id, component_version }`. The nested `sha256` is validated as lowercase hex at parse time, so an uppercase digest passes this untyped schema yet fails on load.",
           "type": "object"
         },
         "sha256": {
+          "description": "Lowercase-hex SHA-256 of the component artifact; uppercase hex is rejected. `gtdx lint --publish` additionally rejects the all-zeros placeholder that scaffolds ship with (`E_SHA256_ZERO`).",
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
         "world": {
+          "description": "WIT world the component exports, e.g. `greentic:extension-design/guardrail@0.3.0`.",
           "type": "string"
         }
       }
@@ -591,15 +649,19 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "algorithm": {
+          "description": "Signature algorithm. ed25519 is the only algorithm the contract implements; any other value is rejected.",
           "const": "ed25519"
         },
         "publicKey": {
+          "description": "Base64-encoded 32-byte ed25519 public key of the signer (44 characters). An `ed25519:` prefix is stripped if present. This is the key verification uses, and the one `gtdx keygen` tells authors to distribute here.",
           "type": "string"
         },
         "value": {
+          "description": "Base64-encoded 64-byte ed25519 signature over the JCS canonicalization of this document with `signature` removed. An `ed25519:` prefix is stripped if present.",
           "type": "string"
         },
         "keyId": {
+          "description": "Optional label naming which publisher key signed, carried through from `gtdx publish --key-id`. Advisory only - verification uses `publicKey` and never reads this field.",
           "type": "string"
         }
       }
