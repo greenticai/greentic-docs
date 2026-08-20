@@ -1,0 +1,173 @@
+---
+title: Integration API Overview
+description: Authenticate a partner backend against Greentic Designer's /api/v1/* surface with an admin-minted integration key, and run the whoami smoke test.
+---
+
+import { Aside, Card, CardGrid, Steps, Tabs, TabItem, LinkCard } from '@astrojs/starlight/components';
+
+The **Integration API** is the machine-to-machine surface of Greentic Designer, served under `/api/v1/`. It lets a partner's own backend provision assistants, manage sessions, and push knowledge documents into a tenant's library over a stable, versioned HTTP contract — without a Designer login and without a browser.
+
+It is a separate contract from the Designer's own session-authenticated routes. Those routes exist to serve the composer UI and their shapes change with it; `/api/v1/*` commits to a narrow projection that can be widened but never silently narrowed.
+
+<CardGrid>
+	<Card title="Assistants" icon="rocket">
+		Create, read, update, delete, and publish `pages`-mode assistants under `/api/v1/factory/assistants`.
+	</Card>
+	<Card title="Sessions" icon="document">
+		The general session surface under `/api/v1/sessions` — both `flow` and `pages` rows.
+	</Card>
+	<Card title="Knowledge" icon="open-book">
+		Push documents by your own `external_id` and attach them to knowledge bases under `/api/v1/knowledge/`.
+	</Card>
+	<Card title="Behaviour" icon="warning">
+		Ownership, rate limits, and revocation lag — the three things an integration must be designed around.
+	</Card>
+</CardGrid>
+
+## Authentication
+
+Every request carries an **integration key** in a standard bearer header:
+
+```http
+Authorization: Bearer gti_live_...
+```
+
+Three facts about that key determine how you deploy against this API.
+
+### The key is minted by the admin, per tenant
+
+An integration key is issued by the Greentic admin service, not by the Designer. It is `gti_`-class, distinct from the `gts_` platform service key. The Designer never mints, stores, or rotates one — ask your Greentic operator for a key, and ask them again when you need it rotated or revoked.
+
+### The key carries tenant *and* team
+
+The key **is** the identity. When the admin resolves it, the answer is `{tenant, team, integration_id, name, status}` — so the tenant and the team a request acts in are properties of the credential, never of the request. There is no request field, header, or query parameter that selects a tenant or a team, which is what makes cross-tenant isolation hold by construction.
+
+Rotating the credential does not change who owns the rows it created: ownership is stamped from the stable `integration_id`, not from the key material.
+
+### The Designer only verifies it
+
+On each request the Designer asks the admin to verify the presented key, then acts on the answer. It never inspects the key's shape itself — the token is opaque to it. Two consequences follow, and both are load-bearing:
+
+- **Verification fails closed.** Any outcome that is not "the admin says this key is active" refuses the request. An admin outage does not become an open write endpoint.
+- **Verification results are cached for 60 seconds.** That is what makes a revoked key keep working for up to a minute. See [Revocation lag](/integration-api/behaviour/#revocation-is-not-instant).
+
+<Aside type="caution" title="A session cookie is never a substitute">
+`/api/v1/*` reads the `Authorization` header and never the `Cookie` header. A valid, freshly minted Designer session cookie presented with no bearer key is rejected exactly like no credential at all. This is deliberate: if the cookie worked here, any hostile page could drive a state-changing request from a logged-in user's browser.
+</Aside>
+
+## First call: the whoami smoke test
+
+Before wiring up anything that writes, confirm the key resolves to the tenant and team you expect.
+
+<Steps>
+
+1. **Export the key and your Designer host.**
+
+   ```bash
+   export GREENTIC_KEY="gti_live_..."
+   export GREENTIC_DESIGNER="https://designer.example.com"
+   ```
+
+2. **Call `whoami`.**
+
+   ```bash
+   curl -sS "$GREENTIC_DESIGNER/api/v1/knowledge/whoami" \
+     -H "Authorization: Bearer $GREENTIC_KEY"
+   ```
+
+3. **Check the identity.**
+
+   ```json
+   {
+     "tenant": "acme",
+     "team": "support",
+     "integrationId": "<integration-id>",
+     "name": "acme-webchat-backend"
+   }
+   ```
+
+   `tenant` and `team` are the scope every subsequent call acts in. If either is not what you expected, stop — the key is wrong, not your code.
+
+</Steps>
+
+`GET /api/v1/knowledge/whoami` is a read that touches nothing. It carries no information the admin did not already give you when it minted the key, so it is safe to call from a health check.
+
+<Aside type="note">
+The route lives under the `/api/v1/knowledge/` prefix for historical reasons — it was the first prefix this surface served — but it reports the identity for the whole Integration API, including the assistant and session routes.
+</Aside>
+
+## Response shapes
+
+Successful responses are **bare JSON** — this surface sits outside the Designer's `{ok, data, error}` response envelope, so a `200` body is the resource itself with no wrapper:
+
+```json
+{ "id": "sess-1756100000000-3f2a91bc", "name": "Support Assistant", "instructions": "...", "model": null }
+```
+
+Errors use one shape everywhere:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "assistant_not_found",
+    "message": "No such assistant."
+  }
+}
+```
+
+`code` is a stable snake_case token — match on it, not on `message`, which is an English fallback that may change.
+
+<Aside type="caution" title="One documented exception">
+`POST /api/v1/factory/assistants/{id}/publish` returns a **plain-text body** for build and pipeline failures (`422`, `500`). Only its `409 worker_name_taken` refusal uses the JSON error shape. See [Publishing an assistant](/integration-api/assistants/#publish-an-assistant).
+</Aside>
+
+## Authentication and transport errors
+
+These four can be returned by any route on this surface, before the handler runs.
+
+| Status | `code` | When |
+|--------|--------|------|
+| `401` | `invalid_api_key` | No `Authorization: Bearer <key>` header, a non-`Bearer` scheme, an empty key, or a key the admin does not recognise. |
+| `403` | `integration_disabled` | The admin recognises the key but its status is not `active` (disabled, revoked, suspended, or a status this Designer build does not recognise). |
+| `429` | `rate_limited` | The per-key token bucket is empty. Carries a `Retry-After` header in whole seconds. See [Rate limiting](/integration-api/behaviour/#rate-limiting). |
+| `503` | `integration_auth_unavailable` | No admin backend is attached to this deployment (see below), or verification could not complete — the admin returned `403`/`429`/`5xx`, timed out, was unreachable, or sent a body that could not be decoded. |
+
+<Aside type="caution" title="Standalone deployments cannot verify keys">
+A Designer running standalone has no admin service to ask, so there is nothing that can resolve an integration key. Every `/api/v1/*` request on such a deployment answers `503 integration_auth_unavailable`. The Integration API requires an admin-backed deployment; there is no local verification source and none is planned.
+</Aside>
+
+## Not supported
+
+Read these before you design against the API — each one is a deliberate boundary, not a gap waiting for a patch.
+
+<Aside type="caution" title="No CORS — this is a backend-to-backend API">
+Greentic Designer serves no CORS headers on any route, including `/api/v1/*`. A browser-side client calling this API directly is **not supported** and will be blocked by the browser's same-origin policy. Call it from your server.
+
+This also means the integration key never belongs in front-end code: it is a tenant-wide credential, and a browser is not a place to keep one.
+</Aside>
+
+<Aside type="caution" title="Chat turns are not on this API">
+The Integration API provisions and configures assistants. It does not serve end-customer conversations — there is no turn, message, or completion endpoint under `/api/v1/*`, by design.
+
+Serving end customers is the job of a **deployed bundle** (`greentic-start`), not of the Designer. Publish the assistant through this API, then deploy the resulting pack. See [Deploying Bundles](/operations/deploying-bundles/).
+</Aside>
+
+For the front-end half of a chat integration, the WebChat widget already covers embedding:
+
+<LinkCard
+	title="WebChat Embedding"
+	description="Fullpage link, inline iframe, and chat-bubble embeds for the deployed WebChat widget."
+	href="/providers/messaging/webchat-embedding/"
+/>
+
+Two further limitations affect what you can build through this API rather than how you call it — MCP tools on agentic workers, and which lane to build workers in. Both are covered in [Behaviour and limits](/integration-api/behaviour/#not-supported).
+
+## Where to next
+
+<CardGrid>
+	<LinkCard title="Assistants" href="/integration-api/assistants/" description="Create, update, and publish assistants through the factory routes." />
+	<LinkCard title="Sessions" href="/integration-api/sessions/" description="List, create, rename, and delete sessions in both modes." />
+	<LinkCard title="Knowledge" href="/integration-api/knowledge/" description="Push documents by external_id and attach them to knowledge bases." />
+	<LinkCard title="Behaviour and limits" href="/integration-api/behaviour/" description="Ownership, rate limiting, revocation lag, and what is not supported." />
+</CardGrid>

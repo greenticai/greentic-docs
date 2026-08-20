@@ -1,0 +1,191 @@
+---
+title: Behaviour and Limits
+description: Ownership, rate limiting, revocation lag, and the boundaries of the Greentic Integration API — what an integrator must design around before going live.
+---
+
+import { Aside, Steps, LinkCard } from '@astrojs/starlight/components';
+
+Three behaviours of the Integration API will shape your integration whether you plan for them or not: what a key can reach, how fast it can call, and how long a revoked key keeps working. This page also states plainly what the API does not do, so you find out here rather than at 2am.
+
+## Ownership
+
+**A key reaches only the rows it created.** That is the whole rule, and it is enforced in one place for every route on this surface.
+
+A row belongs to your integration when both of these hold:
+
+- its owner is your integration — derived from the stable `integration_id`, not from the key material, so it survives credential rotation; **and**
+- its team matches the team your key carries.
+
+Everything else is out of reach:
+
+| Row | Reachable? |
+|-----|-----------|
+| Created by this key's integration, in this key's team | Yes |
+| Created by a human in the same tenant, private | No |
+| Created by a human in the same tenant, shared tenant-wide | No |
+| Created by this integration but in a different team | No |
+| Created by a different integration | No |
+| In a different tenant | No |
+| Pre-existing, with no recorded owner | No |
+
+<Aside type="caution" title="Everything unreachable is 404 — never 403">
+There is no `403` for an ownership refusal anywhere on this API. An id you do not own, an id in another team, an id in another tenant, and an id that never existed all answer the same `404`.
+
+This is deliberate. A `403` would confirm that the id exists somewhere you cannot reach, which turns the route into an existence oracle for another tenant's data. **Do not write logic that distinguishes "forbidden" from "missing" — the API will never tell you the difference.**
+</Aside>
+
+The [factory routes](/integration-api/assistants/) narrow this further: a `flow`-mode session your key genuinely owns is still a `404` on `/api/v1/factory/assistants/{id}`, because a flow row is not an assistant. It is reachable on [`/api/v1/sessions/{id}`](/integration-api/sessions/).
+
+<Aside type="note" title="Rows that predate your key">
+Sessions created before this ownership model existed carry no recorded owner and cannot be attributed to an integration retroactively. They are **not** reachable through `/api/v1/*` — they stay visible to humans in the Designer UI. If you are migrating from an earlier integration, expect to re-create rather than adopt.
+</Aside>
+
+### What this means for your design
+
+- **Store the ids you create.** You cannot discover a row you did not create, and there is no route that lists another owner's work.
+- **Treat the key as the tenant boundary.** No request field selects a tenant or a team, so one key per tenant/team is the unit of scoping.
+- **A rotated key keeps its rows.** A *different* key is a different owner, even in the same tenant.
+
+## Rate limiting
+
+Each `integration_id` gets a token bucket:
+
+| Parameter | Value |
+|-----------|-------|
+| Sustained rate | **60 requests per minute** (1 token per second) |
+| Burst capacity | **120 requests** back-to-back before the sustained rate binds |
+| Over the limit | `429 rate_limited` with a `Retry-After` header |
+
+`Retry-After` is a whole number of seconds until the next token is available, minimum `1`. Honour it — retrying sooner just spends another refused request.
+
+The bucket is shared across every route on this surface. A knowledge sync and an assistant publish draw from the same 60/minute.
+
+<Aside type="caution" title="This is a guardrail, not a quota">
+The bucket lives in the Designer process that served the request. A deployment running several replicas behind a load balancer has one bucket per replica, so the effective ceiling is higher than 60/minute and depends on how your requests are distributed — it is not a number you can rely on.
+
+Design for the documented 60/minute and back off on `429`. Do not build a client that assumes headroom it observed in production; a topology change removes it without notice, and a per-tenant quota, if one is ever introduced, will be enforced elsewhere.
+</Aside>
+
+A newly seen key starts with a full burst of 120, which is enough for a modest initial sync in one go. Size a bulk load around the sustained rate, not the burst.
+
+## Revocation is not instant
+
+<Aside type="caution" title="A revoked key keeps working for up to 60 seconds">
+When the admin verifies a key successfully, the Designer caches that answer for **60 seconds** before asking again. Revoking, disabling, or suspending a key therefore takes effect **within a minute, not immediately** — a request presenting the revoked key inside that window is still served.
+
+Plan your incident response around it:
+
+- Revoking a leaked key is not an instant containment step. Assume up to a further minute of successful requests and check what happened in that window.
+- If you need a harder stop, take away what the key acts on as well — the Designer cannot serve a request whose target no longer exists.
+- Never test revocation by revoking and immediately re-calling; a success there is the cache, not a failed revocation.
+</Aside>
+
+The reverse direction is quicker. A key the admin **rejects** is remembered as invalid for only **10 seconds**, so a newly minted key becomes usable within about ten seconds even if something called with it before it existed.
+
+Both windows are ceilings, not schedules: any request after the cached entry expires re-checks the admin.
+
+### Verification failures fail closed
+
+Every outcome that is not "the admin says this key is active" refuses the request. There is no fallback that lets a request through unverified, and no stale positive is served when the admin is unreachable.
+
+| Outcome | Response |
+|---------|----------|
+| Admin does not recognise the key | `401 invalid_api_key` |
+| Admin resolves it, status is not `active` | `403 integration_disabled` |
+| Admin resolves it, status is one this build does not recognise | `403 integration_disabled` |
+| Admin unreachable, timed out, rate-limited, erroring, or undecodable | `503 integration_auth_unavailable` |
+| No admin attached to this deployment | `503 integration_auth_unavailable` |
+
+Treat `503 integration_auth_unavailable` as retryable with backoff; it says nothing about your key. Treat `401` and `403` as terminal until a human intervenes.
+
+<Aside type="caution" title="Standalone deployments cannot verify keys at all">
+A Designer running standalone has no admin service to ask. Every `/api/v1/*` request there answers `503 integration_auth_unavailable`, permanently. The Integration API is only available on an admin-backed deployment — there is no local verification source and none is planned.
+</Aside>
+
+## Not supported
+
+Each of these is a current boundary of the product, stated so you can design around it rather than debug into it.
+
+### No CORS — call this from a backend
+
+<Aside type="caution" title="A browser-side client is not supported">
+Greentic Designer serves no CORS headers on any route, `/api/v1/*` included. A browser cannot call this API cross-origin, and there is no configuration that enables it.
+
+This surface is built for a server-to-server caller, and the integration key reflects that: it is a tenant-wide credential that carries tenant and team, so it does not belong in code a user can read. Keep it on your backend and expose your own endpoints to your front end.
+</Aside>
+
+For the browser-facing half of a chat integration, use the WebChat widget, which is designed for it:
+
+<LinkCard
+	title="WebChat Embedding"
+	description="Fullpage link, inline iframe, and chat-bubble embeds for the deployed WebChat widget."
+	href="/providers/messaging/webchat-embedding/"
+/>
+
+### Chat turns are not on this API
+
+<Aside type="caution" title="There is no conversation endpoint under /api/v1/*">
+The Integration API provisions, configures, and publishes assistants. It does not serve end-customer conversations, and no turn, message, or completion route is planned for it.
+
+Serving end customers is the job of a **deployed bundle** run by `greentic-start` — a different process with a different job, not the Designer. The Designer's own chat surfaces are an authoring playground and an editor demo runner; neither is a production conversation engine.
+
+The path is: build and publish the assistant through this API, then deploy the resulting pack and serve conversations from the deployment.
+</Aside>
+
+<LinkCard
+	title="Deploying Bundles"
+	description="Deploy a published pack into an environment, manage revisions, and shift traffic."
+	href="/operations/deploying-bundles/"
+/>
+
+### MCP tools on agentic workers
+
+<Aside type="caution" title="An mcp: tool bound to an agentic worker is dropped at run time">
+MCP tools come in two flavours, and only one of them survives deployment today.
+
+- **MCP on a flow node — supported.** The tool's material travels inside the pack, so a deployed bundle resolves it. This is the flavour to use.
+- **MCP bound to an agentic worker — not yet supported in a deployed bundle.** That binding is resolved at run time from a live MCP catalog which the deployment is never given access to. The runtime finds no entry, **silently drops the tool**, and never offers it to the model. The worker answers plausibly and simply never does the thing, with no error to correlate against.
+
+**Workaround today:** put the MCP tool on a flow node and have the worker reach it there, rather than binding `mcp:` directly to the agentic worker. Use an MCP server scoped to the **tenant** — a server scoped to a specific team is not yet resolvable at run time, in either flavour.
+
+**How to detect it:** [`POST /api/v1/factory/assistants/{id}/publish`](/integration-api/assistants/#unreachabletools) reports every such binding in `unreachableTools`, with `reason: "missing_admin_credentials"`. Surface it in your pipeline instead of discovering it from a user complaint — but note the field is **absent** when there is nothing to report, not an empty array, so default it before you read it. `sorla:` tools have the same shape and report `reason: "missing_sorx_url"`.
+
+This is a current limitation of what a deployed bundle is handed, not a defect in your binding. The same binding works in the Designer's own playground, which is why it can look fine before deployment.
+</Aside>
+
+### Build agentic workers through a flow session
+
+<Aside type="caution" title="Use the flow lane for anything you intend to deploy">
+An assistant built purely through the pages lane produces a pack that the deployed runtime cannot load. Build agentic workers through a **flow session** — create the session with [`POST /api/v1/sessions`](/integration-api/sessions/#create-a-session) using `mode: "flow"`, and place the worker in the flow.
+
+`POST /api/v1/factory/assistants` and its publish route remain the right tools for authoring and iterating on an assistant's instructions and model. Just do not treat a pages-lane publish as a deployable artifact on its own.
+</Aside>
+
+## Checklist before going live
+
+<Steps>
+
+1. **Verify the key's scope** with `GET /api/v1/knowledge/whoami` and assert the `tenant` and `team` your code expects.
+
+2. **Persist every id you create.** Ownership means you cannot rediscover a row you did not create.
+
+3. **Match on `error.code`, never on `error.message`.** Messages are English fallbacks and may change.
+
+4. **Treat every `404` as "not reachable"** — do not branch on missing versus forbidden.
+
+5. **Back off on `429` using `Retry-After`,** and size bulk work against 60 requests/minute rather than the 120 burst.
+
+6. **Retry `503 integration_auth_unavailable`** with backoff; do not retry `401` or `403`.
+
+7. **Document the 60-second revocation window** in your own runbook, so an on-call engineer is not testing whether revocation worked.
+
+8. **Fail your build when a publish reports `unreachableTools`** unless you have deliberately accepted it — and default the field first (`published.unreachableTools ?? []`), because it is omitted on a clean publish rather than sent empty.
+
+9. **Keep the key on your server.** No CORS, and no reason to ship a tenant-wide credential to a browser.
+
+</Steps>
+
+## Related
+
+<LinkCard title="Integration API Overview" href="/integration-api/overview/" description="Authentication, the error envelope, and the whoami smoke test." />
+<LinkCard title="Multi-Tenancy" href="/concepts/multi-tenancy/" description="How tenant and team isolation works across the platform." />

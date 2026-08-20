@@ -1,0 +1,324 @@
+---
+title: Knowledge Documents and Bases
+description: Push documents into a tenant's Greentic knowledge library by your own external_id, and attach them to knowledge bases, from a partner backend.
+---
+
+import { Aside, Steps, LinkCard } from '@astrojs/starlight/components';
+
+The routes under `/api/v1/knowledge/` let your backend keep a tenant's knowledge library in sync with your own system of record, and attach what it pushes to the knowledge bases an operator has already assembled.
+
+Every route on this page requires `Authorization: Bearer <key>` — see [Overview and authentication](/integration-api/overview/).
+
+## Documents are addressed by *your* id
+
+Every document route is keyed by an **`external_id` you choose**, never by a Designer-internal id you would have to store and reconcile. Use whatever your system already calls the record — a CRM ticket id, a CMS slug, a file path.
+
+An `external_id` is scoped to your integration. Two integrations in the same tenant can each use `handbook-v3` without colliding, and an `external_id` you never pushed is a `404` whether it does not exist at all or belongs to someone else.
+
+## The document shape
+
+```json
+{
+  "externalId": "handbook-v3",
+  "name": "handbook.pdf",
+  "kind": "pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 184320,
+  "contentHash": "b1946ac92492d2347c6235b4d2611184",
+  "createdAt": 1756100000,
+  "updatedAt": 1756186400
+}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `externalId` | string | The id you supplied. |
+| `name` | string | The uploaded filename. |
+| `kind` | `pdf` \| `xlsx` \| `csv` \| `txt` \| `md` | Derived from the file extension. |
+| `mimeType` | string | Canonical MIME type for the kind. |
+| `sizeBytes` | integer | Stored size. |
+| `contentHash` | string | Content hash of the stored document. |
+| `createdAt` | integer | Unix epoch in **seconds** — when this `external_id` was first pushed. |
+| `updatedAt` | integer | Unix epoch in **seconds** — when it last changed. |
+
+<Aside type="note" title="Two different epoch units on one API">
+Knowledge routes use Unix **seconds**; [session](/integration-api/sessions/) and [assistant](/integration-api/assistants/) routes use Unix **milliseconds**. The two prefixes were built against different internal clocks and both are now part of a stable contract, so neither was changed. Check the unit per prefix.
+</Aside>
+
+The timestamps belong to *your mapping*, not to the underlying stored document. Identical content pushed under two `external_id`s is stored once and shared, so only the mapping's timestamps are meaningful per-`external_id` values.
+
+## Uploads
+
+Both write routes take a `multipart/form-data` body.
+
+| Field | Route | Notes |
+|-------|-------|-------|
+| `file` | both | Required. The document bytes. |
+| `external_id` | `POST` only | Required on `POST`. Ignored by `PUT`, whose `external_id` is the path parameter. |
+
+Unknown fields are ignored rather than rejected, so you can send metadata this version does not read without breaking.
+
+- **Accepted extensions:** PDF, Excel (`.xlsx`), CSV, TXT, MD.
+- **Maximum size:** 5 MiB per file.
+
+## Create a document
+
+`POST /api/v1/knowledge/documents`
+
+Create only. An `external_id` your integration already holds is a `409` — an accidental re-`POST` is never mistaken for an update.
+
+```bash
+curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/knowledge/documents" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -F "external_id=handbook-v3" \
+  -F "file=@./handbook.pdf"
+```
+
+| Status | Body |
+|--------|------|
+| `201` | The document object — the content was genuinely new. |
+| `200` | The document object — the content matched a document already stored for this tenant and was shared rather than stored again. |
+| `400` `missing_file` | No `file` field. |
+| `400` `missing_external_id` | No `external_id` field, or it was blank. |
+| `400` `decode` | The multipart body could not be read. |
+| `409` `external_id_exists` | This `external_id` already exists for this integration — use `PUT`. |
+| `413` `file_too_large` | Over 5 MiB. |
+| `415` `unsupported_file_type` | Extension is not PDF / Excel / CSV / TXT / MD. |
+| `422` `extraction_failed` | The file was accepted but no text could be extracted from it. |
+| `500` `internal_error` | Storage or mapping write failed. |
+
+<Aside type="tip" title="201 versus 200 is about storage, not about you">
+Both mean "your `external_id` now exists and points at this content". The difference is only whether the bytes were already in the tenant's library. Treat them the same unless you are auditing storage.
+</Aside>
+
+## Replace a document
+
+`PUT /api/v1/knowledge/documents/{external_id}`
+
+Upsert: creates when the `external_id` is absent, replaces when it is present.
+
+```bash
+curl -sS -X PUT "$GREENTIC_DESIGNER/api/v1/knowledge/documents/handbook-v3" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -F "file=@./handbook.pdf"
+```
+
+| Status | Body |
+|--------|------|
+| `201` | The document object — there was no prior mapping, so this was a create. |
+| `200` | `{ "unchanged": true, "externalId": "handbook-v3" }` — the uploaded bytes are identical to what this `external_id` already resolved to. |
+| `200` | The document object — the content differed and the mapping was repointed. |
+| `400` / `413` / `415` / `422` / `500` | Same codes as `POST`. |
+
+<Aside type="tip" title="Re-pushing unchanged content is free">
+An identical `PUT` is an explicit no-op. Nothing is touched — not the mapping's `updatedAt`, not the vector index, not any knowledge base's index state. A nightly full resync of an unchanged corpus therefore costs nothing downstream, which is exactly what it is designed for.
+
+Distinguish the two `200` shapes by the presence of the `unchanged` field.
+</Aside>
+
+When content *does* change, the mapping is repointed to the new stored document. If the document you were pointing at was one **your** integration created, its knowledge-base memberships are carried across, so a base that held the old version holds the new one and is marked stale. If you were pointing at a document you do not own — an operator's, or another integration's, reached because an earlier push happened to match its content — nothing about that document or its bases is touched. Only your mapping moves.
+
+## Read one document
+
+`GET /api/v1/knowledge/documents/{external_id}`
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/knowledge/documents/handbook-v3" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+Metadata only — the original bytes are not served back by this API.
+
+| Status | Body |
+|--------|------|
+| `200` | The document object. |
+| `404` `document_not_found` | No document with that `external_id` for this integration. |
+| `500` `internal_error` | The read failed. |
+
+## List documents
+
+`GET /api/v1/knowledge/documents`
+
+Cursor-paginated by `external_id`.
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/knowledge/documents?limit=100" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+| Query parameter | Default | Notes |
+|-----------------|---------|-------|
+| `limit` | `50` | Clamped to the range 1–200. |
+| `after` | — | The previous page's `nextCursor`. |
+
+```json
+{
+  "documents": [
+    {
+      "externalId": "handbook-v3",
+      "name": "handbook.pdf",
+      "kind": "pdf",
+      "mimeType": "application/pdf",
+      "sizeBytes": 184320,
+      "contentHash": "b1946ac92492d2347c6235b4d2611184",
+      "createdAt": 1756100000,
+      "updatedAt": 1756186400
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+`nextCursor` is `null` on the last page. Pass it back as `after` to fetch the next one.
+
+Only documents this integration pushed are listed.
+
+| Status | Body |
+|--------|------|
+| `200` | `{ "documents": [...], "nextCursor": ... }` |
+| `500` `internal_error` | The query failed. |
+
+## Delete a document
+
+`DELETE /api/v1/knowledge/documents/{external_id}`
+
+```bash
+curl -sS -X DELETE "$GREENTIC_DESIGNER/api/v1/knowledge/documents/handbook-v3" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -i
+```
+
+Removes **your mapping**. The stored document itself is removed only when no mapping of any kind still references it *and* your integration is the one that created it.
+
+| Status | Body |
+|--------|------|
+| `204` | Empty. |
+| `404` `document_not_found` | No document with that `external_id` for this integration. |
+| `500` `internal_error` | The delete failed. |
+
+<Aside type="caution" title="You can never delete content you did not upload">
+If your push happened to match content an operator uploaded, or content another integration owns, deleting your `external_id` removes only your reference to it. That document, its vectors, and its knowledge-base memberships are left completely untouched. The same rule applies when a `PUT` repoints away from such a document.
+</Aside>
+
+## Knowledge bases
+
+A knowledge base is a collection an operator assembles and a deployed worker retrieves from. This API can **discover** bases and **change their membership**, but not create or destroy them.
+
+<Aside type="caution" title="There is no POST /bases and no DELETE /bases">
+Assembling a collection stays an operator decision. An external script pushing documents must never be able to create — or, worse, delete — a knowledge base a production worker depends on. This is a deliberate boundary, not a missing route.
+</Aside>
+
+### List knowledge bases
+
+`GET /api/v1/knowledge/bases`
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/knowledge/bases" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+```json
+{
+  "bases": [
+    {
+      "id": "<kb-id>",
+      "name": "Support handbook",
+      "description": "Everything the tier-1 desk needs",
+      "documentCount": 42,
+      "createdAt": 1756000000,
+      "updatedAt": 1756186400,
+      "indexState": "stale"
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `id` | Use this as `{kb_id}` on the two routes below. |
+| `description` | May be `null`. |
+| `documentCount` | Documents currently in the base, from every source. |
+| `indexState` | The one field you can use to observe the effect of your own attach and detach calls. |
+
+Bases are listed for the key's tenant **and team** — this route shows what that team has, not only what your integration pushed. Embedding configuration and vector-build metadata are operator concerns and are deliberately not exposed here.
+
+| Status | Body |
+|--------|------|
+| `200` | `{ "bases": [...] }` |
+| `500` `internal_error` | The query failed. |
+
+### Attach documents to a base
+
+`POST /api/v1/knowledge/bases/{kb_id}/documents`
+
+```bash
+curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/knowledge/bases/<kb-id>/documents" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "externalIds": ["handbook-v3", "refund-policy-2026"] }'
+```
+
+```json
+{ "linked": 2 }
+```
+
+`linked` counts the membership rows actually created — re-attaching a document that is already a member adds nothing and is not an error.
+
+| Status | Body |
+|--------|------|
+| `200` | `{ "linked": <count> }` |
+| `404` `knowledge_base_not_found` | No knowledge base with that id for this tenant and team. |
+| `404` `document_not_found` | One of the `externalIds` does not resolve under this integration. |
+| `500` `internal_error` | The lookup or write failed. |
+
+<Aside type="note" title="All-or-nothing">
+Every `external_id` is resolved before any membership row is written. If one does not resolve, the whole request fails with `404 document_not_found` and **nothing is attached** — there is no partial-attach outcome to reason about and nothing to roll back.
+</Aside>
+
+### Detach a document from a base
+
+`DELETE /api/v1/knowledge/bases/{kb_id}/documents/{external_id}`
+
+```bash
+curl -sS -X DELETE "$GREENTIC_DESIGNER/api/v1/knowledge/bases/<kb-id>/documents/handbook-v3" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -i
+```
+
+Idempotent: detaching a document that was never a member of that base still answers `204`. Only an id that cannot be resolved at all is an error.
+
+| Status | Body |
+|--------|------|
+| `204` | Empty. |
+| `404` `knowledge_base_not_found` | No knowledge base with that id for this tenant and team. |
+| `404` `document_not_found` | No document with that `external_id` for this integration. |
+| `500` `internal_error` | The lookup or write failed. |
+
+### Index staleness
+
+Attaching or detaching marks the affected base's index **stale** — its published index no longer matches its contents, and the outbound sync reads that flag to know it must rebuild. Poll `indexState` on `GET /api/v1/knowledge/bases` to watch it settle.
+
+Marking is best-effort and happens after the membership change has already succeeded, so a `200` or `204` means the membership changed; it does not on its own guarantee the stale flag was written.
+
+## A typical sync
+
+<Steps>
+
+1. **Confirm the key's scope** with [`GET /api/v1/knowledge/whoami`](/integration-api/overview/#first-call-the-whoami-smoke-test).
+
+2. **Discover the target base** with `GET /api/v1/knowledge/bases` and keep its `id`.
+
+3. **Push each record** with `PUT /api/v1/knowledge/documents/{your-id}`. Unchanged records cost nothing, so a full resync is safe to run on a schedule.
+
+4. **Attach the new ones** with `POST /api/v1/knowledge/bases/{kb_id}/documents`. Already-attached ids are harmless.
+
+5. **Remove retired records** with `DELETE /api/v1/knowledge/documents/{your-id}`.
+
+6. **Stay under the rate limit** — see [Rate limiting](/integration-api/behaviour/#rate-limiting) before sizing your batch loop.
+
+</Steps>
+
+## Related
+
+<LinkCard title="Agent Knowledge (RAG)" href="/concepts/agent-knowledge/" description="How a worker retrieves from a knowledge corpus at run time." />
+<LinkCard title="Behaviour and limits" href="/integration-api/behaviour/" description="Ownership, rate limiting, revocation lag, and what is not supported." />
