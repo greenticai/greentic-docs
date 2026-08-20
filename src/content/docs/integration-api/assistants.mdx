@@ -1,0 +1,236 @@
+---
+title: Assistants
+description: Create, read, update, delete, and publish Greentic assistants from a partner backend through the /api/v1/factory routes.
+---
+
+import { Aside, Steps, Tabs, TabItem, LinkCard } from '@astrojs/starlight/components';
+
+The factory routes under `/api/v1/factory/assistants` are the "type a prompt, get an assistant" surface. An assistant is a session in `pages` mode, created and owned by your integration key.
+
+Every route on this page requires `Authorization: Bearer <key>` — see [Overview and authentication](/integration-api/overview/).
+
+<Aside type="note" title="A narrow projection, on purpose">
+The Designer's own composer document has ten sections and a provenance sidecar. This API accepts and returns three fields — `name`, `instructions`, `model` — and owns the projection onto the full document itself. Widening this surface later is additive; narrowing one you have already integrated against is not, which is why it starts small.
+</Aside>
+
+## The assistant shape
+
+`POST`, `GET`, and `PATCH` on a single assistant all return the same object:
+
+```json
+{
+  "id": "sess-1756100000000-3f2a91bc",
+  "name": "Support Assistant",
+  "instructions": "Answer billing questions using the knowledge base. Escalate refunds.",
+  "model": "gpt-4o-mini"
+}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | string | Assigned by the Designer. Use it verbatim; do not parse it. |
+| `name` | string | Stored exactly as sent. The pack id is slugified from it at build time, so you do not have to. |
+| `instructions` | string | The worker's system prompt. |
+| `model` | string \| null | `null` means "whatever the workspace is configured with" — the common case, and the one that needs no credential of its own. |
+
+## Create an assistant
+
+`POST /api/v1/factory/assistants`
+
+```bash
+curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/factory/assistants" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Support Assistant",
+    "instructions": "Answer billing questions using the knowledge base. Escalate refunds.",
+    "model": "gpt-4o-mini"
+  }'
+```
+
+**Body**
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `name` | yes | Rejected when empty after trimming. |
+| `instructions` | yes | Rejected when empty after trimming. |
+| `model` | no | Omit to use the workspace's configured model. |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| `201` | The assistant object. |
+| `400` `name_required` | `name` missing or blank. |
+| `400` `instructions_required` | `instructions` missing or blank. |
+| `500` `assistant_create_failed` | The row could not be written. |
+
+The new assistant is scoped by the key alone. There is no field in this body that could place it in another tenant or another team.
+
+## List assistants
+
+`GET /api/v1/factory/assistants`
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/factory/assistants" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+```json
+{
+  "assistants": [
+    { "id": "sess-1756100000000-3f2a91bc", "name": "Support Assistant", "updated_at": 1756100000000 }
+  ]
+}
+```
+
+List rows deliberately omit `instructions`, which can be long and is rarely wanted per row — fetch one assistant to get it.
+
+`updated_at` is a **Unix epoch in milliseconds**. Rows come back most-recently-touched first, and the list is **not paginated**: it returns every assistant this key owns.
+
+Only `pages`-mode rows appear here. A `flow` session created through [`/api/v1/sessions`](/integration-api/sessions/) is not an assistant and is deliberately hidden from this list.
+
+| Status | Body |
+|--------|------|
+| `200` | `{ "assistants": [...] }` |
+| `500` `assistant_list_failed` | The query failed. |
+
+## Read one assistant
+
+`GET /api/v1/factory/assistants/{id}`
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/factory/assistants/sess-1756100000000-3f2a91bc" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+| Status | Body |
+|--------|------|
+| `200` | The assistant object. |
+| `404` `assistant_not_found` | See below. |
+| `500` `assistant_read_failed` | The read failed. |
+
+<Aside type="note" title="404 covers every refusal">
+`assistant_not_found` is returned for an id that does not exist, one belonging to another tenant, another team, another integration, an unowned row, **and** for a `flow`-mode session that your key does own. They are indistinguishable on purpose: reporting them differently would turn this route into an oracle for ids you cannot reach. There is no `403` on this API. See [Ownership](/integration-api/behaviour/#ownership).
+</Aside>
+
+## Update an assistant
+
+`PATCH /api/v1/factory/assistants/{id}`
+
+Every field is optional. An absent field is left alone, not cleared.
+
+```bash
+curl -sS -X PATCH "$GREENTIC_DESIGNER/api/v1/factory/assistants/sess-1756100000000-3f2a91bc" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "instructions": "Answer billing questions. Never quote a refund amount." }'
+```
+
+| Status | Body |
+|--------|------|
+| `200` | The updated assistant object. |
+| `400` `name_required` | `name` was present but blank. |
+| `400` `instructions_required` | `instructions` was present but blank. |
+| `400` `assistant_not_composed` | `instructions` or `model` was sent for a row that has no composer configuration to write them onto. |
+| `404` `assistant_not_found` | Not yours, not a `pages` row, or gone. |
+| `500` `assistant_update_failed` | The write failed. |
+
+Renaming through this route also updates the display name the published manifest is built from, so the pack and the agent inside it cannot end up disagreeing.
+
+## Delete an assistant
+
+`DELETE /api/v1/factory/assistants/{id}`
+
+```bash
+curl -sS -X DELETE "$GREENTIC_DESIGNER/api/v1/factory/assistants/sess-1756100000000-3f2a91bc" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -i
+```
+
+| Status | Body |
+|--------|------|
+| `204` | Empty. |
+| `404` `assistant_not_found` | Not yours, not a `pages` row, or already gone. |
+| `500` `assistant_delete_failed` | The delete failed. |
+
+## Publish an assistant
+
+`POST /api/v1/factory/assistants/{id}/publish`
+
+Builds the assistant's `.gtpack` and publishes it, returning the `agent_id` and `version` a deployment needs. This runs the same build core as the Designer UI's own publish, so both lanes produce identical packs.
+
+```bash
+curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/factory/assistants/sess-1756100000000-3f2a91bc/publish" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "publish_to_store": true }'
+```
+
+**Body**
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `publish_to_store` | `true` | Upload to the Greentic Store as well as recording locally. A cloud deploy resolves the pack by reference, so a local-only publish produces an artifact nothing downstream can fetch. |
+
+**Response — `200`**
+
+```json
+{
+  "agent_id": "support-assistant",
+  "version": "0.1.0",
+  "pack_sha256": "9f2c...",
+  "local_saved": true,
+  "store_status": "published"
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `agent_id` | The published worker's id, derived from `name`. |
+| `version` | The published version. |
+| `pack_sha256` | Content hash of the built pack. |
+| `local_saved` | Whether the pack was recorded on the Designer's own disk. |
+| `store_status` | One of `published`, `already_published`, `failed`, `skipped`. `skipped` is what you get for `publish_to_store: false`. |
+| `store_error` | Present only when `store_status` is `failed`. |
+| `unreachableTools` | Present only when non-empty. See below. |
+
+<Aside type="caution" title="A 200 does not mean the Store upload succeeded">
+The pack build and the Store upload are reported separately. `store_status: "failed"` arrives with HTTP `200` and a `store_error` string. Check the field, not just the status code.
+</Aside>
+
+**Errors**
+
+| Status | Body |
+|--------|------|
+| `400` `assistant_not_composed` | The assistant has no configuration to publish. |
+| `404` `assistant_not_found` | Not yours, not a `pages` row, or gone. |
+| `409` `worker_name_taken` | A different principal already published under this name in this workspace. JSON error shape. |
+| `422` | Conversion, pack-build, or pipeline failure. **Plain-text body**, not JSON. |
+| `500` | Output directory could not be created or resolved. **Plain-text body**, not JSON. |
+
+`worker_name_taken` is the one publish refusal a machine caller is expected to act on: a human published a worker under this name first, and this key must not silently overwrite it. Choose another `name` and retry.
+
+### `unreachableTools`
+
+When the published worker binds a tool that a deployed runtime cannot resolve, the response reports it and publishes anyway — a published worker is portable, and the operator installing it may run a runtime that *can* resolve the tool.
+
+```json
+{
+  "agent_id": "support-assistant",
+  "version": "0.1.0",
+  "pack_sha256": "9f2c...",
+  "local_saved": true,
+  "store_status": "published",
+  "unreachableTools": [
+    { "extensionId": "mcp:jira", "toolName": "create_issue", "reason": "missing_admin_credentials" }
+  ]
+}
+```
+
+`reason` is a stable token: `missing_admin_credentials` for `mcp:` tools, `missing_sorx_url` for `sorla:` tools. Treat a non-empty `unreachableTools` as a warning your pipeline should surface — the worker will run, but those tools will not be offered to the model. See [Agentic-worker MCP tools](/integration-api/behaviour/#mcp-tools-on-agentic-workers).
+
+## Next
+
+<LinkCard title="Sessions" href="/integration-api/sessions/" description="The general session surface, including flow-mode rows." />
+<LinkCard title="Behaviour and limits" href="/integration-api/behaviour/" description="Ownership, rate limiting, revocation lag, and what is not supported." />

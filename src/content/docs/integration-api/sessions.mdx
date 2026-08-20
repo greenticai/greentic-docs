@@ -1,0 +1,166 @@
+---
+title: Sessions
+description: List, create, rename, and delete Greentic Designer sessions from a partner backend through the /api/v1/sessions routes.
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+`/api/v1/sessions` is the general session surface. Unlike the [factory routes](/integration-api/assistants/), which serve `pages`-mode assistants only, this one serves **both** session modes: a `flow` session is an ordinary resource here.
+
+Every route on this page requires `Authorization: Bearer <key>` — see [Overview and authentication](/integration-api/overview/).
+
+## The session shape
+
+`GET`, `POST`, and `PATCH` on a single session return:
+
+```json
+{
+  "id": "sess-1756100000000-3f2a91bc",
+  "name": "Order intake flow",
+  "mode": "flow",
+  "created_at": 1756100000000,
+  "updated_at": 1756100000000,
+  "deploy_state": "draft"
+}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | string | Assigned by the Designer. |
+| `name` | string | Stored verbatim. |
+| `mode` | `"flow"` \| `"pages"` | Which editor the session belongs to. |
+| `created_at` | integer | Unix epoch in **milliseconds**. |
+| `updated_at` | integer | Unix epoch in **milliseconds**. |
+| `deploy_state` | `"draft"` \| `"live"` | `live` once a deploy has completed successfully. |
+| `instructions` | string | **`pages` rows only.** Omitted entirely for a `flow` row. |
+| `model` | string | **`pages` rows only**, and only when a model was named. Omitted otherwise. |
+
+The flow graph, message history, and composer document are deliberately not exposed. This surface commits to metadata plus the same `{instructions, model}` projection the factory routes already publish, so the two cannot drift into describing the same row differently.
+
+## List sessions
+
+`GET /api/v1/sessions`
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/sessions" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+```json
+{
+  "sessions": [
+    {
+      "id": "sess-1756100000000-3f2a91bc",
+      "name": "Order intake flow",
+      "mode": "flow",
+      "created_at": 1756100000000,
+      "updated_at": 1756100000000,
+      "deploy_state": "draft"
+    }
+  ]
+}
+```
+
+Both modes are listed. List rows carry metadata only — no `instructions` or `model`, even for a `pages` row.
+
+Rows come back most-recently-touched first, and the list is **not paginated**: it returns every session this key owns.
+
+| Status | Body |
+|--------|------|
+| `200` | `{ "sessions": [...] }` |
+| `500` `session_list_failed` | The query failed. |
+
+## Create a session
+
+`POST /api/v1/sessions`
+
+```bash
+curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/sessions" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Order intake flow", "mode": "flow" }'
+```
+
+**Body**
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `name` | yes | Rejected when empty after trimming. |
+| `mode` | yes | Must be `"flow"`. See below. |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| `201` | The session object. |
+| `400` `name_required` | `name` missing or blank. |
+| `400` `pages_mode_requires_factory` | `mode: "pages"` was requested. |
+| `500` `session_create_failed` | The row could not be written. |
+
+<Aside type="caution" title="mode: pages is refused here, not merely unsupported">
+A `pages` session created through this door would have no composer configuration, and nothing on this surface could ever populate one — `PATCH /api/v1/sessions/{id}` carries no field for it, and both `PATCH /api/v1/factory/assistants/{id}` and the publish route refuse exactly that shape with `400 assistant_not_composed`. It would be a dead row only a human could rescue by opening the composer.
+
+Use [`POST /api/v1/factory/assistants`](/integration-api/assistants/#create-an-assistant) instead. It provisions `instructions` and a model in the same call.
+</Aside>
+
+The new session is scoped by the key alone. There is no field in this body that could place it in another tenant or another team.
+
+## Read one session
+
+`GET /api/v1/sessions/{id}`
+
+```bash
+curl -sS "$GREENTIC_DESIGNER/api/v1/sessions/sess-1756100000000-3f2a91bc" \
+  -H "Authorization: Bearer $GREENTIC_KEY"
+```
+
+| Status | Body |
+|--------|------|
+| `200` | The session object. |
+| `404` `session_not_found` | Absent, another tenant's, another team's, another integration's, or unowned. |
+| `500` `session_read_failed` | The read failed. |
+
+A `flow` row **is** reachable here — that is the whole point of this surface. On the factory routes the same id would be a `404`.
+
+## Rename a session
+
+`PATCH /api/v1/sessions/{id}`
+
+```bash
+curl -sS -X PATCH "$GREENTIC_DESIGNER/api/v1/sessions/sess-1756100000000-3f2a91bc" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Order intake flow v2" }'
+```
+
+`name` is the only field this surface exposes, and it is optional — a `{}` body leaves the row's content alone and just refreshes `updated_at`.
+
+| Status | Body |
+|--------|------|
+| `200` | The updated session object. |
+| `400` `name_required` | `name` was present but blank. |
+| `404` `session_not_found` | Not yours, or gone. |
+| `500` `session_update_failed` | The write failed. |
+
+To edit a `pages` row's `instructions` or `model`, use [`PATCH /api/v1/factory/assistants/{id}`](/integration-api/assistants/#update-an-assistant). This route has no field that could write them.
+
+## Delete a session
+
+`DELETE /api/v1/sessions/{id}`
+
+```bash
+curl -sS -X DELETE "$GREENTIC_DESIGNER/api/v1/sessions/sess-1756100000000-3f2a91bc" \
+  -H "Authorization: Bearer $GREENTIC_KEY" \
+  -i
+```
+
+| Status | Body |
+|--------|------|
+| `204` | Empty. |
+| `404` `session_not_found` | Not yours, or already gone. |
+| `500` `session_delete_failed` | The delete failed. |
+
+## Next
+
+<LinkCard title="Knowledge documents and bases" href="/integration-api/knowledge/" description="Push documents by your own external_id and attach them to knowledge bases." />
+<LinkCard title="Behaviour and limits" href="/integration-api/behaviour/" description="Ownership, rate limiting, revocation lag, and what is not supported." />

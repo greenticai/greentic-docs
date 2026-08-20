@@ -168,6 +168,16 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Integration API',
+					items: [
+						{ label: 'Overview & Authentication', slug: 'integration-api/overview' },
+						{ label: 'Assistants', slug: 'integration-api/assistants' },
+						{ label: 'Sessions', slug: 'integration-api/sessions' },
+						{ label: 'Knowledge Documents & Bases', slug: 'integration-api/knowledge' },
+						{ label: 'Behaviour & Limits', slug: 'integration-api/behaviour' },
+					],
+				},
+				{
 					label: 'Messaging Extensions',
 					items: [
 						{ label: 'Overview', slug: 'providers/messaging/overview' },
