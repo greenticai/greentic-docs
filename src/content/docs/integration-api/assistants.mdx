@@ -193,7 +193,7 @@ curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/factory/assistants/sess-175610000000
 | `local_saved` | Whether the pack was recorded on the Designer's own disk. |
 | `store_status` | One of `published`, `already_published`, `failed`, `skipped`. `skipped` is what you get for `publish_to_store: false`. |
 | `store_error` | Present only when `store_status` is `failed`. |
-| `unreachableTools` | Present only when non-empty. See below. |
+| `unreachableTools` | **Absent entirely when there is nothing to report** — the key is omitted, not sent as `[]`. See below. |
 
 <Aside type="caution" title="A 200 does not mean the Store upload succeeded">
 The pack build and the Store upload are reported separately. `store_status: "failed"` arrives with HTTP `200` and a `store_error` string. Check the field, not just the status code.
@@ -228,7 +228,27 @@ When the published worker binds a tool that a deployed runtime cannot resolve, t
 }
 ```
 
-`reason` is a stable token: `missing_admin_credentials` for `mcp:` tools, `missing_sorx_url` for `sorla:` tools. Treat a non-empty `unreachableTools` as a warning your pipeline should surface — the worker will run, but those tools will not be offered to the model. See [Agentic-worker MCP tools](/integration-api/behaviour/#mcp-tools-on-agentic-workers).
+`reason` is a stable token: `missing_admin_credentials` for `mcp:` tools, `missing_sorx_url` for `sorla:` tools. The worker will still run — those tools simply will not be offered to the model. See [Agentic-worker MCP tools](/integration-api/behaviour/#mcp-tools-on-agentic-workers).
+
+<Aside type="caution" title="The field is absent on the healthy path">
+When every bound tool is resolvable, `unreachableTools` is **omitted from the response entirely**. It is not sent as an empty array.
+
+A pipeline gate that reads `response.unreachableTools.length` therefore works on the failing publish and crashes on the successful one — the worst possible place to put the break. Default the field before you read it.
+</Aside>
+
+```js
+// The key is absent when nothing is unreachable, so default it before reading.
+const unreachable = published.unreachableTools ?? [];
+
+if (unreachable.length > 0) {
+  const detail = unreachable
+    .map((t) => `${t.extensionId}/${t.toolName} (${t.reason})`)
+    .join(', ');
+  throw new Error(`Published worker binds tools a deployment cannot resolve: ${detail}`);
+}
+```
+
+The same rule applies to `store_error`, which is omitted unless `store_status` is `failed`.
 
 ## Next
 

@@ -148,7 +148,7 @@ MCP tools come in two flavours, and only one of them survives deployment today.
 
 **Workaround today:** put the MCP tool on a flow node and have the worker reach it there, rather than binding `mcp:` directly to the agentic worker. Use an MCP server scoped to the **tenant** — a server scoped to a specific team is not yet resolvable at run time, in either flavour.
 
-**How to detect it:** [`POST /api/v1/factory/assistants/{id}/publish`](/integration-api/assistants/#unreachabletools) reports every such binding in `unreachableTools`, with `reason: "missing_admin_credentials"`. A non-empty `unreachableTools` is your build-time signal — surface it in your pipeline instead of discovering it from a user complaint. `sorla:` tools have the same shape and report `reason: "missing_sorx_url"`.
+**How to detect it:** [`POST /api/v1/factory/assistants/{id}/publish`](/integration-api/assistants/#unreachabletools) reports every such binding in `unreachableTools`, with `reason: "missing_admin_credentials"`. Surface it in your pipeline instead of discovering it from a user complaint — but note the field is **absent** when there is nothing to report, not an empty array, so default it before you read it. `sorla:` tools have the same shape and report `reason: "missing_sorx_url"`.
 
 This is a current limitation of what a deployed bundle is handed, not a defect in your binding. The same binding works in the Designer's own playground, which is why it can look fine before deployment.
 </Aside>
@@ -179,7 +179,7 @@ An assistant built purely through the pages lane produces a pack that the deploy
 
 7. **Document the 60-second revocation window** in your own runbook, so an on-call engineer is not testing whether revocation worked.
 
-8. **Fail your build on a non-empty `unreachableTools`** unless you have deliberately accepted it.
+8. **Fail your build when a publish reports `unreachableTools`** unless you have deliberately accepted it — and default the field first (`published.unreachableTools ?? []`), because it is omitted on a clean publish rather than sent empty.
 
 9. **Keep the key on your server.** No CORS, and no reason to ship a tenant-wide credential to a browser.
 
