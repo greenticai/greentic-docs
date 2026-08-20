@@ -221,7 +221,7 @@ curl -sS "$GREENTIC_DESIGNER/api/v1/knowledge/bases" \
 {
   "bases": [
     {
-      "id": "kb_01J8Z2",
+      "id": "<kb-id>",
       "name": "Support handbook",
       "description": "Everything the tier-1 desk needs",
       "documentCount": 42,
@@ -252,7 +252,7 @@ Bases are listed for the key's tenant **and team** — this route shows what tha
 `POST /api/v1/knowledge/bases/{kb_id}/documents`
 
 ```bash
-curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/knowledge/bases/kb_01J8Z2/documents" \
+curl -sS -X POST "$GREENTIC_DESIGNER/api/v1/knowledge/bases/<kb-id>/documents" \
   -H "Authorization: Bearer $GREENTIC_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "externalIds": ["handbook-v3", "refund-policy-2026"] }'
@@ -280,7 +280,7 @@ Every `external_id` is resolved before any membership row is written. If one doe
 `DELETE /api/v1/knowledge/bases/{kb_id}/documents/{external_id}`
 
 ```bash
-curl -sS -X DELETE "$GREENTIC_DESIGNER/api/v1/knowledge/bases/kb_01J8Z2/documents/handbook-v3" \
+curl -sS -X DELETE "$GREENTIC_DESIGNER/api/v1/knowledge/bases/<kb-id>/documents/handbook-v3" \
   -H "Authorization: Bearer $GREENTIC_KEY" \
   -i
 ```

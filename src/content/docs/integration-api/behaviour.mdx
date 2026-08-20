@@ -146,7 +146,7 @@ MCP tools come in two flavours, and only one of them survives deployment today.
 - **MCP on a flow node — supported.** The tool's material travels inside the pack, so a deployed bundle resolves it. This is the flavour to use.
 - **MCP bound to an agentic worker — not yet supported in a deployed bundle.** That binding is resolved at run time from a live MCP catalog which the deployment is never given access to. The runtime finds no entry, **silently drops the tool**, and never offers it to the model. The worker answers plausibly and simply never does the thing, with no error to correlate against.
 
-**Workaround today:** put the MCP tool on a flow node and have the worker reach it there, rather than binding `mcp:` directly to the agentic worker.
+**Workaround today:** put the MCP tool on a flow node and have the worker reach it there, rather than binding `mcp:` directly to the agentic worker. Use an MCP server scoped to the **tenant** — a server scoped to a specific team is not yet resolvable at run time, in either flavour.
 
 **How to detect it:** [`POST /api/v1/factory/assistants/{id}/publish`](/integration-api/assistants/#unreachabletools) reports every such binding in `unreachableTools`, with `reason: "missing_admin_credentials"`. A non-empty `unreachableTools` is your build-time signal — surface it in your pipeline instead of discovering it from a user complaint. `sorla:` tools have the same shape and report `reason: "missing_sorx_url"`.
 
