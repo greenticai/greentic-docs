@@ -1,0 +1,261 @@
+---
+title: LLM Provider API Keys
+description: Where to get an API key for every LLM provider type the admin console offers, what shape each key has, and which providers need a base URL instead of a key.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# LLM Provider API Keys
+
+Every AI provider form in the admin console asks for the same three things —
+a **provider type**, an **API key**, and optionally a **base URL**. What
+changes per provider is where the key comes from and what it looks like. This
+page is that list.
+
+The "How to get a … key" link beside the API key field in the console lands on
+this page, at the section for whichever provider is selected.
+
+<Aside type="note">
+Keys are encrypted at rest and never echoed back. The console shows only
+whether a key is present; to change one you paste a new value, and leaving the
+field blank on an edit keeps the existing key.
+</Aside>
+
+## Which fields matter
+
+| Field | When it matters |
+| --- | --- |
+| **API key** | Every provider except the three below that authenticate another way. |
+| **Base URL** | Leave blank unless this page says otherwise. Blank means the provider's own default endpoint. Azure is the main exception: its endpoint is per-resource, so the field is effectively required. |
+| **Model** | The catalog offers each provider's common models and a **Custom…** escape hatch for anything not listed. |
+
+Three providers take **no API key at all** — [Ollama](#ollama),
+[Llamafile](#llamafile) and [AWS Bedrock](#aws-bedrock). Leave the key blank
+for those; an empty box there is correct, not an unfinished form.
+
+## Popular
+
+### OpenAI
+
+Sign in to the OpenAI platform dashboard at
+`https://platform.openai.com/api-keys` and create a secret key. Keys belong to
+a project, and the value is shown once — copy it before closing the dialog.
+
+Shape: begins `sk-`.
+
+Base URL: leave blank. Set it only if you front OpenAI with a proxy that
+speaks the same API.
+
+### Anthropic
+
+In the Anthropic Console (`https://console.anthropic.com`), go to **Settings →
+API keys** and create a key. Shown once at creation.
+
+Shape: begins `sk-ant-`.
+
+### DeepSeek
+
+In the DeepSeek open platform (`https://platform.deepseek.com`), open **API
+keys** and create one. Shown once.
+
+Shape: begins `sk-`.
+
+### Google Gemini
+
+Create a **Gemini API key** in Google AI Studio
+(`https://aistudio.google.com/apikey`).
+
+<Aside type="caution">
+This is **not** a Google Cloud service-account key. A service-account JSON file
+— the kind described on [Google Cloud
+Credentials](/admin/cloud-credentials-gcp/) — will not authenticate against the
+Gemini API, and the two are easy to confuse because both come from Google.
+</Aside>
+
+### Cohere
+
+Create a key in the Cohere dashboard (`https://dashboard.cohere.com`) under
+**API keys**. A trial key works but is rate-limited well below production use;
+create a production key before relying on it.
+
+### Groq
+
+In the GroqCloud console (`https://console.groq.com`), open **API Keys** and
+create one. Shown once.
+
+Shape: begins `gsk_`.
+
+### Perplexity
+
+Perplexity's API is billed separately from a Pro subscription. Sign in at
+`https://www.perplexity.ai`, open your account settings, and generate an API
+key from the **API** section.
+
+Shape: begins `pplx-`.
+
+### xAI (Grok)
+
+Create a key in the xAI console (`https://console.x.ai`). Keys belong to a
+team, and each key's model access is set on the key itself — a key that works
+for one model may be refused for another.
+
+Shape: begins `xai-`.
+
+### Mistral
+
+Create a key on La Plateforme (`https://console.mistral.ai`) under **API
+keys**.
+
+## Local and self-hosted
+
+These talk to a server you run. There is no key to obtain — what matters is
+that the endpoint is reachable **from wherever the Designer runs**, which is
+not your laptop when the Designer is hosted.
+
+### Ollama
+
+No API key. Leave the field blank.
+
+Base URL: blank uses the local default, `http://localhost:11434`. Point it at
+your own host to use a daemon elsewhere.
+
+Install Ollama from `https://ollama.com` and pull a model
+(`ollama pull llama3.2`) before selecting it here.
+
+### Llamafile
+
+No API key. Leave the field blank.
+
+Base URL: wherever the llamafile's built-in server listens. A llamafile serves
+whichever model its binary embeds, so the model field is a label rather than a
+selector.
+
+## Cloud platforms
+
+### Azure OpenAI
+
+Azure is the provider people most often misconfigure, because three separate
+values all have to line up.
+
+1. In the Azure portal, open your **Azure OpenAI** resource.
+2. Go to **Keys and Endpoint**. Copy **KEY 1** (or KEY 2 — either works) into
+   the API key field, and the **Endpoint** into the base URL field.
+3. Set the **model** field to your **deployment name** — the name you chose
+   when you deployed the model, which is not necessarily the model id.
+
+<Aside type="caution">
+An OpenAI key is not an Azure OpenAI key and the two are not interchangeable.
+If a request fails with a 401 against an Azure endpoint, check which of the two
+you pasted.
+</Aside>
+
+Base URL: **required**. There is no shared default endpoint — every Azure
+OpenAI resource has its own.
+
+### Azure AI Foundry
+
+Open the deployment in the Azure AI Foundry portal and copy its key and
+endpoint from the deployment's own page.
+
+Base URL: **required**, for the same reason as Azure OpenAI. A serverless
+Foundry deployment is addressed at its own endpoint rather than by model name.
+
+### AWS Bedrock
+
+No API key. Bedrock authenticates through the **AWS credential chain** on the
+machine the Designer runs on — an instance role, environment variables, or a
+shared profile — so there is nothing to paste here.
+
+Two things to check when a Bedrock call fails:
+
+- The model must be **enabled for your account** in the Bedrock console
+  (**Model access**). Access is per-model and per-region, and a newly created
+  account has none.
+- The identity the Designer runs as needs `bedrock:InvokeModel` for that model.
+
+See [AWS Credentials](/admin/cloud-credentials-aws/) for how the AWS credential
+chain is supplied.
+
+### OpenRouter
+
+Create a key at `https://openrouter.ai/keys`.
+
+Shape: begins `sk-or-`.
+
+OpenRouter fronts many upstream providers, so the **model id carries a vendor
+prefix** — `openai/gpt-4o`, not `gpt-4o`. A bare model id is a common cause of
+a "model not found" from OpenRouter.
+
+### Together AI
+
+Create a key in the Together dashboard under **API keys**
+(`https://api.together.xyz/settings/api-keys`).
+
+### Hugging Face
+
+Create an **access token** under **Settings → Access Tokens**
+(`https://huggingface.co/settings/tokens`). A *read* token is enough for
+inference. The model must be one your account may reach — a gated model needs
+its licence accepted on the model page first.
+
+Shape: begins `hf_`.
+
+Base URL: leave blank for the hosted inference endpoint. Set it to your own
+endpoint URL when running a dedicated Inference Endpoint.
+
+## Less common providers
+
+<Aside type="note">
+Each of these is an API key issued by that vendor's own developer console. The
+exact menu path inside each console is **not tracked here** — these consoles
+change more often than this page could follow, and a stale click-path is worse
+than none. Sign in to the vendor, find the API-keys section, and create a key.
+If your account is on a regional endpoint, set the base URL to match.
+</Aside>
+
+### Moonshot (Kimi)
+
+A Moonshot AI API key from the Moonshot developer console.
+
+Base URL: Moonshot's China and international platforms issue **different keys
+against different endpoints**. If your key was issued by the platform that is
+not the default, set the base URL to that platform's endpoint or every request
+will 401.
+
+### MiniMax
+
+A MiniMax API key from the MiniMax developer platform. Set the base URL if your
+account is on a regional endpoint other than the default.
+
+### Hyperbolic
+
+A Hyperbolic API key from the Hyperbolic dashboard.
+
+### Galadriel
+
+A Galadriel API key from the Galadriel developer portal.
+
+### Mira
+
+A Mira Network API key from the Mira console.
+
+### Z.ai
+
+A Z.ai API key from the Z.ai open platform.
+
+Base URL: Z.ai and the mainland-China Zhipu platform are separate platforms
+issuing separate keys against separate endpoints. Set the base URL when your
+key came from the platform that is not the default.
+
+### Xiaomi MiMo
+
+A Xiaomi MiMo API key from Xiaomi's developer platform.
+
+## Where the key ends up
+
+A key entered here is sealed and scoped to the layer you entered it at —
+platform, partnership, or tenant. Which layer a running Designer resolves, and
+whether a team or a flow may override it, is covered in:
+
+- [Per-Tenant LLM Providers](/admin/tenant-llm-providers/)
+- [Credential Access Levels](/admin/credential-access-levels/)
