@@ -47,15 +47,43 @@ environment has:
 - **Greentic Cloud** (`greentic_cloud`) deploys with the platform's own managed
   role. No per-tenant credentials are needed — it works as soon as the
   environment is created.
-- **AWS / Azure / GCP** are *bring-your-own-cloud* (BYOC). Before a tenant can
-  deploy to one, an operator must attach that environment's cloud credentials.
-  Until then, a deploy attempt is rejected with a clear "configure credentials
-  first" message.
+- **AWS / Azure / GCP** are *bring-your-own-cloud* (BYOC): the deploy runs
+  against your own cloud account, using credentials you supply.
+
+<Aside type="caution">
+**Only `greentic_cloud` has a working deploy pipeline in the admin console
+today.** The Terraform lineage behind `aws`, `azure` and `gcp` was retired, and
+a deploy to one of those environments is refused up front with "this target's
+deploy pipeline has been retired" rather than queued and failed later. The
+environment row, its region and its config are still stored, and the toggles
+below still control which targets may be created — but do not expect a deploy
+to run. Check the current behaviour before planning a BYOC rollout.
+</Aside>
+
+Where each cloud's credentials come from, and what they look like:
+
+- [Google Cloud Credentials](/admin/cloud-credentials-gcp/) — the service-account
+  key a Cloud Run deploy needs, with the exact IAM roles and a permissions
+  check that runs before you deploy.
+- [AWS Credentials](/admin/cloud-credentials-aws/)
+- [Azure Credentials](/admin/cloud-credentials-azure/)
+
+The "Add environment" form links to the matching page from beside its
+credential fields, so an operator filling it in does not have to find this page
+first.
 
 <Aside type="note">
-BYOC credentials are stored as a secret reference on the environment and are
-never returned to the Designer or shown to tenant users. The Designer only
-ever learns whether credentials are present, not their value.
+**Google Cloud credentials are not collected here.** The Designer holds the
+service-account key in its own encrypted store, so the environment form shows a
+notice explaining that instead of offering an input — a key typed into this
+console would be stored, read by nothing, and would make the environment *look*
+ready to deploy. Supply it in the Designer's **Deploy** panel, under **Google
+Cloud Run**, via **Check permissions**.
+
+AWS and Azure credentials that *are* collected here are stored as a secret
+reference on the environment and are never returned to the Designer or shown to
+tenant users. The Designer only ever learns whether credentials are present,
+not their value.
 </Aside>
 
 ### Per-team environments
