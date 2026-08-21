@@ -143,12 +143,16 @@ The path is: build and publish the assistant through this API, then deploy the r
 <Aside type="caution" title="An mcp: tool bound to an agentic worker is dropped at run time">
 MCP tools come in two flavours, and only one of them survives deployment today.
 
-- **MCP on a flow node — supported.** The tool's material travels inside the pack, so a deployed bundle resolves it. This is the flavour to use.
-- **MCP bound to an agentic worker — not yet supported in a deployed bundle.** That binding is resolved at run time from a live MCP catalog which the deployment is never given access to. The runtime finds no entry, **silently drops the tool**, and never offers it to the model. The worker answers plausibly and simply never does the thing, with no error to correlate against.
+- **MCP on a flow node — supported.** The route the node needs travels inside the pack, so a deployed bundle can dispatch it. This is the flavour to use.
+- **MCP bound to an agentic worker — not supported in a deployed bundle.** The route travels in the pack here too. What does not travel is the **credential**: a deployment reads an MCP server's credential from a secrets broker at run time, and a bundle you deploy outward — Kubernetes, Cloud Run, a Store download, an exported artifact — is handed no broker to read it from. The runtime resolves nothing, **silently drops the tool**, and never offers it to the model. The worker answers plausibly and simply never does the thing, with no error to correlate against.
 
-**Workaround today:** put the MCP tool on a flow node and have the worker reach it there, rather than binding `mcp:` directly to the agentic worker. Use an MCP server scoped to the **tenant** — a server scoped to a specific team is not yet resolvable at run time, in either flavour.
+**Workaround today:** put the MCP tool on a flow node and have the worker reach it there, rather than binding `mcp:` directly to the agentic worker.
 
-**How to detect it:** [`POST /api/v1/factory/assistants/{id}/publish`](/integration-api/assistants/#unreachabletools) reports every such binding in `unreachableTools`, with `reason: "missing_admin_credentials"`. Surface it in your pipeline instead of discovering it from a user complaint — but note the field is **absent** when there is nothing to report, not an empty array, so default it before you read it. `sorla:` tools have the same shape and report `reason: "missing_sorx_url"`.
+Team scoping is not the deciding factor and does not need to be worked around. A deployment looks the credential up at the team the server was bound under and falls back to the tenant default, so a team-scoped server is neither more nor less reachable than a tenant-scoped one.
+
+**How to detect it:** [`POST /api/v1/factory/assistants/{id}/publish`](/integration-api/assistants/#unreachabletools) reports every such binding in `unreachableTools`, with `reason: "missing_secrets_broker"`. Gate your pipeline on the **entry being present** rather than on that exact token — the token names the credential path, and the credential path is the half of this that has already changed once. Note too that the field is **absent** when there is nothing to report, not an empty array, so default it before you read it. `sorla:` tools have the same shape and report `reason: "missing_sorx_url"`.
+
+Publish reports **every** `mcp:` binding on a worker this way, including one that would in fact have run — a server that runs as a component carried inside the pack needs no credential at all. That over-reporting is deliberate: the check sees the server's id and never how the server is reached, and a warning you can dismiss costs less than a deployment that quietly answers without the tool.
 
 This is a current limitation of what a deployed bundle is handed, not a defect in your binding. The same binding works in the Designer's own playground, which is why it can look fine before deployment.
 </Aside>
@@ -156,7 +160,14 @@ This is a current limitation of what a deployed bundle is handed, not a defect i
 ### Build agentic workers through a flow session
 
 <Aside type="caution" title="Use the flow lane for anything you intend to deploy">
-An assistant built purely through the pages lane produces a pack that the deployed runtime cannot load. Build agentic workers through a **flow session** — create the session with [`POST /api/v1/sessions`](/integration-api/sessions/#create-a-session) using `mode: "flow"`, and place the worker in the flow.
+An assistant created and published through [`/api/v1/factory/assistants`](/integration-api/assistants/) produces a pack with **no entry point**. Its instructions, model, tools and knowledge are all in the pack; what is not in it is anything telling a deployment where to send an incoming turn.
+
+That lands in one of two places, and neither is a place you want to find it:
+
+- Deploying the pack into a Greentic environment is **refused**, naming the missing entry point.
+- Wrapping that pack into a bundle yourself and running it **reports success at every layer you can observe** — the process starts, the pack counts as live, the health check answers `ok` — and every turn goes unanswered.
+
+Build agentic workers you intend to deploy through a **flow session** — create the session with [`POST /api/v1/sessions`](/integration-api/sessions/#create-a-session) using `mode: "flow"`, and place the worker in the flow. A flow carries the entry point the pages lane does not.
 
 `POST /api/v1/factory/assistants` and its publish route remain the right tools for authoring and iterating on an assistant's instructions and model. Just do not treat a pages-lane publish as a deployable artifact on its own.
 </Aside>
