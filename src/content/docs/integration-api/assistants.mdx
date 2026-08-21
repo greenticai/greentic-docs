@@ -223,12 +223,12 @@ When the published worker binds a tool that a deployed runtime cannot resolve, t
   "local_saved": true,
   "store_status": "published",
   "unreachableTools": [
-    { "extensionId": "mcp:jira", "toolName": "create_issue", "reason": "missing_admin_credentials" }
+    { "extensionId": "mcp:jira", "toolName": "create_issue", "reason": "missing_secrets_broker" }
   ]
 }
 ```
 
-`reason` is a stable token: `missing_admin_credentials` for `mcp:` tools, `missing_sorx_url` for `sorla:` tools. The worker will still run — those tools simply will not be offered to the model. See [Agentic-worker MCP tools](/integration-api/behaviour/#mcp-tools-on-agentic-workers).
+`reason` is a machine token — `missing_secrets_broker` for `mcp:` tools, `missing_sorx_url` for `sorla:` tools. Branch on the entry being present rather than on the token itself. The worker will still run — those tools simply will not be offered to the model. See [Agentic-worker MCP tools](/integration-api/behaviour/#mcp-tools-on-agentic-workers).
 
 <Aside type="caution" title="The field is absent on the healthy path">
 When every bound tool is resolvable, `unreachableTools` is **omitted from the response entirely**. It is not sent as an empty array.
