@@ -1,0 +1,170 @@
+---
+title: Getting Your Extension Used
+description: Three destinations for a built extension — the local Designer, the public store, and a tenant in Greentic Admin — and which one you actually want.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+You have built and packed an extension. Where it goes next depends on who should be able
+to use it:
+
+| Destination | Who sees it | Command |
+|---|---|---|
+| **Local Designer** | just you, on this machine | `gtdx dev --once` |
+| **The public store** | anyone | `gtdx login` → `gtdx publish --registry greentic-store` |
+| **A tenant in Greentic Admin** | one tenant's users | `gtdx component register` |
+
+They are not steps in a sequence — pick the one that matches your intent.
+
+## Local Designer
+
+The fastest loop, and what `gtdx dev` already does:
+
+```bash
+gtdx dev --once                                   # build + pack + install
+gtdx install ./dist/my-ext-0.1.0.gtxpack -y       # or install an existing pack
+```
+
+An unsigned pack installs fine locally — signing matters for distribution, not for your
+own machine.
+
+<Aside type="caution" title="The Designer reads only ~/.greentic">
+It ignores `GREENTIC_HOME` and offers no flag to point it elsewhere. If you have been
+working in an isolated home, the Designer will not see anything you installed there —
+install into the default home when you want it to appear.
+</Aside>
+
+If it still does not show up, the cause is almost always version skew rather than a bad
+pack. See [Designer Compatibility](/extensions/designer-compatibility/) and the
+troubleshooting section of the [Extension Quickstart](/extensions/extension-quickstart/).
+
+## The public store
+
+Check the version slot first — **reads are anonymous**, so this needs no account and tells
+you immediately whether the version is free:
+
+```bash
+gtdx publish --verify-only --registry greentic-store
+# verify-only: greentic.my-ext@0.1.0 slot free in https://store.greentic.cloud
+```
+
+Then authenticate and publish:
+
+```bash
+gtdx login                                        # browser device flow
+gtdx publish --sign --key my-key.pem --registry greentic-store
+```
+
+`gtdx login` also takes `--no-browser` (prints the URL and code), `--paste` (paste a token
+by hand), and `--token` for CI. [Publishing Extensions](/extensions/publishing-extensions/)
+covers signing keys, trust policies, and how the store verifies a pack.
+
+## A tenant in Greentic Admin
+
+`gtdx component register` registers a **component that is already published** as a
+component-tool for one tenant. It does not upload your extension — if you want the
+artifact distributed, publish it to the store first, then register its URL here.
+
+<Steps>
+
+1. **Postgres.** Current Admin builds read Postgres for at least one module, so SQLite
+   alone is not enough despite what `--db` defaults to:
+
+   ```bash
+   docker run -d --name gt-admin-pg \
+     -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin -e POSTGRES_DB=greentic_admin \
+     -p 55432:5432 postgres:16-alpine
+
+   export GREENTIC_ADMIN_DB_PG="postgres://admin:admin@127.0.0.1:55432/greentic_admin"
+   ```
+
+   Without it, start-up fails with `GREENTIC_ADMIN_DB_PG is not set`.
+
+2. **Migrate and create an owner.** `reset-admin` also needs the Postgres URL exported:
+
+   ```bash
+   greentic-admin migrate --db "sqlite://./admin.db?mode=rwc"
+   greentic-admin reset-admin --db "sqlite://./admin.db?mode=rwc" \
+     --email owner@local.test --password '<password>'
+   ```
+
+3. **Start it.**
+
+   ```bash
+   greentic-admin start --port 8090 --db "sqlite://./admin.db?mode=rwc"
+   ```
+
+4. **Log in and keep the CSRF token.** State-changing calls use a double-submit token
+   returned in the login *body* — not as a cookie:
+
+   ```bash
+   curl -s -c jar.txt -o login.json -X POST localhost:8090/api/admin/login \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"owner@local.test","password":"<password>"}'
+
+   CSRF=$(python3 -c "import json;print(json.load(open('login.json'))['csrf_token'])")
+   ```
+
+5. **Mint a service key.** Owner-only, and the secret is returned exactly once:
+
+   ```bash
+   curl -s -b jar.txt -X POST localhost:8090/api/admin/service-keys \
+     -H 'Content-Type: application/json' -H "x-csrf-token: $CSRF" \
+     -d '{"label":"gtdx-local"}'
+   # {"id":…,"prefix":"gts_…","label":"gtdx-local","key":"gts_…","created_at":…}
+   ```
+
+6. **Create a tenant**, if you do not have one. A fresh Admin has none, and registering
+   against a missing tenant fails with a bare `404 not found`:
+
+   ```bash
+   curl -s -b jar.txt -X POST localhost:8090/api/admin/tenants \
+     -H 'Content-Type: application/json' -H "x-csrf-token: $CSRF" \
+     -d '{"name":"Acme","slug":"acme"}'
+   ```
+
+7. **Register the component.**
+
+   ```bash
+   gtdx component register \
+     --url "oci://ghcr.io/org/component-demo@sha256:<digest>" \
+     --name demo-tool \
+     --tenant acme \
+     --user owner@local.test \
+     --admin-url http://localhost:8090 \
+     --admin-token gts_…
+   # ✓ registered component-tool 'demo-tool' (id=…) url=… roles=(default)
+   ```
+
+   `--admin-token` also reads `GREENTIC_ADMIN_TOKEN`, or the `greentic-admin` key in
+   `~/.greentic/credentials.toml`. `--user` must be a tenant admin — it is sent as
+   `X-Greentic-User` and the tenant slug as `X-Greentic-Tenant`.
+
+</Steps>
+
+Confirm it landed:
+
+```bash
+curl -s -H "Authorization: Bearer gts_…" \
+     -H 'X-Greentic-Tenant: acme' -H 'X-Greentic-User: owner@local.test' \
+     localhost:8090/api/v1/designer/tenant/me/component-tools
+```
+
+<Aside type="note" title="The binary may be older than its checkout">
+A locally built `greentic-admin` can be months behind the source beside it, and the
+symptom is misleading: every API path returns the SPA's HTML instead of JSON, so calls
+look like wrong URLs rather than an old binary. If `POST /api/admin/login` answers with
+`<!doctype html>`, rebuild before debugging anything else.
+
+The binary was also renamed — `greentic-designer-admin` became `greentic-admin`. Older
+help text and command descriptions still use the old name.
+</Aside>
+
+## Next
+
+- [Publishing Extensions](/extensions/publishing-extensions/) — signing, trust policies,
+  and store verification
+- [Designer Compatibility](/extensions/designer-compatibility/) — why a built extension
+  can be invisible
+- [Extension Quickstart](/extensions/extension-quickstart/) — the whole path from install
+  to publish
