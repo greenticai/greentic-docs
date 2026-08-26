@@ -25,8 +25,23 @@ gtdx dev --once                                   # build + pack + install
 gtdx install ./dist/my-ext-0.1.0.gtxpack -y       # or install an existing pack
 ```
 
-An unsigned pack installs fine locally — signing matters for distribution, not for your
-own machine.
+**Sign it, even locally.** `gtdx install` accepts an unsigned pack without complaint, so
+this looks like it worked — but the Designer refuses to load one, and says so only in its
+own log:
+
+```
+failed to load extension greentic.my-ext-0.1.0:
+signature verification failed: missing signature field
+```
+
+Installing and being loaded are separate things, and only the second one is what you
+wanted. Sign as part of packing:
+
+```bash
+gtdx keygen --out my-key.pem          # once
+gtdx publish --sign --key my-key.pem  # writes a signed pack to dist/
+gtdx install ./dist/my-ext-0.1.0.gtxpack -y
+```
 
 <Aside type="caution" title="The Designer reads only ~/.greentic">
 It ignores `GREENTIC_HOME` and offers no flag to point it elsewhere. If you have been
@@ -34,9 +49,36 @@ working in an isolated home, the Designer will not see anything you installed th
 install into the default home when you want it to appear.
 </Aside>
 
+<Aside type="note" title="Current Designer builds need Postgres">
+Like Greentic Admin, the Designer now reads Postgres and will not finish starting without
+it:
+
+```
+GREENTIC_DESIGNER_DB_PG must be set to a postgres:// URL for the designer database
+```
+
+```bash
+docker run -d --name gt-designer-pg \
+  -e POSTGRES_USER=d -e POSTGRES_PASSWORD=d -e POSTGRES_DB=designer \
+  -p 55433:5432 postgres:16-alpine
+
+export GREENTIC_DESIGNER_DB_PG="postgres://d:d@127.0.0.1:55433/designer"
+```
+
+Extensions are loaded before this point, so you may see the load lines scroll past and
+then the process exit — the extension list in the log is still trustworthy.
+</Aside>
+
 If it still does not show up, the cause is almost always version skew rather than a bad
 pack. See [Designer Compatibility](/extensions/designer-compatibility/) and the
 troubleshooting section of the [Extension Quickstart](/extensions/extension-quickstart/).
+
+Once it loads, it appears in `/api/extensions`:
+
+```bash
+curl -s localhost:<port>/api/extensions | grep my-ext
+# {"id":"greentic.my-ext","version":"0.1.0","kind":"design","enabled":true,"node_count":0}
+```
 
 ## The public store
 
@@ -151,13 +193,27 @@ curl -s -H "Authorization: Bearer gts_…" \
 ```
 
 <Aside type="note" title="The binary may be older than its checkout">
-A locally built `greentic-admin` can be months behind the source beside it, and the
-symptom is misleading: every API path returns the SPA's HTML instead of JSON, so calls
-look like wrong URLs rather than an old binary. If `POST /api/admin/login` answers with
-`<!doctype html>`, rebuild before debugging anything else.
+Both locally built Greentic binaries can be months behind the source beside them, and in
+each case the symptom points somewhere else entirely:
 
-The binary was also renamed — `greentic-designer-admin` became `greentic-admin`. Older
-help text and command descriptions still use the old name.
+- **`greentic-admin`** — every API path returns the SPA's HTML instead of JSON, so calls
+  look like wrong URLs. If `POST /api/admin/login` answers with `<!doctype html>`, rebuild
+  before debugging anything else.
+- **`greentic-designer`** — a build predating the `compat` field rejects every v2 manifest
+  with `unknown field 'compat'`, which reads as a contract mismatch between `gtdx` and the
+  Designer. It is not. Check what the binary actually contains:
+
+  ```bash
+  strings $(which greentic-designer) | grep -c min_designer_version
+  # 0 means it predates the v2 contract, whatever --version says
+  ```
+
+`--version` does not tell you which contract or routes a binary implements, which is also
+why `gtdx doctor`'s Designer-compatibility check can report an extension as loadable while
+the Designer refuses it.
+
+The admin binary was also renamed — `greentic-designer-admin` became `greentic-admin`.
+Older help text and command descriptions still use the old name.
 </Aside>
 
 ## Next
