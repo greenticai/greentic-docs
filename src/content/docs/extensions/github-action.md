@@ -81,7 +81,7 @@ After CI passes, the publish job builds, signs, and uploads the `.gtxpack` to th
       - uses: actions/checkout@v4
       - uses: greenticai/greentic-designer-extension-action@v2
         with:
-          gtdx-version: "=1.2.18-research"
+          gtdx-version: "=1.2.8"
           manifest: Cargo.toml
           store-url: https://store.greentic.cloud
           store-token: ${{ secrets.GREENTIC_STORE_TOKEN }}
@@ -89,5 +89,20 @@ After CI passes, the publish job builds, signs, and uploads the `.gtxpack` to th
 ```
 
 The `greentic-designer-extension-action` wraps the `gtdx publish` flow described in [Publishing Extension Packs](/extensions/publishing-extensions/): it installs the pinned `gtdx`, builds and signs the pack, and publishes the detected version to `store-url` using `store-token`.
+
+:::caution[`gtdx-ref` and `gtdx-version` are not interchangeable]
+They resolve from different places, and a value valid for one will fail for the other:
+
+- **`gtdx-ref`** is a **git ref** on `greentic-designer-sdk`, so a research tag such as
+  `v1.2.18-research` works — the tag exists in the repo.
+- **`gtdx-version`** is a **crates.io version**. Research tags are deliberately never
+  published to crates.io (`release.yml` skips any tag containing `research`), so pinning
+  one there cannot resolve and the step fails at install.
+
+Pin `gtdx-version` to a released stable version — `=1.2.8` at time of writing. A handful of
+old `-research` versions do sit on crates.io from before the skip rule landed; avoid them,
+since a pre-release of a *higher* patch outranks the current stable while carrying older
+code.
+:::
 
 The store token is held in the repository secret `GREENTIC_STORE_TOKEN`. For headless signing, supply the PKCS8 PEM signing key through the `GREENTIC_EXT_SIGNING_KEY_PEM` environment variable (the default read by `gtdx publish --key-env`).
