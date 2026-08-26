@@ -143,6 +143,7 @@ export default defineConfig({
 						{ label: 'Overview', slug: 'concepts/extensions' },
 						{ label: 'gtdx CLI', slug: 'extensions/gtdx-cli' },
 						{ label: 'Extension Quickstart', slug: 'extensions/extension-quickstart' },
+						{ label: 'What gtdx new Generates', slug: 'extensions/scaffold-layout' },
 						{ label: 'Writing Extension Packs', slug: 'extensions/writing-extensions' },
 						{ label: 'Extension Tools & Node Types', slug: 'extensions/extension-tools' },
 						{ label: 'Designer Compatibility', slug: 'extensions/designer-compatibility' },
