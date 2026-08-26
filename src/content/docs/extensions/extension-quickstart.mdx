@@ -10,10 +10,12 @@ lint it, sign it, and publish it. It takes a few minutes on a machine that alrea
 Rust. For the concepts behind each step — what `describe.json` declares, what a component
 contributes — read [Writing Extensions](/extensions/writing-extensions/) after this.
 
-<Aside type="caution" title="Use gtdx 1.2.7 or newer">
+<Aside type="caution" title="Use gtdx 1.2.8 or newer">
 Earlier releases have defects that bite immediately, and pinning an old version re-enters
 them:
 
+- Through **1.2.7**, the scaffold shipped no tests, so `ci/local_check.sh` ran `cargo test`
+  against nothing and no one was told host tests were possible.
 - Through **1.2.6**, `design`, `bundle`, `deploy` and `provider` scaffolded every export as
   an empty stub, so a fresh extension built and installed cleanly and then contributed
   nothing.
@@ -29,7 +31,7 @@ them:
 - **Rust 1.95 or later**, with the `wasm32-wasip2` target:
   `rustup target add wasm32-wasip2`
 - **`cargo-component`**: `cargo install --locked cargo-component`
-- **`gtdx` 1.2.7 or newer** (installed below)
+- **`gtdx` 1.2.8 or newer** (installed below)
 
 `gtdx new` checks all three before it writes a single file, so a missing tool is reported
 up front rather than at your first build.
@@ -49,7 +51,7 @@ up front rather than at your first build.
    named after the asset, so extract from that path:
 
    ```bash
-   TAG=v1.2.7
+   TAG=v1.2.8
    TARGET=aarch64-apple-darwin        # swap for your platform
    curl -L -o gtdx.tgz \
      "https://github.com/greenticai/greentic-designer-sdk/releases/download/$TAG/gtdx-$TAG-$TARGET.tgz"
@@ -197,6 +199,68 @@ full summary and asks **Proceed?** before anything is uploaded.
 
 Left to itself, `publish` keeps its scripted defaults — the wizard is strictly opt-in, so
 existing CI invocations are unaffected.
+
+## Testing while you develop
+
+Three layers, fastest first. Most of your testing belongs in the first one.
+
+| Layer | Command | What it proves |
+|---|---|---|
+| **Unit, on the host** | `cargo test` | Your logic is right. Milliseconds — no WASM, no Designer. |
+| **Full gate** | `./ci/local_check.sh` | fmt + clippy + tests + the wasm actually builds. |
+| **Integration** | `gtdx dev --once` | It packs and installs. *Not* that it behaves — that is the layer above. |
+
+The guest exports are plain Rust functions, so a host test calls them directly. No
+harness, no runtime:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn echo_returns_its_arguments() {
+        let out = <Component as tools::Guest>::invoke_tool(
+            "echo".to_string(),
+            r#"{"message":"hi"}"#.to_string(),
+        )
+        .expect("echo is implemented");
+        assert!(out.contains("echoed"));
+    }
+}
+```
+
+Since 1.2.8 the scaffold ships tests like this for `design`, `bundle`, `deploy` and
+`provider` — covering the error paths too, not just the happy one. Extend them rather than
+deleting them: `ci/local_check.sh` runs `cargo test`, so an empty test module makes that
+step green while verifying nothing.
+
+<Aside type="caution" title="Build once before your first cargo test">
+`cargo test` needs `src/bindings.rs`, which is **generated rather than committed**. In a
+fresh clone, run `gtdx dev --once` (or `cargo component build`) first, or the test build
+fails with `cannot find export in bindings` — which reads like a broken project rather
+than a missing step.
+</Aside>
+
+### Testing code that calls the host
+
+For logic that reaches http, secrets, state, logging or translation, the SDK publishes
+in-memory mocks:
+
+```toml
+[dev-dependencies]
+greentic-extension-sdk-testing = "1.2.8"
+```
+
+```rust
+use greentic_extension_sdk_testing::mock_host::{MockHttpClient, MockLogger};
+```
+
+They are ordinary objects — `MockHttpClient`, `MockSecretsBackend`, `MockLogger`,
+`MockTranslator`, `MockBroker` — not automatic implementations of the generated import
+traits. They help when your code takes the host dependency as a parameter rather than
+calling the binding directly. Structuring it that way is what keeps the logic testable on
+the host at all.
 
 ## Check what you built
 
