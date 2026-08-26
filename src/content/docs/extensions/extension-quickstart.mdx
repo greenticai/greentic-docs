@@ -1,0 +1,220 @@
+---
+title: Extension Quickstart
+description: Build, sign, and publish your first Greentic extension end to end with the gtdx CLI — every command, and the failure modes worth knowing before you hit them.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+This page walks the whole authoring path with real commands: scaffold a project, build it,
+lint it, sign it, and publish it. It takes a few minutes on a machine that already has
+Rust. For the concepts behind each step — what `describe.json` declares, what a component
+contributes — read [Writing Extensions](/extensions/writing-extensions/) after this.
+
+<Aside type="caution" title="Use gtdx 1.2.5 or newer">
+Earlier releases have defects that bite immediately. On `1.2.2` and older, `cargo binstall`
+points at the wrong path inside the release archive and silently falls back to a full
+source build instead of downloading. Through `1.2.2`, `gtdx publish` also left all-zero
+`sha256` placeholders in `describe.json`, so `gtdx lint --publish` failed on a freshly
+scaffolded project and kept failing after a successful publish. Pinning an old version
+re-enters both.
+</Aside>
+
+## Prerequisites
+
+- **Rust 1.95 or later**, with the `wasm32-wasip2` target:
+  `rustup target add wasm32-wasip2`
+- **`cargo-component`**: `cargo install --locked cargo-component`
+- **`gtdx` 1.2.5 or newer** (installed below)
+
+`gtdx new` checks all three before it writes a single file, so a missing tool is reported
+up front rather than at your first build.
+
+## Build and publish an extension
+
+<Steps>
+
+1. **Install the CLI.** This downloads a prebuilt binary — no compile:
+
+   ```bash
+   cargo binstall greentic-extension-sdk-cli
+   gtdx --version
+   ```
+
+   Prefer a manual download? Every release archive holds the binary one directory deep,
+   named after the asset, so extract from that path:
+
+   ```bash
+   TAG=v1.2.5
+   TARGET=aarch64-apple-darwin        # swap for your platform
+   curl -L -o gtdx.tgz \
+     "https://github.com/greenticai/greentic-designer-sdk/releases/download/$TAG/gtdx-$TAG-$TARGET.tgz"
+   tar -xzf gtdx.tgz
+   chmod +x "gtdx-$TAG-$TARGET/gtdx"
+   mv "gtdx-$TAG-$TARGET/gtdx" ~/.cargo/bin/
+   ```
+
+2. **Scaffold a project.** Pick the kind that matches the surface you are implementing:
+
+   ```bash
+   gtdx new my-ext --kind design --yes
+   cd my-ext
+   ```
+
+   Run `gtdx new` with no arguments on a terminal for the interactive wizard instead.
+   `--yes` resolves everything from flags and defaults, which is what you want in scripts
+   and CI where there is no terminal.
+
+   `--kind wasm-component` is the one kind that needs an extra flag: it wraps an
+   already-published component, so it needs that component's **digest-pinned** OCI
+   reference. Omit it and the scaffold writes a placeholder that `gtdx lint --publish`
+   refuses:
+
+   ```bash
+   gtdx new my-node --kind wasm-component \
+     --component-ref oci://ghcr.io/greenticai/component/component-my-node@sha256:461c6a68…
+   ```
+
+3. **Build, pack, and install locally.** This is the inner loop:
+
+   ```bash
+   gtdx dev --once
+   ```
+
+   It rebuilds the component, packs `dist/<name>-<version>.gtxpack`, and installs it into
+   your local dev registry. Drop `--once` to watch the source tree and repeat on every
+   save.
+
+   The pack carries a `manifest.json` integrity ledger — a sha256 of every entry — which
+   the runtime verifies at install.
+
+4. **Lint before you publish.** Two levels:
+
+   ```bash
+   gtdx lint --dir .              # cross-field invariants
+   gtdx lint --publish --dir .    # also enforces the publish-only rules
+   ```
+
+   `--publish` adds `E_SHA256_ZERO`, which rejects placeholder digests. A scaffold that
+   has been through `gtdx dev --once` passes: the packer fills in the real digest of the
+   wasm it just produced.
+
+5. **Create a signing key**, once, and keep it out of the repo:
+
+   ```bash
+   gtdx keygen --out my-key.pem   # PKCS8 PEM ed25519, mode 0600
+   ```
+
+6. **Publish.** Dry-run first — it needs no account and does everything except the
+   registry write:
+
+   ```bash
+   gtdx publish --dry-run --sign --key my-key.pem
+   gtdx publish --sign --key my-key.pem
+   ```
+
+   To publish to the public store rather than your local registry, authenticate first with
+   `gtdx login` and pass `--registry greentic-store`. The store is built in — you do not
+   need `gtdx registries add` for it.
+
+</Steps>
+
+<Aside type="note" title="publish takes no positional path">
+`gtdx publish` reads the project directory from `--manifest` (default `./Cargo.toml`).
+Passing a trailing path — `gtdx publish --manifest ./x/Cargo.toml ./x` — exits with
+`unexpected argument`.
+</Aside>
+
+## Check what you built
+
+```bash
+gtdx verify dist/my-ext-0.1.0.gtxpack
+```
+
+Without a trusted key this reports **integrity only**: the pack is self-consistent and
+signed, but the publisher is not authenticated. Pass `--trusted-key` to verify who signed
+it. The tool is deliberate about the distinction — an unauthenticated signature is not the
+same as a verified one.
+
+To inspect an installed extension:
+
+```bash
+gtdx list                     # everything installed, grouped by kind
+gtdx info greentic.my-ext     # metadata for one
+gtdx doctor                   # toolchain, registries, credentials, installed extensions
+```
+
+`gtdx doctor` exits non-zero when it finds real problems. It groups failures by cause and
+summarises the extensions that pass; add `--verbose` for the full per-extension listing.
+
+## Every kind
+
+All seven scaffold, build, lint, sign, publish, and install:
+
+| `--kind` | What it is |
+|---|---|
+| `design` | A designer extension — nodes, tools, and validation surfaces |
+| `bundle` | Bundle-level assets and behaviour |
+| `deploy` | A deployment target |
+| `provider` | Messaging and event providers |
+| `wasm-component` | Wraps an already-published component as a palette node |
+| `llm` | An LLM backend |
+| `mcp` | A `wasix:mcp/router` component — flow-capable, addressable as `dw.mcp.<id>` |
+
+<Aside type="tip">
+`--kind mcp` can be generated from an OpenAPI spec:
+`gtdx new --kind mcp --from-openapi ./api.yaml weatherapi`. It shells out to
+`greentic-mcp-gen` and auto-authors `describe.json`, including network permissions derived
+from the spec's servers.
+</Aside>
+
+## When the extension does not show up
+
+A freshly built extension that installs cleanly can still be invisible in Designer. In
+order of likelihood:
+
+**The Designer is older than the contract.** `gtdx` scaffolds against `greentic.ai/v2`,
+which a Designer below **1.2.0** screens out at boot — the extension never reaches
+`/api/extensions`, and nothing in the logs points at the version. See
+[Designer Compatibility](/extensions/designer-compatibility/).
+
+**The Designer binary is older than its version string.** This one is worth knowing
+because the version number will not tell you. A Designer built from a checkout embeds
+whichever `greentic-extension-sdk-contract` it was compiled against, and that is what
+actually decides which manifests it can parse — regardless of what `--version` reports. A
+binary that predates the `compat` field rejects every v2 manifest with:
+
+```
+json: unknown field `compat`, expected one of `$schema`, `apiVersion`, `kind`,
+`metadata`, `engine`, `capabilities`, `runtime`, `execution`, `contributions`, `signature`
+```
+
+`engine` in that list is the tell: it is the **v1** shape, and `gtdx lint` forbids `engine`
+precisely because `compat` replaced it. Check what the binary actually contains rather
+than what it claims:
+
+```bash
+strings $(which greentic-designer) | grep -o 'greentic-extension-sdk-contract-[0-9][^/]*' | sort -u
+```
+
+A `0.4.x` result means the binary is from before the v2 contract, whatever its
+`--version` says. Rebuild or reinstall the Designer.
+
+<Aside type="caution" title="doctor cannot catch this one">
+`gtdx doctor`'s Designer-compatibility check compares `min_designer_version` against
+`greentic-designer --version`. When the version string does not reflect the contract the
+binary implements, doctor reports the extension as loadable and the Designer still refuses
+it. Treat that check as a version sanity check, not proof that the manifest will parse.
+</Aside>
+
+**The Designer reads only `~/.greentic`.** It ignores `GREENTIC_HOME`, and there is no flag
+to point it elsewhere — so an extension installed into an isolated home will not be seen.
+Install into the default home when you want the Designer to pick it up.
+
+## Next
+
+- [Writing Extensions](/extensions/writing-extensions/) — what to put in `describe.json`
+  and the component
+- [describe.json Manifest](/reference/describe-json/) — the full field reference
+- [Publishing Extensions](/extensions/publishing-extensions/) — signing, trust policies,
+  and the store
+- [gtdx CLI](/extensions/gtdx-cli/) — every command and flag
