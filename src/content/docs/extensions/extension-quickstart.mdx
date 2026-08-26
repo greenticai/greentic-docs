@@ -60,9 +60,9 @@ up front rather than at your first build.
    cd my-ext
    ```
 
-   Run `gtdx new` with no arguments on a terminal for the interactive wizard instead.
    `--yes` resolves everything from flags and defaults, which is what you want in scripts
-   and CI where there is no terminal.
+   and CI. Prefer to be asked instead? Run `gtdx new` with no arguments — see
+   [Scaffold with the wizard](#scaffold-with-the-wizard) below.
 
    `--kind wasm-component` is the one kind that needs an extra flag: it wraps an
    already-published component, so it needs that component's **digest-pinned** OCI
@@ -123,6 +123,72 @@ up front rather than at your first build.
 Passing a trailing path — `gtdx publish --manifest ./x/Cargo.toml ./x` — exits with
 `unexpected argument`.
 </Aside>
+
+## Scaffold with the wizard
+
+Run `gtdx new` with no arguments on a terminal and it prompts for everything instead. The
+wizard is the same code path as the flags — it just asks first, and every answer has a
+default you can accept with Enter:
+
+```console
+$ gtdx new
+gtdx new — interactive wizard (press Enter to accept defaults)
+
+Project name (kebab-case): wizard-demo
+Extension kind:
+> design          Designer/agentic tools (default)
+  mcp             MCP router (wasix:mcp/router) — usable as flow node + agentic tool
+  provider        Messaging/event provider
+  wasm-component  Generic WASM flow component
+  llm             LLM provider extension
+  bundle          Bundle extension
+  deploy          Deploy target extension
+Extension id (reverse-DNS) [greentic.wizard-demo]:
+Version [0.1.0]:
+Author [bimapangestu28]:
+License (SPDX id) [Apache-2.0]:
+
+About to scaffold:
+  name     wizard-demo
+  kind     design
+  id       greentic.wizard-demo
+  version  0.1.0
+  author   bimapangestu28
+  license  Apache-2.0
+Create this extension? [Y/n]
+```
+
+Nothing is written until you answer that last prompt, so it is safe to walk through and
+back out. The id defaults to `greentic.<name>`, and the author comes from your
+`git config user.name`.
+
+Two details worth knowing:
+
+- **Flags become the defaults.** `gtdx new my-ext --wizard` pre-fills the name and still
+  asks the rest, which is handy when you know some answers but not all. `--wizard` also
+  forces the wizard even when you passed enough flags to skip it.
+- **Choosing `mcp` adds a prompt.** The wizard offers to seed the extension from an
+  OpenAPI spec, and asks for the spec path if you accept.
+
+The wizard needs a terminal. Without one — in CI, or when stdin is a pipe — `gtdx new`
+with no name fails rather than hanging, and tells you to pass a name or use `--yes`.
+
+### Publishing with prompts
+
+`gtdx publish` has the same option, and it is the friendlier way in while you are still
+learning the flags:
+
+```bash
+gtdx publish --wizard
+```
+
+It asks for the registry, then the mode — *publish for real*, *dry-run*, or *verify-only* —
+then a version override, whether to sign (and where the key comes from: file, key id, or
+env var), the trust policy, and whether to overwrite an existing version. It prints the
+full summary and asks **Proceed?** before anything is uploaded.
+
+Left to itself, `publish` keeps its scripted defaults — the wizard is strictly opt-in, so
+existing CI invocations are unaffected.
 
 ## Check what you built
 
