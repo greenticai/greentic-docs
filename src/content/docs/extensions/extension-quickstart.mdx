@@ -10,13 +10,18 @@ lint it, sign it, and publish it. It takes a few minutes on a machine that alrea
 Rust. For the concepts behind each step — what `describe.json` declares, what a component
 contributes — read [Writing Extensions](/extensions/writing-extensions/) after this.
 
-<Aside type="caution" title="Use gtdx 1.2.5 or newer">
-Earlier releases have defects that bite immediately. On `1.2.2` and older, `cargo binstall`
-points at the wrong path inside the release archive and silently falls back to a full
-source build instead of downloading. Through `1.2.2`, `gtdx publish` also left all-zero
-`sha256` placeholders in `describe.json`, so `gtdx lint --publish` failed on a freshly
-scaffolded project and kept failing after a successful publish. Pinning an old version
-re-enters both.
+<Aside type="caution" title="Use gtdx 1.2.7 or newer">
+Earlier releases have defects that bite immediately, and pinning an old version re-enters
+them:
+
+- Through **1.2.6**, `design`, `bundle`, `deploy` and `provider` scaffolded every export as
+  an empty stub, so a fresh extension built and installed cleanly and then contributed
+  nothing.
+- Through **1.2.5**, `gtdx dev` watch mode rebuilt itself in a loop — a build re-touched
+  the paths it was watching. `gtdx dev --once` was never affected.
+- Through **1.2.2**, `cargo binstall` pointed at the wrong path inside the release archive
+  and silently fell back to a full source build, and `gtdx publish` left all-zero `sha256`
+  placeholders so `gtdx lint --publish` failed on a freshly scaffolded project.
 </Aside>
 
 ## Prerequisites
@@ -24,7 +29,7 @@ re-enters both.
 - **Rust 1.95 or later**, with the `wasm32-wasip2` target:
   `rustup target add wasm32-wasip2`
 - **`cargo-component`**: `cargo install --locked cargo-component`
-- **`gtdx` 1.2.5 or newer** (installed below)
+- **`gtdx` 1.2.7 or newer** (installed below)
 
 `gtdx new` checks all three before it writes a single file, so a missing tool is reported
 up front rather than at your first build.
@@ -44,7 +49,7 @@ up front rather than at your first build.
    named after the asset, so extract from that path:
 
    ```bash
-   TAG=v1.2.5
+   TAG=v1.2.7
    TARGET=aarch64-apple-darwin        # swap for your platform
    curl -L -o gtdx.tgz \
      "https://github.com/greenticai/greentic-designer-sdk/releases/download/$TAG/gtdx-$TAG-$TARGET.tgz"
