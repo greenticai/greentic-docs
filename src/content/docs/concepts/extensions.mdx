@@ -10,7 +10,7 @@ import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
 Greentic has **two complementary extension surfaces**:
 
 - **Pack-embedded extension metadata** (`.gtpack`) — explicit `pack.yaml` keys (capability offers, deployer contracts, static routes) that the runtime reads when it loads a bundle. This is the focus of most of this page.
-- **Standalone design-time extension packs** (`.gtxpack`) — signed, independently published packs in four kinds (**design**, **bundle**, **deploy**, **provider**) installed into `GREENTIC_EXTENSIONS_DIR` and consumed by the Greentic Designer and the runtime. **Design extensions are how [agentic workers](/concepts/agentic-workers/) get their tools and [guardrails](/extensions/guardrail-extensions/).** See [Design Extensions](#design-extensions-gtxpack) below.
+- **Standalone design-time extension packs** (`.gtxpack`) — signed, independently published packs in five kinds (**design**, **bundle**, **deploy**, **provider**, **addon**) installed into `GREENTIC_EXTENSIONS_DIR` and consumed by the Greentic Designer and the runtime. **Design extensions are how [agentic workers](/concepts/agentic-workers/) get their tools and [guardrails](/extensions/guardrail-extensions/).** See [Design Extensions](#design-extensions-gtxpack) below.
 
 A pack-embedded **extension** adds platform behavior through explicit metadata in `pack.yaml`. The `.gtpack` authoring path is:
 
@@ -152,7 +152,7 @@ Static route paths are deliberately constrained. Public paths must live under `/
 
 ## Design Extensions (.gtxpack)
 
-Alongside the pack-embedded `.gtpack` metadata above, Greentic ships a **design-time extension** system: standalone, signed `.gtxpack` packs that are published independently and installed into `GREENTIC_EXTENSIONS_DIR`. There are four kinds:
+Alongside the pack-embedded `.gtpack` metadata above, Greentic ships a **design-time extension** system: standalone, signed `.gtxpack` packs that are published independently and installed into `GREENTIC_EXTENSIONS_DIR`. There are five kinds:
 
 | Kind | What it adds |
 | --- | --- |
@@ -160,6 +160,7 @@ Alongside the pack-embedded `.gtpack` metadata above, Greentic ships a **design-
 | **bundle** | Bundle-level helpers applied when a bundle is assembled. |
 | **deploy** | Deployment targets and operations beyond the built-in deployers. |
 | **provider** | Channel/service providers surfaced to the Designer and runtime. |
+| **addon** | Infrastructure a flow depends on — Qdrant, Redis, Postgres. The addon declares the workload and reconciles day-2 state; the platform provisions it. Discovered from `GREENTIC_EXTENSIONS_DIR/addon/`. Nothing runs the reconciler side yet — see [Addon Extensions](/extensions/addon-extensions/). |
 
 **Design extensions are the mechanism behind agentic-worker tools and guardrails.** An agentic worker's `AgentConfig` references tools by `extension_id` + `tool_name`, and guardrails by capability id — both resolved against installed design extensions. Guardrails implement the `greentic:extension-design/guardrail@0.3.0` WIT interface.
 
