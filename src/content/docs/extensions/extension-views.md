@@ -11,19 +11,18 @@ serves them and renders your entry in a sandboxed iframe. Use it for anything a 
 inspector's schema-driven form cannot express — a usage dashboard, a per-tenant settings
 screen, any real layout.
 
-<Aside type="note" title="Current status: rendering works everywhere, tool calls not yet in Designer">
-Both hosts render a view and serve its assets today. Where they differ is the bridge's
-tool-calling side:
+<Aside type="note" title="Current status: rendering and invokeTool work everywhere; callApi and fetch are Admin-only">
+Both hosts render a view and serve its assets today. Tool calls:
 
-- **Admin** executes `invokeTool`, `callApi`, and `fetch` for real — every call is
-  RBAC-checked and audited.
-- **Designer** renders the view and serves its assets, but its `invokeTool` and
-  `callApi` bridge branches are still stubs, and `fetch` is not implemented yet. They are
-  being wired in a separate change.
+- **`invokeTool`** works end to end in both hosts — each routes it through its own
+  tool-dispatch path, RBAC-checked and audited.
+- **`callApi`** and **`fetch`** work in Admin, for real, audited. Neither exists yet on
+  the Designer surface — there is no platform-API proxy and no outbound-fetch proxy
+  there. That is being wired in a separate change.
 
-So a view that only uses `greentic.ready` plus `resize`/`navigate`/`toast` works fully in
-both hosts today. A view that needs `invokeTool`, `callApi`, or `fetch` works end to end
-in Admin now; in the Designer it renders but those calls do not do real work yet.
+So a view that only needs `greentic.ready`, `invokeTool`, and `resize`/`navigate`/`toast`
+works fully in both hosts today. A view that needs `callApi` or `fetch` works end to end
+in Admin now; in the Designer it renders but those two calls do not do real work yet.
 </Aside>
 
 <Aside type="caution" title="The compat trap — read this before you publish">
@@ -144,15 +143,35 @@ A view asks for results, never for keys:
 
 - **`invokeTool`** runs one of the extension's own tools inside the sandbox, with access
   to the host's secrets — the only one of the three that can touch a credential at all.
-  Live and audited in Admin; still a stub in the Designer (see the status note above).
+  Live and audited in both hosts.
 - **`callApi`** reaches platform REST, but the effective grant is your declared
   allowlist **intersected with the calling user's own RBAC**. Declaring
   `/api/admin/tenants/*` does not let an ordinary tenant user read another tenant's
   data — the bridge can only ever narrow what that person could already do by hand.
-  Live and audited in Admin; still a stub in the Designer.
+  Live and audited in Admin; not implemented yet on the Designer surface.
 - **`fetch`** is proxied server-side rather than issued by the frame, because an opaque
   origin's own `fetch()` sends `Origin: null`, which most third-party APIs reject at
-  CORS. Live in Admin; not implemented yet in the Designer.
+  CORS. Live in Admin; not implemented yet on the Designer surface.
+
+### `invokeTool` is deliberately narrow
+
+A view may only invoke a tool that **its own extension contributes** *and* that **the
+view itself declares** in `views[].tools` — both conditions, not either. Miss one and
+you get a 403, not a silent no-op:
+
+| Error | Means |
+| --- | --- |
+| `E_TOOL_NOT_CONTRIBUTED` | The named tool isn't one of this extension's own tools at all. |
+| `E_TOOL_NOT_DECLARED_BY_VIEW` | The tool is yours, but this view didn't list it under `views[].tools`. |
+
+`E_TOOL_NOT_DECLARED_BY_VIEW` reads like a permissions bug the first time you hit it. It
+isn't — it means "fix your `describe.json`": add the tool's name to this view's `tools`
+array.
+
+The host also stamps identity into the call itself and overwrites whatever the page
+supplied: an `invokeTool` call is dispatched with the caller's own tenant, not one the
+page names. Don't send a tenant or collection id of your own in the args and expect it to
+be honoured — ask for the result and let the host attach who's asking.
 
 Every bridge call, and the initial `init` handshake, times out after 10 seconds if the
 host never replies — `greentic.ready` rejects, and a call promise rejects with a
