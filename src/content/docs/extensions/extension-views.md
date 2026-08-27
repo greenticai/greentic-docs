@@ -6,17 +6,24 @@ description: Contribute a custom UI page to the Greentic Designer or Admin conso
 import { Aside } from '@astrojs/starlight/components';
 
 A view is a UI page your extension contributes to the Greentic Designer or the Greentic
-Admin console. You write the HTML, JS and CSS; they ship inside your `.gtxpack`; a host
-that understands `contributions.views[]` serves them and renders your entry in a
-sandboxed iframe. Use it for anything a node inspector's schema-driven form cannot
-express — a usage dashboard, a per-tenant settings screen, any real layout.
+Admin console. You write the HTML, JS and CSS; they ship inside your `.gtxpack`; the host
+serves them and renders your entry in a sandboxed iframe. Use it for anything a node
+inspector's schema-driven form cannot express — a usage dashboard, a per-tenant settings
+screen, any real layout.
 
-<Aside type="caution" title="No released host renders a view yet">
-Today's SDK lets you declare a view, scaffold one, lint it, schema-validate it, and pack
-it into a signed `.gtxpack`. **No shipped Designer or Admin release renders one.** If you
-publish a view-bearing extension now, it packs and signs cleanly — nothing displays it.
-Treat `--with-view` as a way to build and test a page locally, not to ship it for general
-use yet.
+<Aside type="note" title="Current status: rendering works everywhere, tool calls not yet in Designer">
+Both hosts render a view and serve its assets today. Where they differ is the bridge's
+tool-calling side:
+
+- **Admin** executes `invokeTool`, `callApi`, and `fetch` for real — every call is
+  RBAC-checked and audited.
+- **Designer** renders the view and serves its assets, but its `invokeTool` and
+  `callApi` bridge branches are still stubs, and `fetch` is not implemented yet. They are
+  being wired in a separate change.
+
+So a view that only uses `greentic.ready` plus `resize`/`navigate`/`toast` works fully in
+both hosts today. A view that needs `invokeTool`, `callApi`, or `fetch` works end to end
+in Admin now; in the Designer it renders but those calls do not do real work yet.
 </Aside>
 
 <Aside type="caution" title="The compat trap — read this before you publish">
@@ -137,20 +144,22 @@ A view asks for results, never for keys:
 
 - **`invokeTool`** runs one of the extension's own tools inside the sandbox, with access
   to the host's secrets — the only one of the three that can touch a credential at all.
+  Live and audited in Admin; still a stub in the Designer (see the status note above).
 - **`callApi`** reaches platform REST, but the effective grant is your declared
   allowlist **intersected with the calling user's own RBAC**. Declaring
   `/api/admin/tenants/*` does not let an ordinary tenant user read another tenant's
   data — the bridge can only ever narrow what that person could already do by hand.
+  Live and audited in Admin; still a stub in the Designer.
 - **`fetch`** is proxied server-side rather than issued by the frame, because an opaque
   origin's own `fetch()` sends `Origin: null`, which most third-party APIs reject at
-  CORS.
+  CORS. Live in Admin; not implemented yet in the Designer.
 
 Every bridge call, and the initial `init` handshake, times out after 10 seconds if the
 host never replies — `greentic.ready` rejects, and a call promise rejects with a
 "timed out" error rather than hanging forever. If your page reports "Could not connect
-to the host," this is almost always why: no host is currently listening for
-`postMessage` from this frame at all (see the callout at the top of this page), not a
-slow network.
+to the host," check that you are loading it through an actual Designer or Admin instance
+rather than opening the HTML file directly — a standalone file has nothing listening for
+`postMessage` at all.
 
 Never expect a secret to arrive in the browser. Ask the bridge for a result; the
 credential stays on the server.
