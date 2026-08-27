@@ -27,9 +27,9 @@ gtdx new my-extension --kind design --id com.example.my-extension
 ```
 
 Pick a `--kind` for the surface your extension implements: `design`, `bundle`, `deploy`,
-`provider`, `wasm-component`, `mcp`, or `llm` (these map to the
-`greentic:extension-<kind>` WIT contracts — design, bundle, deploy, and provider
-extensions). Run `gtdx new` with no arguments on a terminal to use the interactive
+`provider`, `wasm-component`, `mcp`, `llm`, or `addon` (these map to the
+`greentic:extension-<kind>` WIT contracts — design, bundle, deploy, provider, and
+addon extensions). Run `gtdx new` with no arguments on a terminal to use the interactive
 wizard, or pass `--yes` to resolve everything from flags and defaults.
 
 The scaffold produces a buildable project:

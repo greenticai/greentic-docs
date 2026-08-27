@@ -70,7 +70,7 @@ For normal extension authoring, prefer the bundled/default catalog exposed by `g
 
 The `gtc wizard` catalog above scaffolds **extension packs** (`.gtpack`) that provide platform capabilities — messaging, events, secrets, deployers, and the other catalog types.
 
-Separately, Greentic has **design-time extensions** (`.gtxpack`) that surface inside the Designer and are consumed by agentic workers: tools, guardrails, and composers. These are authored with the `gtdx` CLI (`gtdx new --kind design` for a design extension; other kinds include `mcp`, `llm`, `provider`, `deploy`, `bundle`, and `wasm-component`) and published to the store. Once registered, the Designer surfaces them in the flow-editor and the agentic-worker pickers.
+Separately, Greentic has **design-time extensions** (`.gtxpack`) that surface inside the Designer and are consumed by agentic workers: tools, guardrails, and composers. These are authored with the `gtdx` CLI (`gtdx new --kind design` for a design extension; other kinds include `mcp`, `llm`, `provider`, `deploy`, `bundle`, `wasm-component`, and `addon`) and published to the store. Once registered, the Designer surfaces them in the flow-editor and the agentic-worker pickers.
 
 - Design extensions (tools, guardrails, composers): [Writing Extensions](/extensions/writing-extensions/) and [Guardrail Extensions](/extensions/guardrail-extensions/)
 - The `gtdx` CLI: [gtdx CLI](/extensions/gtdx-cli/)

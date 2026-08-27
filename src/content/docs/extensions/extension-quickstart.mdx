@@ -286,7 +286,7 @@ summarises the extensions that pass; add `--verbose` for the full per-extension 
 
 ## Every kind
 
-All seven scaffold, build, lint, sign, publish, and install:
+All eight scaffold, build, lint, sign, publish, and install:
 
 | `--kind` | What it is |
 |---|---|
@@ -297,6 +297,7 @@ All seven scaffold, build, lint, sign, publish, and install:
 | `wasm-component` | Wraps an already-published component as a palette node |
 | `llm` | An LLM backend |
 | `mcp` | A `wasix:mcp/router` component — flow-capable, addressable as `dw.mcp.<id>` |
+| `addon` | An infrastructure workload (Qdrant, Redis, Postgres, …) a flow depends on — see [Addon Extensions](/extensions/addon-extensions/) |
 
 <Aside type="tip">
 `--kind mcp` can be generated from an OpenAPI spec:

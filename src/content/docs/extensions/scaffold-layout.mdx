@@ -46,6 +46,12 @@ fresh `gtdx dev --once` produces something you can see and copy:
 `llm` and `mcp` already shipped working examples. `wasm-component` has no guest at all —
 it wraps a component someone else published, so it is describe-only.
 
+`addon` (added in 1.2.13) sits between those two extremes: `validation.validate-config`,
+`validation.validate-desired-state`, `workload.render-workload`, and `reconciler.plan`
+are fully implemented, but `reconciler.observe` and `reconciler.apply` deliberately fail
+— they need a live backing service the scaffold cannot provide. See
+[Addon Extensions](/extensions/addon-extensions/).
+
 Replace the example rather than adding beside it. It exists to be read once and then
 deleted.
 

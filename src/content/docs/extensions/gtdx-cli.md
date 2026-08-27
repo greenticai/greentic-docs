@@ -39,7 +39,7 @@ interactive wizard, or pass `--yes` to resolve everything from flags and default
 Key options:
 
 - `--kind <KIND>` — extension kind, one of `design` (default), `bundle`, `deploy`,
-  `provider`, `wasm-component`, `mcp`, `llm`.
+  `provider`, `wasm-component`, `mcp`, `llm`, `addon`.
 - `--from-openapi <SPEC>` — (with `--kind mcp`) seed the extension from an
   OpenAPI/Swagger spec instead of the empty echo skeleton: `gtdx` shells out to
   `greentic-mcp-gen` to generate a `wasix:mcp/router` component and auto-authors

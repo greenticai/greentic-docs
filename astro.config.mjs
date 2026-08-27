@@ -151,6 +151,7 @@ export default defineConfig({
 						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
 						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },
 						{ label: 'Deployer Extensions', slug: 'extensions/deploy-extensions' },
+						{ label: 'Addon Extensions', slug: 'extensions/addon-extensions' },
 						{ label: 'Static Routes & Assets', slug: 'extensions/bundle-extensions' },
 						{ label: 'Publishing Extension Packs', slug: 'extensions/publishing-extensions' },
 						{ label: 'Extension CI', slug: 'extensions/github-action' },
