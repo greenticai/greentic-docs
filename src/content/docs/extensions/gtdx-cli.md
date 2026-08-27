@@ -52,6 +52,9 @@ Key options:
 - `--dir <DIR>` — output directory (default `./<name>`).
 - `--no-git` — skip `git init`; `--force` — overwrite an existing target.
 - `-w, --wizard` — force the interactive wizard even when a name/flags are given.
+- `--with-view` — add a working example UI page (`assets/views/<id>/`) and its
+  `contributions.views[]` entry. Rejected for `--kind mcp`. See
+  [Extension Views](/extensions/extension-views/).
 
 The scaffold includes a working WASM component (`src/lib.rs`), the vendored WIT contract
 under `wit/` (pinned by `.gtdx-contract.lock`), `describe.json`, `i18n/en.json`, a
@@ -272,6 +275,8 @@ Registers a component-tool by URL against greentic-designer-admin.
 ## See Also
 
 - [Writing Extensions](/extensions/writing-extensions/) — the end-to-end authoring path.
+- [Extension Views](/extensions/extension-views/) — `--with-view`, the bridge, and the
+  compat trap to know before publishing one.
 - [Publishing Extensions](/extensions/publishing-extensions/) — packaging, signing, and
   distribution details.
 - [Designer Compatibility](/extensions/designer-compatibility/) — the Designer ↔

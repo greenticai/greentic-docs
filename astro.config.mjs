@@ -147,6 +147,7 @@ export default defineConfig({
 						{ label: 'Getting Your Extension Used', slug: 'extensions/getting-it-used' },
 						{ label: 'Writing Extension Packs', slug: 'extensions/writing-extensions' },
 						{ label: 'Extension Tools & Node Types', slug: 'extensions/extension-tools' },
+						{ label: 'Extension Views', slug: 'extensions/extension-views' },
 						{ label: 'Designer Compatibility', slug: 'extensions/designer-compatibility' },
 						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
 						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },

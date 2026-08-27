@@ -73,6 +73,9 @@ For `apiVersion: greentic.ai/v2`, what the platform offers to users is declared 
   Each tool's `capabilities` list decides which surface offers it; when absent it defaults
   to `["flow"]`, so a tool meant for an agentic worker must say so explicitly.
 - `contributions.nodeTypes[]` — node types the flow editor shows as draggable blocks.
+- `contributions.views[]` — a custom UI page, shipped as HTML/JS/CSS inside the pack and
+  rendered in a sandboxed iframe. See [Extension Views](/extensions/extension-views/) —
+  including a compat trap worth reading before you add one.
 
 Building a `ToolMeta` with a `capabilities` vector in `src/lib.rs` has **no effect** under
 v2: the tool list is read from the manifest and the component's `list-tools` export is never
