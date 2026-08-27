@@ -11,29 +11,35 @@ serves them and renders your entry in a sandboxed iframe. Use it for anything a 
 inspector's schema-driven form cannot express — a usage dashboard, a per-tenant settings
 screen, any real layout.
 
-<Aside type="note" title="Current status: rendering and invokeTool work everywhere; callApi and fetch are Admin-only">
-Both hosts render a view and serve its assets today. Tool calls:
+<Aside type="note" title="`callApi` and `fetch` are Admin-only">
+Both hosts render a view, serve its assets, and run **`invokeTool`** for real — each
+routes the call through its own tool-dispatch path, RBAC-checked and audited.
 
-- **`invokeTool`** works end to end in both hosts — each routes it through its own
-  tool-dispatch path, RBAC-checked and audited.
-- **`callApi`** and **`fetch`** work in Admin, for real, audited. Neither exists yet on
-  the Designer surface — there is no platform-API proxy and no outbound-fetch proxy
-  there. That is being wired in a separate change.
+**`callApi`** and **`fetch`** are Admin-only. The Designer surface has no platform-API
+proxy and no outbound-fetch proxy, so a view that depends on either still renders there
+but cannot complete those two calls.
 
-So a view that only needs `greentic.ready`, `invokeTool`, and `resize`/`navigate`/`toast`
-works fully in both hosts today. A view that needs `callApi` or `fetch` works end to end
-in Admin now; in the Designer it renders but those two calls do not do real work yet.
+A view built on `greentic.ready`, `invokeTool`, `resize`, `navigate` and `toast` works
+the same on both surfaces.
 </Aside>
 
 <Aside type="caution" title="The compat trap — read this before you publish">
-`Contributions` is `#[serde(deny_unknown_fields)]`. A designer built against a
-pre-views contract crate does not skip an unrecognised `views` key — it fails to parse
-the whole `describe.json`, so the extension does not load at all. `gtdx new` fills
-`compat.min_designer_version` from this SDK's `MIN_DESIGNER_VERSION` constant, which has
-not been raised past `1.2.0` yet. So a view-bearing describe *claims* `>=1.2.0` while
-actually being unloadable on every Designer release from 1.2.0 through 1.2.8 — the
-entire released line as of this writing. Do not publish a `views[]`-carrying extension
-for general use until a host release that understands it has shipped.
+`Contributions` is `#[serde(deny_unknown_fields)]`, and `describe-v2.json` sets
+`additionalProperties: false` on the `contributions` block. A host built against a
+pre-views contract does not ignore a `views` key it does not recognise — it fails to
+parse the whole `describe.json`. The extension then does not load at all, not merely
+without its view.
+
+Meanwhile `gtdx new` fills `compat.min_designer_version` from the SDK's
+`MIN_DESIGNER_VERSION` constant, which is still `1.2.0`. So a view-bearing describe
+*claims* `>=1.2.0` while actually requiring a host that has both adopted the v2 contract
+**and** learned the `views` field — a later release than that floor admits. The range in
+your own describe will not stop an older host from choking on your pack.
+
+Until the hosts your users run understand `contributions.views[]`, treat `--with-view` as
+a way to build and test a page against a host that does, rather than as something to
+publish for general use. When you do ship one, raise `compat.min_designer_version` by
+hand to the first host version that supports views — the scaffolded default is too low.
 </Aside>
 
 ## Scaffold one
@@ -128,7 +134,8 @@ await greentic.callApi("GET", "/api/flows")            // platform REST
 await greentic.fetch("https://api.example.com/x")      // proxied server-side
 ```
 
-The last three are gated by `runtime.permissions.ui`:
+The last two are gated by `runtime.permissions.ui`. `invokeTool` is not — it is gated
+per view, and the difference matters (see below):
 
 ```jsonc title="describe.json"
 "permissions": {
@@ -139,25 +146,36 @@ The last three are gated by `runtime.permissions.ui`:
 }
 ```
 
+Those two keys are the whole block. **`permissions.ui` has no `tools` field and cannot
+be given one:** `UiPermissions` is `#[serde(deny_unknown_fields)]` with exactly
+`fetchHosts` and `platformApi`, and the schema sets `additionalProperties: false` on it.
+Writing `permissions.ui.tools` gets your describe rejected outright — by `gtdx validate`,
+by the deserialiser, and by the store. Which tools a view may call is declared per view,
+in `views[].tools`; see [below](#invoketool-is-deliberately-narrow).
+
 A view asks for results, never for keys:
 
 - **`invokeTool`** runs one of the extension's own tools inside the sandbox, with access
   to the host's secrets — the only one of the three that can touch a credential at all.
-  Live and audited in both hosts.
+  Live and audited on both surfaces, under identical rules.
 - **`callApi`** reaches platform REST, but the effective grant is your declared
   allowlist **intersected with the calling user's own RBAC**. Declaring
   `/api/admin/tenants/*` does not let an ordinary tenant user read another tenant's
   data — the bridge can only ever narrow what that person could already do by hand.
-  Live and audited in Admin; not implemented yet on the Designer surface.
+  Admin only. On the Designer surface the call *resolves* with a placeholder payload
+  marked `stub: true` rather than rejecting — check for that flag if a Designer view
+  seems to be reading empty data.
 - **`fetch`** is proxied server-side rather than issued by the frame, because an opaque
   origin's own `fetch()` sends `Origin: null`, which most third-party APIs reject at
-  CORS. Live in Admin; not implemented yet on the Designer surface.
+  CORS. Admin only; on the Designer surface it rejects with `not_implemented`.
 
 ### `invokeTool` is deliberately narrow
 
 A view may only invoke a tool that **its own extension contributes** *and* that **the
-view itself declares** in `views[].tools` — both conditions, not either. Miss one and
-you get a 403, not a silent no-op:
+view itself declares** in `views[].tools` — both conditions, not either. Both hosts
+enforce exactly this rule, with the same two codes, so a view that calls its tools
+correctly behaves the same on either surface. Miss one condition and you get a 403, not
+a silent no-op:
 
 | Error | Means |
 | --- | --- |
@@ -166,7 +184,13 @@ you get a 403, not a silent no-op:
 
 `E_TOOL_NOT_DECLARED_BY_VIEW` reads like a permissions bug the first time you hit it. It
 isn't — it means "fix your `describe.json`": add the tool's name to this view's `tools`
-array.
+array. `E_TOOL_NOT_CONTRIBUTED` is the other kind of problem entirely: the extension has
+no such tool, so the page is asking for something it was never given, and the host treats
+that as an escalation attempt rather than a typo.
+
+Declaring tools per view rather than once per extension is deliberately the tighter of
+the two options: an extension with a privileged tool and three views grants it to the one
+view that needs it, instead of to all three.
 
 The host also stamps identity into the call itself and overwrites whatever the page
 supplied: an `invokeTool` call is dispatched with the caller's own tenant, not one the
@@ -182,6 +206,50 @@ rather than opening the HTML file directly — a standalone file has nothing lis
 
 Never expect a secret to arrive in the browser. Ask the bridge for a result; the
 credential stays on the server.
+
+## How the host serves and sizes your page
+
+None of this needs anything from you. It is worth knowing because the first part decides
+what you may safely put in a file, and the last saves you writing layout code you do not
+need.
+
+### Your view's files are served without a session
+
+A sandboxed frame has an opaque origin, so every subresource it requests counts as
+`Sec-Fetch-Site: cross-site` and the browser withholds the host's `SameSite=Lax` session
+cookie. The entry document itself still loads — the host navigates the frame, and that
+navigation is same-site — but `app.js` and `style.css` would come back as `401` JSON,
+which `nosniff` then refuses to execute as script or apply as a stylesheet.
+
+Both hosts therefore exempt the view-asset route from their session gate, for `GET` and
+`HEAD` only. The consequence for you is simple: **your view's files are readable by
+anyone who can reach the host, so never ship a secret in view assets.** Put it behind a
+tool and ask the bridge for the result.
+
+The bridge route itself is not exempt. Anything that makes your extension *do* something
+still requires a session.
+
+### `script-src 'self'` works in the sandbox
+
+Assets are served under `default-src 'none'; script-src 'self'; style-src 'self'
+'unsafe-inline'; img-src 'self' data:; connect-src 'none'; frame-ancestors 'self'`.
+
+`'self'` keeps working even though the document's origin is opaque: a policy captures its
+own self-origin when it is created (CSP3 §2.2), and that resolves to the origin the
+policy was delivered from. So an external `<script src="app.js">` in your entry HTML runs
+normally. Substituting a concrete origin for `'self'` would be strictly worse — it breaks
+the page anywhere the guess fails to match.
+
+### The frame fills the content pane
+
+```
+height = max(available pane height, content height reported via `resize`)
+```
+
+The pane height is a floor, so a short page fills the pane and looks right without you
+doing anything. The bridge's `resize` message can only ever grow the frame past that
+floor, never shrink it below — send it when your content is taller than the pane, and
+the pane scrolls.
 
 ## Lint codes
 
