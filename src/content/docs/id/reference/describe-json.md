@@ -11,7 +11,7 @@ Schema id: `https://store.greentic.cloud/schemas/describe-v2.json`
 
 `describe.json` is the manifest every Greentic extension ships. It is the source of truth for the extension's identity, the capabilities it offers and requires, the WASM components it loads, and what it contributes to the Designer. `gtdx` validates it against this JSON Schema, and the publisher's Ed25519 signature is written back into the same file.
 
-This schema covers the 5 Designer extension kinds (`DesignExtension`, `BundleExtension`, `DeployExtension`, `ProviderExtension`, `AddonExtension`). Artifacts of kind `wasix:mcp/router` are validated against a separate manifest schema, `../greentic-designer-sdk/crates/greentic-extension-sdk-contract/schemas/describe-mcp-v1.json`, which declares a different required set and a different secret-requirement field. Do not read this page as describing that kind.
+This schema covers the 4 Designer extension kinds (`DesignExtension`, `BundleExtension`, `DeployExtension`, `ProviderExtension`). Artifacts of kind `wasix:mcp/router` are validated against a separate manifest schema, `../greentic-designer-sdk/crates/greentic-extension-sdk-contract/schemas/describe-mcp-v1.json`, which declares a different required set and a different secret-requirement field. Do not read this page as describing that kind.
 
 The top-level object sets `additionalProperties: false`, so any field not listed below is rejected.
 
@@ -21,7 +21,7 @@ The top-level object sets `additionalProperties: false`, so any field not listed
 | --- | --- | --- | --- |
 | `$schema` | no | `string` | Must be exactly `https://store.greentic.cloud/schemas/describe-v2.json`. `gtdx lint` reports `E_SCHEMA_HOST` for any other value (including the legacy `store.greentic.ai` host) and for a missing key. |
 | `apiVersion` | yes | `greentic.ai/v2` | Describe-contract discriminator, fixed at `greentic.ai/v2`. A designer older than 1.2.0 does not understand this contract and skips the extension at boot, so it never appears in `/api/extensions` and nothing in the logs points at the version. |
-| `kind` | yes | `DesignExtension`, `BundleExtension`, `DeployExtension`, `ProviderExtension`, `AddonExtension` | Which extension family this artifact belongs to; selects the on-disk install directory (`design`, `bundle`, `deploy`, `provider`, `addon`). `wasix:mcp/router` is deliberately absent from this enum: those artifacts are validated against describe-mcp-v1.json instead. `AddonExtension` is a component the platform provisions and reconciles as declarative infrastructure (a Qdrant, a Redis) rather than a flow-time or design-time extension; it declares itself through `contributions.addons[]` like any other kind, but its runtime component implements `greentic:extension-addon@0.1.0`'s `addon-extension` world instead of a design/bundle/deploy/provider one. |
+| `kind` | yes | `DesignExtension`, `BundleExtension`, `DeployExtension`, `ProviderExtension` | Which extension family this artifact belongs to; selects the on-disk install directory (`design`, `bundle`, `deploy`, `provider`). A fifth kind, `wasix:mcp/router`, is deliberately absent from this enum: those artifacts are validated against describe-mcp-v1.json instead. |
 | `compat` | yes | `compat` | Minimum designer/runner versions plus the literal contract version the descriptor was authored against. Parsed eagerly, so an invalid descriptor fails at deserialize time rather than when an installer tries to match. |
 | `metadata` | yes | `metadata` | Identity and catalogue information for the extension. `metadata.id` and `metadata.version` together form the identity key (`<id>@<version>`) the store and installer address the artifact by. |
 | `engine` | no | `engine` | Deprecated. `gtdx lint` rejects any describe that still carries this block (`E_ENGINE_DEPRECATED`); `compat.min_designer_version` / `compat.min_runner_version` are the sole source of version constraints. Still accepted here so pre-deprecation artifacts keep validating. |
@@ -50,7 +50,7 @@ Identity and store-listing fields. Referenced as `#/$defs/metadata`.
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| `id` | yes | `string` | Reverse-DNS extension id, e.g. `greentic.telco-x`. `gtdx lint` enforces a stricter form than the pattern here: `E_ID_PATTERN` requires `^greentic\.[a-z0-9][a-z0-9-]*$`. Pattern: `^[a-z][a-z0-9.-]*\.[a-z0-9.-]+$`. |
+| `id` | yes | `string` | Reverse-DNS extension id, e.g. `greentic.telco-x`. Any namespace the author controls is valid. `gtdx new`, `gtdx lint` (`E_ID_PATTERN`) and `gtdx publish` share a stricter form than the pattern here: `^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\.[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*)+$`. The id becomes the WIT package name (`greentic.telco-x` -> `package greentic:telco-x;`), so each segment must be a WIT kebab-name: every dash-separated word starts with a letter. `greentic.3aigent-designer` matches the pattern here but cannot be built. Pattern: `^[a-z][a-z0-9.-]*\.[a-z0-9.-]+$`. |
 | `name` | yes | `string` | Human-readable display name shown in the store and designer catalogue. Must be non-empty. Minimum length: 1. |
 | `version` | yes | `string` | Exact semver version of this extension release, e.g. `1.3.0-research.2`. Pattern: `^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`. |
 | `summary` | yes |  | One-line summary used in catalogue listings. Deliberately untyped: it accepts either a plain string or a localized object `{ default, locales }`. |
@@ -117,7 +117,6 @@ The WASM components the extension loads and the host permissions they may use. R
 | `secrets` | no | `array` of `string` | Secret keys the extension declares it needs to read. Listed in the `gtdx install` consent prompt. |
 | `callExtensionKinds` | no | `array` of `string` | Extension kinds this extension may call into. Surfaced in the `gtdx install` consent prompt as a cross-extension request. |
 | `llmRoles` | no | `array` of `string` | LLM roles (wire names, e.g. sorla_composer) this extension may request from the host greentic:extension-host/llm import. |
-| `oauthProviders` | no | `array` of `string` | OAuth provider ids (e.g. `hubspot`) this extension may request tokens for via the host `greentic:oauth-broker/broker-v1` import. The host rejects `get-token` for any provider not listed here. |
 | `ui` | no | `object` | Grants that apply to browser-executed view code, not to the WASM guest. Kept separate from `network` on purpose: `network` authorises `http.fetch` from inside the guest, where the caller is the extension's own logic, while these authorise requests a human clicking in a browser can trigger, whose responses land in browser-executed code. |
 
 ### runtimeComponent
@@ -146,8 +145,8 @@ What the extension adds to the Designer. Most contribution arrays are declared a
 | `schemas` | no | `array` | JSON Schema documents shipped with the extension. Each entry is a `{ path }` object whose `path` is relative to the gtxpack root. |
 | `guardrails` | no | `array` of `object` | Content-moderation guardrails contributed by the extension. |
 | `views` | no | `array` of `object` | UI pages the extension contributes to a host surface. The page's assets ship in the pack under `assets/views/<id>/`; the host serves them and renders `entry` in a sandboxed iframe with an opaque origin. What the page may reach is declared once in `runtime.permissions.ui`, not per view. |
-| `addons` | no | `array` of `object` | Managed services this extension offers to an environment - Qdrant, Redis, Postgres. Catalogue metadata only: the platform provisions the workload, and the addon declares what it needs. Secrets never appear in `desired_state_schema`; they reach the addon through its runtime binding, because a secret in desired state can never be read back and so diffs forever. |
 | `connection_test` | no | `object` | Optional self-test the extension declares so a consumer (designer, gtdx, store) can verify a live connection or credential by invoking one of the extension's own tools. Snake-case on the wire, unlike the camelCase siblings in this block - that spelling matches how extensions and the designer already read `contributions.connection_test`. |
+| `messaging_channel` | no | `object` | The messaging channel a provider extension offers, so a consumer can present it for selection and, when a deployment is built, bake the right provider pack into the bundle. Snake-case on the wire for the same reason as `connection_test` above. Absent means the extension offers no channel, which is the normal state and never an error. |
 
 ### contributions.guardrails entries
 
@@ -219,13 +218,12 @@ The publisher's detached signature, written back into `describe.json` in place b
       "const": "greentic.ai/v2"
     },
     "kind": {
-      "description": "Which extension family this artifact belongs to; selects the on-disk install directory (`design`, `bundle`, `deploy`, `provider`, `addon`). `wasix:mcp/router` is deliberately absent from this enum: those artifacts are validated against describe-mcp-v1.json instead. `AddonExtension` is a component the platform provisions and reconciles as declarative infrastructure (a Qdrant, a Redis) rather than a flow-time or design-time extension; it declares itself through `contributions.addons[]` like any other kind, but its runtime component implements `greentic:extension-addon@0.1.0`'s `addon-extension` world instead of a design/bundle/deploy/provider one.",
+      "description": "Which extension family this artifact belongs to; selects the on-disk install directory (`design`, `bundle`, `deploy`, `provider`). A fifth kind, `wasix:mcp/router`, is deliberately absent from this enum: those artifacts are validated against describe-mcp-v1.json instead.",
       "enum": [
         "DesignExtension",
         "BundleExtension",
         "DeployExtension",
-        "ProviderExtension",
-        "AddonExtension"
+        "ProviderExtension"
       ]
     },
     "compat": {
@@ -399,94 +397,6 @@ The publisher's detached signature, written back into `describe.json` in place b
             }
           }
         },
-        "addons": {
-          "description": "Managed services this extension offers to an environment - Qdrant, Redis, Postgres. Catalogue metadata only: the platform provisions the workload, and the addon declares what it needs. Secrets never appear in `desired_state_schema`; they reach the addon through its runtime binding, because a secret in desired state can never be read back and so diffs forever.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "family",
-              "display_name",
-              "description",
-              "config_schema",
-              "desired_state_schema"
-            ],
-            "properties": {
-              "id": {
-                "description": "Unique within the extension. The platform namespaces it as `<extension_id>/<id>`.",
-                "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9-]*$"
-              },
-              "family": {
-                "description": "What kind of thing this is - `vector-db`, `cache`, `sql`. A catalogue grouping label a flow author can browse or filter by - not a substitutability guarantee: two addons sharing a family are not promised compatible outputs, so this field alone is not a basis for automatically swapping one for the other. An open string on purpose: describe.json is signed and immutable once published, so a closed enum in it rots. `gtdx lint` warns on an unfamiliar family instead.",
-                "type": "string"
-              },
-              "display_name": {
-                "type": "string"
-              },
-              "description": {
-                "type": "string"
-              },
-              "icon": {
-                "description": "Host-resolved icon name.",
-                "type": "string"
-              },
-              "config_schema": {
-                "description": "JSON Schema (Draft 2020-12) for the knobs a user sets per environment - size, replicas, version. Rendered as a form by the Designer. Stringly-encoded because it is a payload passed to a renderer, not host control data. Must parse as JSON; the Rust deserializer rejects it otherwise.",
-                "type": "string"
-              },
-              "desired_state_schema": {
-                "description": "JSON Schema for the day-2 state the addon reconciles - Qdrant collections, Redis ACL users. Secrets do not belong here: a password in desired state can never be read back by `observe`, so it diffs forever and no plan is ever clean. `gtdx lint` reports a secret-looking property as an error.",
-                "type": "string"
-              },
-              "outputs": {
-                "description": "Values the addon publishes once provisioned, referenced from another resource as `${resources.<id>.outputs.<name>}`.",
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "name",
-                    "type"
-                  ],
-                  "properties": {
-                    "name": {
-                      "description": "Referenced as `${resources.<id>.outputs.<name>}`. `gtdx lint` constrains this to characters that survive becoming an environment variable, because that is what the platform does with it.",
-                      "type": "string",
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                    },
-                    "type": {
-                      "description": "Scalar only. An output is interpolated into another resource's configuration, where a structured value has no meaningful rendering; an addon wanting structure exposes several outputs.",
-                      "enum": [
-                        "text",
-                        "number",
-                        "boolean"
-                      ]
-                    },
-                    "sensitive": {
-                      "description": "A sensitive output never becomes a literal value - the platform resolves it to a secret reference, so it never passes through a plan document, a plan UI, or a support bundle. Getting this wrong is how a password ends up in a log.",
-                      "type": "boolean"
-                    },
-                    "description": {
-                      "type": "string"
-                    }
-                  }
-                }
-              },
-              "supports_backup": {
-                "description": "Whether the addon can snapshot before a destructive change. The platform offers to back up on the strength of this flag, so declare true only when a snapshot genuinely happens.",
-                "type": "boolean"
-              },
-              "schema_version": {
-                "description": "Version of this addon's `desired_state_schema`, not of the addon. It lets one extension migrate instances from a v1 shape to a v2 shape rather than breaking them. Defaults to 1.",
-                "type": "integer",
-                "minimum": 1
-              }
-            }
-          }
-        },
         "connection_test": {
           "description": "Optional self-test the extension declares so a consumer (designer, gtdx, store) can verify a live connection or credential by invoking one of the extension's own tools. Snake-case on the wire, unlike the camelCase siblings in this block - that spelling matches how extensions and the designer already read `contributions.connection_test`.",
           "type": "object",
@@ -502,6 +412,31 @@ The publisher's detached signature, written back into `describe.json` in place b
             "args": {
               "description": "Arguments to pass to the tool. Absent is treated as `{}`.",
               "type": "object"
+            }
+          }
+        },
+        "messaging_channel": {
+          "description": "The messaging channel a provider extension offers, so a consumer can present it for selection and, when a deployment is built, bake the right provider pack into the bundle. Snake-case on the wire for the same reason as `connection_test` above. Absent means the extension offers no channel, which is the normal state and never an error.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "ref"
+          ],
+          "properties": {
+            "id": {
+              "description": "Stable channel id, e.g. `messaging-3aigent-gui`. This is the identity a consumer stores against a deployment and later resolves back to `ref`, so renaming it orphans every deployment that already selected the channel.",
+              "type": "string",
+              "minLength": 1
+            },
+            "ref": {
+              "description": "OCI reference of the messaging provider pack to bake into a bundle. Digest-pinned references are strongly preferred: a tag can be moved to different bytes after publication, so a bundle built from one is not reproducible. A consumer may warn on, or refuse, an unpinned reference.",
+              "type": "string",
+              "pattern": "^oci://"
+            },
+            "label": {
+              "description": "Display name for the channel. Absent means a consumer should fall back to `metadata.name`. The field exists for the case where the channel's name and the extension's name legitimately differ.",
+              "type": "string"
             }
           }
         }
@@ -609,7 +544,7 @@ The publisher's detached signature, written back into `describe.json` in place b
       ],
       "properties": {
         "id": {
-          "description": "Reverse-DNS extension id, e.g. `greentic.telco-x`. `gtdx lint` enforces a stricter form than the pattern here: `E_ID_PATTERN` requires `^greentic\\.[a-z0-9][a-z0-9-]*$`.",
+          "description": "Reverse-DNS extension id, e.g. `greentic.telco-x`. Any namespace the author controls is valid. `gtdx new`, `gtdx lint` (`E_ID_PATTERN`) and `gtdx publish` share a stricter form than the pattern here: `^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\\.[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*)+$`. The id becomes the WIT package name (`greentic.telco-x` -> `package greentic:telco-x;`), so each segment must be a WIT kebab-name: every dash-separated word starts with a letter. `greentic.3aigent-designer` matches the pattern here but cannot be built.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9.-]*\\.[a-z0-9.-]+$"
         },
@@ -751,7 +686,6 @@ The publisher's detached signature, written back into `describe.json` in place b
         "permissions": {
           "description": "Host permissions the extension requests. `gtdx install` prints the network, secrets and cross-extension requests and asks for confirmation before installing, unless the install was pre-approved (`--yes` / CI).",
           "type": "object",
-          "additionalProperties": false,
           "properties": {
             "network": {
               "description": "URL patterns the extension may reach, e.g. `https://api.example.com/*`. `gtdx publish` requires `https://`, with one exception: plain `http://` is accepted for loopback hosts (`127.0.0.1`, `localhost`, `[::1]`) only. This mirrors the extension runtime, which honours plain http for loopback hosts and drops non-loopback http patterns.",
@@ -780,13 +714,6 @@ The publisher's detached signature, written back into `describe.json` in place b
                 "type": "string"
               },
               "description": "LLM roles (wire names, e.g. sorla_composer) this extension may request from the host greentic:extension-host/llm import."
-            },
-            "oauthProviders": {
-              "description": "OAuth provider ids (e.g. `hubspot`) this extension may request tokens for via the host `greentic:oauth-broker/broker-v1` import. The host rejects `get-token` for any provider not listed here.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             },
             "ui": {
               "description": "Grants that apply to browser-executed view code, not to the WASM guest. Kept separate from `network` on purpose: `network` authorises `http.fetch` from inside the guest, where the caller is the extension's own logic, while these authorise requests a human clicking in a browser can trigger, whose responses land in browser-executed code.",
