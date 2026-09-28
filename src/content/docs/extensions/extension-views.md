@@ -19,8 +19,10 @@ routes the call through its own tool-dispatch path, RBAC-checked and audited.
 grants whatever your declared allowlist and the calling user's RBAC intersect to. The
 Designer grants only `GET` against a fixed, host-owned list of routes — see
 [What `callApi` can reach on the Designer](#what-callapi-can-reach-on-the-designer) —
-plus, as of Designer 1.2.511-dev, a narrow write door onto your own extension's stored
-assets. A path outside both lists is refused with a stable `view_api_*` code, not a
+plus, from the Designer release that includes the campus routes (1.2.511-dev or later), an
+ungated write door onto your own extension's stored assets: no `platformApi` declaration
+needed for that door, since the store already belongs to your extension. A path outside
+both the GET list and the write door is refused with a stable `view_api_*` code, not a
 silent stub.
 
 **`fetch`** is still Admin-only. The Designer has no outbound-fetch proxy, so a view that
@@ -172,10 +174,12 @@ A view asks for results, never for keys:
     `/api/admin/tenants/*` does not let an ordinary tenant user read another tenant's
     data — the bridge can only ever narrow what that person could already do by hand.
   - **Designer** intersects your allowlist with a **fixed, host-owned list of `GET`
-    routes** (plus, since Designer 1.2.511-dev, a write door onto your own extension's
-    assets) — see [What `callApi` can reach on the
+    routes** — see [What `callApi` can reach on the
     Designer](#what-callapi-can-reach-on-the-designer). Declaring a route the host
-    doesn't also allow gets you `view_api_not_readable`, not a wider grant.
+    doesn't also allow gets you `view_api_not_readable`, not a wider grant. Separately,
+    from the release that includes the campus routes (1.2.511-dev or later), the
+    Designer also opens a write door onto your own extension's stored assets — that one
+    needs no `platformApi` declaration at all.
 - **`fetch`** is proxied server-side rather than issued by the frame, because an opaque
   origin's own `fetch()` sends `Origin: null`, which most third-party APIs reject at
   CORS. Admin only; on the Designer surface it rejects with `not_implemented`.
@@ -220,10 +224,11 @@ credential stays on the server.
 
 ## What `callApi` can reach on the Designer
 
-The Designer does not consult your describe's `platformApi` list on its own — it
-intersects it with a **second, host-owned list** it never publishes for you to widen.
-Your declared route has to appear in *both* lists, and only `GET` is ever proxied
-outside the one write door — the last two rows below.
+The Designer does not consult your describe's `platformApi` list on its own — for a
+`GET` other than your own extension's asset store, it intersects your list with a
+**second, host-owned list** it never publishes for you to widen. Your declared route
+has to appear in *both* lists. No query string is accepted anywhere on the asset store,
+even on the collection `GET`.
 
 | Method | Path | Allowed query keys | Returns |
 | --- | --- | --- | --- |
@@ -234,10 +239,10 @@ outside the one write door — the last two rows below.
 | `GET` | `/api/env-canvas/*/units/*/metrics` | `window` (`1h`, `24h`, `7d`) | Time-series request counts and p50/p99 latency for one deployed unit. |
 | `GET` | `/api/audit/runs/summary` | `env`, `unit`, `flow`, `window`, `since`, `until`, `basis` | Per-flow run-status counts over the window — completed / dropped-off / technical-error / in-progress / agentic. No per-person or per-run data. |
 | `GET` | `/api/audit/runs/by-worker` | `env`, `unit`, `flow`, `window`, `since`, `until`, `basis` | The same status counts, broken out per worker and start date. |
-| `GET` | `/api/env-canvas/campus/metrics` — *Designer 1.2.511-dev+* | — | Per member team, per environment, per unit: `{idle, requests, p50, p99}` over the same window `units/*/metrics` reads — no new numbers, just every team's floors in one call. |
-| `GET` | `/api/env-canvas/campus/links` — *Designer 1.2.511-dev+* | — | Which deployed units are **configured** to call which agents, resolved from each unit's own pack — never observed traffic. Names the agents and, when one resolves to a unit on the campus, its `{team, envId, unitId}`. |
-| `GET`/`POST` | `/api/extensions/{own}/assets` — *Designer 1.2.511-dev+* | — | List, or create, your own extension's stored assets. `{own}` is always the calling view's own extension id — the host decides it, never the frame. See [Storing view state](#storing-view-state). |
-| `GET`/`PUT`/`DELETE` | `/api/extensions/{own}/assets/{id}` — *Designer 1.2.511-dev+* | — | Read, replace, or delete one of your own extension's stored assets by id. Same `{own}` scoping as above. |
+| `GET` — *the release that includes the campus routes (1.2.511-dev or later)* | `/api/env-canvas/campus/metrics` | — | Per member team, per environment, EVERY environment: `{idle, requests, p50, p99}` per unit when a read succeeds; `error: "no_signal"` (never deployed, a local-lane environment, or a target that isn't Cloud Run) or `error: "unavailable"` (the read itself failed — credential, admin, or Cloud Monitoring refusal) when it doesn't. No numbers this host doesn't already serve through the single-unit metrics route above. |
+| `GET` — *same release* | `/api/env-canvas/campus/links` | — | Which deployed units are **configured** to call which agents, read from each unit's own on-disk pack — labelled that way because it is configuration, never observed traffic. Each agent's `target` is a campus `{team, envId, unitId}` only when its route matches **exactly one** A2A-exposed unit's public address; zero or more than one match and `target` is `null`. |
+| `GET`/`POST` — *same release* | `/api/extensions/{own}/assets` | — (no query string at all) | List, or create, your own extension's stored assets. `{own}` is always the calling view's own extension id — the host decides it from the route, never the frame — and no `platformApi` declaration is needed for this door at all. See [Storing view state](#storing-view-state). |
+| `GET`/`PUT`/`DELETE` — *same release* | `/api/extensions/{own}/assets/{id}` | — | Read, replace, or delete one of your own extension's stored assets by id. Same `{own}` scoping and same no-declaration-needed rule as above. |
 
 Two routes match the `/api/env-canvas/*` pattern by shape but are **never** proxied,
 whatever your describe declares: `/api/env-canvas/available-units` and
@@ -245,12 +250,12 @@ whatever your describe declares: `/api/env-canvas/available-units` and
 
 ### The grant is an intersection, not a request
 
-Declaring a route in `permissions.ui.platformApi` is necessary but not sufficient on
-the Designer — it only ever *narrows* what the table above already allows. Ask for a
-route the host doesn't serve to views and you get `view_api_not_readable`, not a wider
-grant; ask for a query key the route doesn't accept and you get
-`view_api_query_not_allowed`. A view built to read campus metrics and links, and to
-keep its own state, declares exactly those routes and nothing wider:
+Declaring a route in `permissions.ui.platformApi` is necessary but not sufficient for
+any of the `GET` rows above the asset store — it only ever *narrows* what the table
+already allows. Ask for a route the host doesn't serve to views and you get
+`view_api_not_readable`, not a wider grant; ask for a query key the route doesn't
+accept and you get `view_api_query_not_allowed`. A view built to read campus metrics
+and links declares exactly those routes and nothing wider:
 
 ```jsonc title="describe.json"
 "permissions": {
@@ -263,19 +268,17 @@ keep its own state, declares exactly those routes and nothing wider:
       { "method": "GET", "path_pattern": "/api/env-canvas/*/deployment" },
       { "method": "GET", "path_pattern": "/api/env-canvas/*/units/*/metrics" },
       { "method": "GET", "path_pattern": "/api/audit/runs/summary" },
-      { "method": "GET", "path_pattern": "/api/audit/runs/by-worker" },
-      { "method": "GET", "path_pattern": "/api/extensions/greentic.worker-office/assets" },
-      { "method": "GET", "path_pattern": "/api/extensions/greentic.worker-office/assets/*" },
-      { "method": "POST", "path_pattern": "/api/extensions/greentic.worker-office/assets" },
-      { "method": "PUT", "path_pattern": "/api/extensions/greentic.worker-office/assets/*" }
+      { "method": "GET", "path_pattern": "/api/audit/runs/by-worker" }
     ]
   }
 }
 ```
 
-Note the asset paths are spelled out with the extension's own id — `{own}` in the table
-above is what the running host substitutes at call time, but your describe still
-declares the concrete `/api/extensions/<your-id>/assets...` patterns.
+The asset-store rows are absent from that list on purpose: the Designer decides access
+to your own extension's asset store purely from which extension is hosting the view, so
+declaring `GET`/`POST`/`PUT`/`DELETE` entries for `/api/extensions/<your-id>/assets...`
+changes nothing either way. Some published extensions declare them anyway for
+readability; it's harmless, just not load-bearing.
 
 ## Navigating the host
 
@@ -292,11 +295,14 @@ await greentic.navigate({ route: "audit", envId: "…", unitId: "…", team: "�
   modal on the target canvas instead of the environment as a whole.
 - Both ids must match `^[A-Za-z0-9._~-]{1,128}$` — no `/`, `?`, `#` or `%`, so an id can
   never reshape the path it's placed into.
-- `team` is optional. When it names a team other than the one the viewer is currently
+- `team` is optional and, when present, must be a valid team slug: lowercase letters,
+  digits and hyphens, 1–63 characters, never starting or ending with a hyphen. **A
+  malformed `team` refuses the WHOLE `navigate` call**, not just the team switch — so a
+  typo can never fall through to opening a same-named environment in the wrong team.
+  When a well-formed `team` names a team other than the one the viewer is currently
   acting as, the host switches the active team first (the same membership-checked
   `POST /api/teams/active` a team switcher uses) and only then navigates. **A refused
-  team switch — the viewer isn't a member — shows a toast and navigates nowhere**; it
-  never falls back to the current team's canvas under the id you asked for.
+  team switch — the viewer isn't a member — toasts the error and navigates nowhere.**
 - `navigate` only fires after a real user gesture (`navigator.userActivation.isActive`).
   Calling it from your view's own load handler is silently ignored — the browsers that
   support the check would otherwise let a view trap the Back button by re-navigating on
@@ -304,24 +310,45 @@ await greentic.navigate({ route: "audit", envId: "…", unitId: "…", team: "�
 
 ## Storing view state
 
-Since Designer 1.2.511-dev, a view may keep its own small amount of state across
-sessions through the write door in the `callApi` table above — building layouts, a
-chosen time window, whatever your view needs to remember. Four things worth knowing
-before you reach for it:
+From the release that includes the campus routes (1.2.511-dev or later), a view may
+keep its own small amount of state across sessions through the write door in the
+`callApi` table above — building layouts, a chosen time window, whatever your view
+needs to remember.
+
+**Asset ids are minted by the server — never invent one.** `id` is the row's bare
+primary key across the whole store, not scoped per tenant or team, so a fixed literal
+id like `"my-view-state"` belongs to whichever tenant happens to create it first; every
+other tenant's write to that same id is silently refused (`404`, indistinguishable from
+"no such asset"). The pattern that works on every install:
+
+1. `GET /api/extensions/{own}/assets` on load. It returns every asset your extension
+   has stored for the caller's team, unfiltered — there is no query-string filtering
+   through this door, so if you keep more than one asset, tell them apart by
+   `assetType` or `name` client-side.
+2. Found your row already → remember its `id` and `PUT
+   /api/extensions/{own}/assets/{id}` to update it, sending `{ assetType, name, content
+   }`.
+3. Found nothing → `POST /api/extensions/{own}/assets` with `{ assetType, name, content
+   }` and **no `id` field** — the server mints one and hands it back in the response.
+   Remember that id for the next write.
+4. `DELETE /api/extensions/{own}/assets/{id}` removes a row you no longer need.
+
+Four more things worth knowing:
 
 - **It's team-shared, not per-person.** The store is keyed `(tenant, team,
-  extension_id[, asset id])`, same as any other extension asset — every member of the
-  team who opens your view reads and writes the same document. Fine for shared state
-  like "which floor is expanded"; wrong for anything that should differ per viewer.
+  extension_id, asset id)` — every member of the team who opens your view reads and
+  writes the same rows. Fine for shared state like "which floor is expanded"; wrong for
+  anything that should differ per viewer.
 - **`content` is opaque text.** The host never parses it — store whatever JSON (or
   anything else) your view wants, serialized to a string, and parse it back yourself.
-- **Only your own extension's namespace.** `{own}` in the path is decided by the host
+- **Only your own extension's namespace.** `{own}` in every path is decided by the host
   from which view is calling, never from anything the frame sends, so there's no way to
   read or write another extension's assets even if you know its id.
-- **Degrade silently on older hosts.** A Designer that predates 1.2.511-dev has no
-  write door at all — the call comes back `view_api_not_readable`. Treat that the same
-  way you'd treat any other refusal: keep the state in memory for the session and don't
-  surface an error for it.
+- **Degrade silently on older hosts.** A Designer that predates this release has no
+  asset door at all: a write is refused as an unrecognised method, and a `GET` falls
+  through to the ordinary read gate, which refuses it too — the assets routes aren't in
+  that allow-list either. Treat any of those refusals the same way you'd treat any
+  other: keep the state in memory for the session and don't surface an error for it.
 
 ## How the host serves and sizes your page
 
