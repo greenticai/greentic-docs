@@ -454,7 +454,8 @@ What the server then checks:
 | `message` | Trimmed, 1–4000 characters. |
 | `conversationId` | `^[A-Za-z0-9_-]{8,64}$`. Generate one per conversation and reuse it to keep context; a new id starts a fresh conversation. The server derives the worker-side session key from it together with the viewer's identity, so two viewers who send the same id do not share a conversation. |
 | Scope | The environment must belong to the viewer's **active team** and carry that unit; otherwise `404` (`env_unit_not_found` or the environment's own not-found). Switch team with [`navigate`](#navigating-the-host) first. |
-| Rate | 20 messages per minute per (viewer, environment, unit), in memory per Designer process — `429 unit_chat_rate_limited`. The worker's own `429` maps to the same code. |
+| Request body | At most 64 KiB; an oversized or unreadable body is `400 unit_chat_invalid`. |
+| Rate | 20 messages per minute per (viewer, environment, unit), in memory per Designer process — `429 unit_chat_rate_limited`. Checked before anything else about the unit is looked up. The worker's own `429` maps to the same code. |
 | Timeout | 60 seconds — `422 unit_chat_timeout`. |
 | Reply | Capped at 8000 characters. A turn that ran and failed is a `200` with `reply: null, status: "failed"`, never the engine's own error text. |
 
@@ -462,9 +463,19 @@ Which units can answer:
 
 | Lane | Works? | How |
 | --- | --- | --- |
-| env-canvas **Cloud Run** | Only when the unit has "Answer other AI agents" (A2A) switched on **and** has been deployed since | The unit's own A2A endpoint, with a credential the last deploy shipped. Otherwise `409 unit_chat_not_exposed` or `409 unit_chat_no_credential`. |
-| env-canvas **local** | Yes | The local worker on loopback. |
+| env-canvas **Cloud Run** | Only when the unit has "Answer other AI agents" (A2A) switched on **and** has been redeployed since | The unit's own A2A endpoint, authenticated with the Designer's own Worker Office credential for that unit (see below). A unit without A2A deployed is `409 unit_chat_not_exposed`. |
+| env-canvas **local** | Yes, from the Designer replica that runs the local worker | The local worker on loopback. On a multi-replica Designer, a request served by a replica that doesn't supervise that worker is `409 unit_chat_other_replica` — retrying later may land on the right one. |
 | env-canvas **Kubernetes** | No | `422 unit_chat_unreachable` — a ClusterIP worker has no address the Designer can reach. |
+
+**The credential is the Designer's own, never a partner's.** Every unit gets a dedicated
+Worker Office credential, separate from the agent-to-agent credentials an operator issues
+to partners. It is created when the unit is deployed, never appears in the unit's
+credential panel, and cannot be revealed, renamed or revoked there. Chat uses it only
+after a deploy has shipped it to the running worker. Until then — a unit deployed before
+this feature, or one whose credential was just created — chat answers
+`409 unit_chat_no_credential`, and the fix is to redeploy the unit. The same code is
+returned if the worker refuses the credential. You never see or send this credential;
+the view only names the environment and unit.
 
 <Aside type="caution" title="Two things to design for">
 **Every message spends the worker's LLM budget.** The call runs as the signed-in viewer,
@@ -506,11 +517,12 @@ arrives as `http_<status>`, and a request that could not be sent as `network_err
 | `extension_asset_too_large` | 413 | Asset store write: `content` over 256 KiB. Permanent for that content. |
 | `extension_asset_field_too_long` | 422 | Asset store write: `name` over 256 bytes or `assetType` over 64 bytes. Permanent for those values. |
 | `extension_asset_rate_limited` | 429 | Asset store write: over 120 writes per minute for this extension, or the per-user or per-process tracking cap is full. Back off and retry. |
-| `unit_chat_invalid` | 400 | Chat: bad `message` or `conversationId`. |
+| `unit_chat_invalid` | 400 | Chat: bad `message` or `conversationId`, or a body over 64 KiB or unreadable. |
 | `env_unit_not_found` | 404 | Chat: the environment has no such unit (in the viewer's active team). |
 | `unit_chat_not_deployed` | 409 | Chat: no running deployment, or no route for that unit. |
 | `unit_chat_not_exposed` | 409 | Chat: Cloud Run unit without A2A exposure deployed. |
-| `unit_chat_no_credential` | 409 | Chat: no credential a deploy has shipped, or the worker refused it. |
+| `unit_chat_no_credential` | 409 | Chat: the unit's Worker Office credential hasn't been shipped by a deploy yet (redeploy), or the worker refused it. |
+| `unit_chat_other_replica` | 409 | Chat, local lane: this Designer replica doesn't run that local worker. |
 | `unit_chat_unreachable` | 422 | Chat: Kubernetes or unknown lane, or the worker could not be reached. |
 | `unit_chat_failed` | 422 | Chat: the worker answered with something unusable. |
 | `unit_chat_timeout` | 422 | Chat: 60 seconds elapsed. |
