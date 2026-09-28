@@ -386,12 +386,21 @@ asset routes, not only views, and are checked before anything is written:
 | Limit | Value | Refusal |
 | --- | --- | --- |
 | Body fields forwarded by the bridge | `assetType`, `name`, `content` — all three required by the server; `id`, timestamps and anything naming an extension are dropped | `invalid_request` if the body isn't a JSON object |
+| Extension id in the path | Unreserved characters (`A-Z a-z 0-9 . _ ~ -`), 1–128, not `.` or `..` — the same grammar the bridge uses | `400 extension_asset_bad_extension_id` |
 | `content` size | 256 KiB (measured in bytes) | `413 extension_asset_too_large` |
-| Writes (`POST`, `PUT`, `DELETE`) | 30 per minute per (tenant, team, user, extension), in memory per Designer process | `429 extension_asset_rate_limited` |
-| `name`, `assetType` length | No bound beyond `content`'s | — |
+| `name` length | 256 bytes | `422 extension_asset_field_too_long` |
+| `assetType` length | 64 bytes | `422 extension_asset_field_too_long` |
+| Writes (`POST`, `PUT`, `DELETE`) | 120 per minute per (tenant, team, user, extension), a fixed window held in memory per Designer process | `429 extension_asset_rate_limited` |
+| Extensions per user per window | A user may write to at most 32 different extensions in one window; a 33rd is refused until the window resets. A process that is already tracking its maximum number of users (4096) refuses a new one the same way. | `429 extension_asset_rate_limited` |
 
-Debounce your saves — one write every few seconds at most — and back off after a `429`
-rather than retrying immediately.
+The id, size and length checks run before the rate count, so a refused write of that kind
+does not use up your budget. Nothing is written to the database for any refused write.
+
+**How to react:** `extension_asset_bad_extension_id`, `extension_asset_too_large` and
+`extension_asset_field_too_long` are permanent. A retry would be refused again, so stop
+writing for the session and keep the state in memory. `extension_asset_rate_limited` is
+temporary: back off (the Worker Office view waits 30 seconds) and retry with the latest
+state. Debounce saves in the first place — one write every few seconds at most.
 
 Four more things worth knowing:
 
@@ -493,8 +502,10 @@ arrives as `http_<status>`, and a request that could not be sent as `network_err
 | Code | Status | Route |
 | --- | --- | --- |
 | `not_found` | 404 | Asset store: no such asset in your extension and team — or, on create/replace, an id that belongs to someone else. |
-| `extension_asset_too_large` | 413 | Asset store: `content` over the cap. |
-| `extension_asset_rate_limited` | 429 | Asset store: too many writes this minute. |
+| `extension_asset_bad_extension_id` | 400 | Asset store write: the path's extension id fails the grammar. Permanent. |
+| `extension_asset_too_large` | 413 | Asset store write: `content` over 256 KiB. Permanent for that content. |
+| `extension_asset_field_too_long` | 422 | Asset store write: `name` over 256 bytes or `assetType` over 64 bytes. Permanent for those values. |
+| `extension_asset_rate_limited` | 429 | Asset store write: over 120 writes per minute for this extension, or the per-user or per-process tracking cap is full. Back off and retry. |
 | `unit_chat_invalid` | 400 | Chat: bad `message` or `conversationId`. |
 | `env_unit_not_found` | 404 | Chat: the environment has no such unit (in the viewer's active team). |
 | `unit_chat_not_deployed` | 409 | Chat: no running deployment, or no route for that unit. |
