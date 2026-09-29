@@ -247,6 +247,15 @@ even on the collection `GET`.
 | `GET`/`POST` — *same release* | `/api/extensions/{own}/assets` | — (no query string at all) | List, or create, your own extension's stored assets. `{own}` is always the calling view's own extension id — the host decides it from the route, never the frame — and no `platformApi` declaration is needed for this door at all. See [Storing view state](#storing-view-state). |
 | `GET`/`PUT`/`DELETE` — *same release* | `/api/extensions/{own}/assets/{id}` | — | Read, replace, or delete one of your own extension's stored assets by id. Same `{own}` scoping and same no-declaration-needed rule as above. |
 | `POST` — *builds that include the unit-chat route* | `/api/env-canvas/*/units/*/chat` | — (no query string at all) | Send one message to a deployed worker and get its reply: `{reply, status, conversationId}`. **Needs** a `POST` grant for exactly this pattern. See [Talking to a deployed worker](#talking-to-a-deployed-worker). |
+| `GET` — *1.2.525-dev or later* | `/api/env-canvas/campus/digest` | `window` — exactly `24h` or `7d` | A "morning briefing" per member team and environment: `{units, busy, runs, errors, topUnit?}`. A count the host could not measure is `null`, never `0`. Also carries `viewerKey`, a pseudonymous per-viewer id (never an email) a view may use to key its own stored state, and English `highlights` that are a fallback only — build localized sentences from the counts. |
+| `GET` — *1.2.525-dev or later* | `/api/env-canvas/*/units/*/health` | — | Revision-scoped health evidence for one deployed unit: readiness, request counts by class, latency, and an `evidence` verdict. Server-cached for 60 seconds per unit, so polling it costs nothing extra. A local or Kubernetes unit answers `200` with `cannot_evaluate` evidence, not an error. |
+| `GET` — *1.2.525-dev or later* | `/api/env-canvas/*/units/*/runtime-logs` | — | The unit's recent log lines, the same ones its panel shows. **These can contain end-user message text** — treat them as the team's data and never send them anywhere outside the view. |
+| `GET` — *1.2.525-dev or later* | `/api/agent-graph/approvals` | `status` — exactly `pending` | The team's pending approvals. Resolved ones are not reachable from a view: a resolved row names the person who decided. |
+| `GET` — *1.2.525-dev or later* | `/api/audit/analytics/tokens` | `env`, `unit`, `flow`, `worker`, `channel`, `window`, `since`, `until` | Token totals per model over the window. No per-person filter. |
+| `POST` — *1.2.525-dev or later* | `/api/audit/cost-rates` | — (no query string at all) | Price a token estimate: send `{models: [...]}` (at most 50 ids), get `{costVisible, rates}`. A read that uses `POST` only so a model id containing a comma is not split. `costVisible: false` means the viewer may not see costs — show "unavailable", not zero. A model with no rate is left out; never price it at zero. **Needs** a `POST` grant for exactly this path. |
+| `GET` — *1.2.527-dev or later* | `/api/env-canvas/*/units/*/chat/history` | `limit` | The **viewer's own** chat history with that unit, oldest first: `{messages: [{role, text, conversationId, at}]}`. Nothing names another viewer. Kept 30 days, at most 200 messages per unit. |
+| `DELETE` — *1.2.527-dev or later* | `/api/env-canvas/*/units/*/chat/history` | — (no query string at all) | Forget the viewer's own history with that unit. A turn still running when you clear it does not write itself back. **Needs** a `DELETE` grant for exactly this pattern. |
+| `POST` — *1.2.527-dev or later* | `/api/env-canvas/campus/presence` | — (no query string at all) | Heartbeat about every 15 seconds with `{envId, unitId, hidden?}` (ids or `null`); the answer lists the **other** viewers in the viewer's own team seen in the last 45 seconds (`{id, name, initials, envId, unitId, at}`) plus `self: {hidden}`. `id` is a random per-visit id and `name` is never an email address. `hidden: true` is a lasting "hide me" the viewer chooses; omit `hidden` to keep whatever they chose. Limited to 30 heartbeats a minute per viewer. **Needs** a `POST` grant for exactly this path. |
 
 Two routes match the `/api/env-canvas/*` pattern by shape but are **never** proxied,
 whatever your describe declares: `/api/env-canvas/available-units` and
@@ -286,6 +295,12 @@ readability; it's harmless, just not load-bearing. The chat route is the opposit
 absent from that list only because it is a separate decision — add
 `{ "method": "POST", "path_pattern": "/api/env-canvas/*/units/*/chat" }` if and only if
 your view talks to workers.
+
+The other write doors work the same way: `POST /api/audit/cost-rates`,
+`DELETE /api/env-canvas/*/units/*/chat/history` and
+`POST /api/env-canvas/campus/presence` each need their own grant for that exact method
+and pattern, and the host rebuilds each body from an allow-list, so a field it does not
+know is dropped rather than forwarded. Declare only the ones your view uses.
 
 ### A minimal `describe.json` for a Designer view
 
