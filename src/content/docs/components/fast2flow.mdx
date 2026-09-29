@@ -205,11 +205,11 @@ Flow routes (`pack/flow`) need a `greentic-start` dev build `1.2.x` from `v1.2.3
 
 `greentic-start` routes on `dispatch` only; it never sends a `respond` or `deny` directive's own text to the user. What happens instead depends on the build:
 
-- **Current dev builds:** a `respond` or `deny` falls through like `continue`, so the [LLM fallback](#llm-fallback) is still asked.
-
-<Aside type="caution" title="Available from greentic-start (next dev build) — pending">
-With [greentic-start#661](https://github.com/greenticai/greentic-start/pull/661), a `respond` or `deny` **stops routing for the turn**: the LLM fallback is not asked, a warning is logged, and the user gets the [fixed routing-miss reply](#when-nothing-matches) — whether or not the pack opted into running its default flow on a miss.
+<Aside type="note" title="Available from greentic-start 1.2.0-dev.36590458516 (dev line; not yet in a stable release)">
+From `1.2.0-dev.36590458516` ([greentic-start#661](https://github.com/greenticai/greentic-start/pull/661)), a `respond` or `deny` **stops routing for the turn**: the LLM fallback is not asked, a warning is logged, and the user gets the [fixed routing-miss reply](#when-nothing-matches) — whether or not the pack opted into running its default flow on a miss.
 </Aside>
+
+Earlier builds, including stable `1.1.41`, let a `respond` or `deny` fall through like `continue`, so the [LLM fallback](#llm-fallback) is still asked.
 
 ### Conversation ownership
 
@@ -228,7 +228,7 @@ Ownership is recorded per conversation (session id), scoped by tenant and team, 
 For each incoming message, the first step that produces a route wins:
 
 1. **Sticky owner** — a flow that owns the conversation and is still parked is resumed. Nothing below runs.
-2. **Fast2Flow** — the routing host scores the text with BM25 against the pack's intent index for the `<tenant>:<team>` scope. A usable `dispatch` becomes a card route or a flow route. (Pending: with greentic-start#661 a `respond` or `deny` ends routing here and the turn gets the fixed reply — see [Two target shapes](#two-target-shapes).)
+2. **Fast2Flow** — the routing host scores the text with BM25 against the pack's intent index for the `<tenant>:<team>` scope. A usable `dispatch` becomes a card route or a flow route. From `1.2.0-dev.36590458516`, a `respond` or `deny` ends routing here and the turn gets the fixed reply (see [Two target shapes](#two-target-shapes)).
 3. **LLM fallback** — only when the bundle's [`llm:` instance](#llm-fallback) has `fast2flow` enabled (the default once an `llm:` block exists). The model picks an exact target from the same index, or abstains; its pick is routed exactly like a Fast2Flow dispatch.
 4. **Otherwise** — see [When nothing matches](#when-nothing-matches).
 
@@ -240,8 +240,8 @@ When the pack declares `greentic.cap.fast2flow.v1`, the conversation is not owne
 
 A message with no text (for example a card submit) is not a miss: the default flow runs as usual. A conversation owned by a flow is never routed, so it can never miss.
 
-<Aside type="caution" title="Available from greentic-start (next dev build) — pending">
-With [greentic-start#661](https://github.com/greenticai/greentic-start/pull/661), a pack can instead run its **default flow** on a miss, with the original message unchanged, by also declaring `greentic.cap.fast2flow.on_miss.default_flow.v1` next to the Fast2Flow capability:
+<Aside type="note" title="Available from greentic-start 1.2.0-dev.36590458516 (dev line; not yet in a stable release)">
+From `1.2.0-dev.36590458516` ([greentic-start#661](https://github.com/greenticai/greentic-start/pull/661)), a pack can instead run its **default flow** on a miss, with the original message unchanged, by also declaring `greentic.cap.fast2flow.on_miss.default_flow.v1` next to the Fast2Flow capability:
 
 ```yaml title="pack.yaml"
 capabilities:
@@ -258,13 +258,13 @@ The default stays the fixed reply on purpose: card-menu packs rely on it so thei
 
 A **routing-host failure** (spawn error, non-zero exit, unparseable output) is logged at `warn` with the reason and is otherwise treated as a miss: an opted-in pack runs its default flow, any other pack gets the fixed reply. A `respond` or `deny` always gets the fixed reply, opt-in or not.
 
-Not in any released build yet.
+Stable `1.1.41` has neither this capability nor the failure handling: every miss there gets the fixed reply.
 </Aside>
 
 ### Route signal
 
-<Aside type="caution" title="Available from greentic-start (next dev build) — pending">
-With [greentic-start#661](https://github.com/greenticai/greentic-start/pull/661), every reply of a turn that Fast2Flow or the LLM fallback **routed** carries a `fast2flow` entry, in two places:
+<Aside type="note" title="Available from greentic-start 1.2.0-dev.36590458516 (dev line; not yet in a stable release)">
+From `1.2.0-dev.36590458516` ([greentic-start#661](https://github.com/greenticai/greentic-start/pull/661)), every reply of a turn that Fast2Flow or the LLM fallback **routed** carries a `fast2flow` entry, in two places:
 
 - `metadata["fast2flow"]` — a JSON **string**;
 - `extensions["channel_data"]["fast2flow"]` — a JSON **object**, merged into an existing `channel_data` object (left alone when `channel_data` is not an object). This is the copy a Direct Line (webchat) client sees, as `channelData.fast2flow`.
