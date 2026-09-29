@@ -443,8 +443,8 @@ What the host enforces before anything leaves the browser:
 - **Exactly that path shape.** Ids of unreserved characters (`A-Z a-z 0-9 . _ ~ -`),
   never `.` or `..`, no query string or fragment (`view_api_query_not_allowed`), and only
   `POST` (`view_api_method_not_allowed`).
-- **A rebuilt body.** The bridge forwards only `message` and `conversationId`, both of
-  which must be strings (`invalid_request` otherwise). Anything else your page puts in
+- **A rebuilt body.** The bridge forwards only `message`, `conversationId` and, from
+  1.2.520-dev, an optional `messageId`, all of which must be strings (`invalid_request` otherwise). Anything else your page puts in
   the body is dropped.
 
 What the server then checks:
@@ -456,7 +456,8 @@ What the server then checks:
 | Scope | The environment must belong to the viewer's **active team** and carry that unit; otherwise `404` (`env_unit_not_found` or the environment's own not-found). Switch team with [`navigate`](#navigating-the-host) first. |
 | Request body | At most 64 KiB; an oversized or unreadable body is `400 unit_chat_invalid`. |
 | Rate | 20 messages per minute per (viewer, environment, unit), shared by every Designer replica (*from 1.2.518-dev; earlier releases counted per process*) — `429 unit_chat_rate_limited`. Checked before anything else about the unit is looked up. The worker's own `429` maps to the same code. |
-| Timeout | 50 seconds (60 before 1.2.518-dev), kept under a default load-balancer idle timeout — `422 unit_chat_timeout`. |
+| Timeout | 50 seconds (60 before 1.2.518-dev), kept under a default load-balancer idle timeout — `422 unit_chat_timeout`. With a `messageId` (below) a slow turn answers `working` instead and keeps running for up to 5 minutes. |
+| `messageId` (optional, *from 1.2.520-dev*) | `^[A-Za-z0-9_-]{8,64}$`. Generate one per user message and send it on every retry and poll of that message. The first call starts the turn; if it is still running after 50 seconds the answer is `200 {status: "working", messageId}` and the turn keeps running for up to 5 minutes. Re-send the same body to ask again: the Designer answers the stored state (from any replica) and never sends the message to the worker twice. Replies are kept for 10 minutes. Polls have their own budget of 60 per minute per (viewer, unit) and do not spend the 20-message budget. A turn that timed out or could not reach the worker can be retried with the same id; one the worker answered, or that failed on the worker, replays its stored result. The same id with a different `message` is `400 unit_chat_invalid`. Without a `messageId` the route behaves as described above. |
 | Reply | Capped at 8000 characters. A turn that ran and failed is a `200` with `reply: null, status: "failed"`, never the engine's own error text. |
 
 Which units can answer:
