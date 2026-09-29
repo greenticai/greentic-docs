@@ -390,7 +390,7 @@ asset routes, not only views, and are checked before anything is written:
 | `content` size | 256 KiB (measured in bytes) | `413 extension_asset_too_large` |
 | `name` length | 256 bytes | `422 extension_asset_field_too_long` |
 | `assetType` length | 64 bytes | `422 extension_asset_field_too_long` |
-| Writes (`POST`, `PUT`, `DELETE`) | 120 per minute per (tenant, team, user, extension), a fixed window held in memory per Designer process | `429 extension_asset_rate_limited` |
+| Writes (`POST`, `PUT`, `DELETE`) | 120 per minute per (tenant, team, user, extension), a fixed window shared by every Designer replica (*from 1.2.518-dev; earlier releases counted per process*) | `429 extension_asset_rate_limited` |
 | Extensions per user per window | A user may write to at most 32 different extensions in one window; a 33rd is refused until the window resets. A process that is already tracking its maximum number of users (4096) refuses a new one the same way. | `429 extension_asset_rate_limited` |
 
 The id, size and length checks run before the rate count, so a refused write of that kind
@@ -455,8 +455,8 @@ What the server then checks:
 | `conversationId` | `^[A-Za-z0-9_-]{8,64}$`. Generate one per conversation and reuse it to keep context; a new id starts a fresh conversation. The server derives the worker-side session key from it together with the viewer's identity, so two viewers who send the same id do not share a conversation. |
 | Scope | The environment must belong to the viewer's **active team** and carry that unit; otherwise `404` (`env_unit_not_found` or the environment's own not-found). Switch team with [`navigate`](#navigating-the-host) first. |
 | Request body | At most 64 KiB; an oversized or unreadable body is `400 unit_chat_invalid`. |
-| Rate | 20 messages per minute per (viewer, environment, unit), in memory per Designer process — `429 unit_chat_rate_limited`. Checked before anything else about the unit is looked up. The worker's own `429` maps to the same code. |
-| Timeout | 60 seconds — `422 unit_chat_timeout`. |
+| Rate | 20 messages per minute per (viewer, environment, unit), shared by every Designer replica (*from 1.2.518-dev; earlier releases counted per process*) — `429 unit_chat_rate_limited`. Checked before anything else about the unit is looked up. The worker's own `429` maps to the same code. |
+| Timeout | 50 seconds (60 before 1.2.518-dev), kept under a default load-balancer idle timeout — `422 unit_chat_timeout`. |
 | Reply | Capped at 8000 characters. A turn that ran and failed is a `200` with `reply: null, status: "failed"`, never the engine's own error text. |
 
 Which units can answer:
@@ -467,7 +467,7 @@ Which units can answer:
 | env-canvas **local** | Yes, from the Designer replica that runs the local worker | The local worker on loopback. On a multi-replica Designer, a request served by a replica that doesn't supervise that worker is `409 unit_chat_other_replica` — retrying later may land on the right one. |
 | env-canvas **Kubernetes** | No | `422 unit_chat_unreachable` — a ClusterIP worker has no address the Designer can reach. |
 
-**The credential is the Designer's own, never a partner's.** Every unit gets a dedicated
+**The credential is the Designer's own, never a partner's.** Every unit on the Cloud Run lane gets a dedicated
 Worker Office credential, separate from the agent-to-agent credentials an operator issues
 to partners. It is created when the unit is deployed, never appears in the unit's
 credential panel, and cannot be revealed, renamed or revoked there. Chat uses it only
@@ -525,7 +525,7 @@ arrives as `http_<status>`, and a request that could not be sent as `network_err
 | `unit_chat_other_replica` | 409 | Chat, local lane: this Designer replica doesn't run that local worker. |
 | `unit_chat_unreachable` | 422 | Chat: Kubernetes or unknown lane, or the worker could not be reached. |
 | `unit_chat_failed` | 422 | Chat: the worker answered with something unusable. |
-| `unit_chat_timeout` | 422 | Chat: 60 seconds elapsed. |
+| `unit_chat_timeout` | 422 | Chat: 50 seconds elapsed (60 before 1.2.518-dev). |
 | `unit_chat_rate_limited` | 429 | Chat: too many messages to this unit this minute. |
 
 **On an older Designer**, a route it doesn't know shows up one of two ways: the host gate
