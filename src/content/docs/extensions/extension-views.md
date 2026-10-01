@@ -11,13 +11,24 @@ serves them and renders your entry in a sandboxed iframe. Use it for anything a 
 inspector's schema-driven form cannot express — a usage dashboard, a per-tenant settings
 screen, any real layout.
 
-<Aside type="note" title="`callApi` and `fetch` are Admin-only">
+<Aside type="note" title="`callApi` is live on the Designer; `fetch` is still Admin-only">
 Both hosts render a view, serve its assets, and run **`invokeTool`** for real — each
 routes the call through its own tool-dispatch path, RBAC-checked and audited.
 
-**`callApi`** and **`fetch`** are Admin-only. The Designer surface has no platform-API
-proxy and no outbound-fetch proxy, so a view that depends on either still renders there
-but cannot complete those two calls.
+**`callApi`** is live on both surfaces, but the two hosts grant different things. Admin
+grants whatever your declared allowlist and the calling user's RBAC intersect to. The
+Designer grants only `GET` against a fixed, host-owned list of routes — see
+[What `callApi` can reach on the Designer](#what-callapi-can-reach-on-the-designer) —
+plus, from the Designer release that includes the campus routes (1.2.511-dev or later), an
+ungated write door onto your own extension's stored assets: no `platformApi` declaration
+needed for that door, since the store already belongs to your extension. Newer Designer
+builds add exactly one more write — sending a chat message to a deployed worker — and that
+one **does** need a declared grant (see [Talking to a deployed
+worker](#talking-to-a-deployed-worker)). A path outside the GET list, the asset door and
+the chat door is refused with a stable `view_api_*` code, not a silent stub.
+
+**`fetch`** is still Admin-only. The Designer has no outbound-fetch proxy, so a view that
+depends on it still renders there but gets `not_implemented` back from that call.
 
 A view built on `greentic.ready`, `invokeTool`, `resize`, `navigate` and `toast` works
 the same on both surfaces.
@@ -159,12 +170,19 @@ A view asks for results, never for keys:
   to the host's secrets — the only one of the three that can touch a credential at all.
   Live and audited on both surfaces, under identical rules.
 - **`callApi`** reaches platform REST, but the effective grant is your declared
-  allowlist **intersected with the calling user's own RBAC**. Declaring
-  `/api/admin/tenants/*` does not let an ordinary tenant user read another tenant's
-  data — the bridge can only ever narrow what that person could already do by hand.
-  Admin only. On the Designer surface the call *resolves* with a placeholder payload
-  marked `stub: true` rather than rejecting — check for that flag if a Designer view
-  seems to be reading empty data.
+  allowlist **intersected with the host's own rules** — the exact intersection differs
+  per surface:
+  - **Admin** intersects your allowlist with **the calling user's own RBAC**. Declaring
+    `/api/admin/tenants/*` does not let an ordinary tenant user read another tenant's
+    data — the bridge can only ever narrow what that person could already do by hand.
+  - **Designer** intersects your allowlist with a **fixed, host-owned list of `GET`
+    routes** — see [What `callApi` can reach on the
+    Designer](#what-callapi-can-reach-on-the-designer). Declaring a route the host
+    doesn't also allow gets you `view_api_not_readable`, not a wider grant. Separately,
+    from the release that includes the campus routes (1.2.511-dev or later), the
+    Designer also opens a write door onto your own extension's stored assets — that one
+    needs no `platformApi` declaration at all — and newer builds a chat door to a
+    deployed worker, which does.
 - **`fetch`** is proxied server-side rather than issued by the frame, because an opaque
   origin's own `fetch()` sends `Origin: null`, which most third-party APIs reject at
   CORS. Admin only; on the Designer surface it rejects with `not_implemented`.
@@ -206,6 +224,331 @@ rather than opening the HTML file directly — a standalone file has nothing lis
 
 Never expect a secret to arrive in the browser. Ask the bridge for a result; the
 credential stays on the server.
+
+## What `callApi` can reach on the Designer
+
+The Designer does not consult your describe's `platformApi` list on its own — for a
+`GET` other than your own extension's asset store, it intersects your list with a
+**second, host-owned list** it never publishes for you to widen. Your declared route
+has to appear in *both* lists. No query string is accepted anywhere on the asset store,
+even on the collection `GET`.
+
+| Method | Path | Allowed query keys | Returns |
+| --- | --- | --- | --- |
+| `GET` | `/api/env-canvas/campus` | — | Every team the signed-in viewer belongs to, each with its env-canvas environments (name, deploy state, and `{nodes, wires}` composition). |
+| `GET` | `/api/env-canvas` | — | The caller's own env-canvas environments (name, channel/bundle/pack counts, deploy state) — no node/wire composition. |
+| `GET` | `/api/env-canvas/*` | — | One environment's full composition: `{nodes, wires, positions}`. |
+| `GET` | `/api/env-canvas/*/deployment` | — | The durable deploy row for that environment — status, endpoint, and step-by-step progress — or `null` if it has never been deployed. |
+| `GET` | `/api/env-canvas/*/units/*/metrics` | `window` (`1h`, `24h`, `7d`) | Time-series request counts and p50/p99 latency for one deployed unit. |
+| `GET` | `/api/audit/runs/summary` | `env`, `unit`, `flow`, `window`, `since`, `until`, `basis` | Per-flow run-status counts over the window — completed / dropped-off / technical-error / in-progress / agentic. No per-person or per-run data. |
+| `GET` | `/api/audit/runs/by-worker` | `env`, `unit`, `flow`, `window`, `since`, `until`, `basis` | The same status counts, broken out per worker and start date. |
+| `GET` — *the release that includes the campus routes (1.2.511-dev or later)* | `/api/env-canvas/campus/metrics` | — | Per member team, per environment, EVERY environment: `{idle, requests, p50, p99}` per unit when a read succeeds; `error: "no_signal"` (never deployed, a local-lane environment, or a target that isn't Cloud Run) or `error: "unavailable"` (the read itself failed — credential, admin, or Cloud Monitoring refusal) when it doesn't. No numbers this host doesn't already serve through the single-unit metrics route above. |
+| `GET` — *same release* | `/api/env-canvas/campus/links` | — | Which deployed units are **configured** to call which agents, read from each unit's own on-disk pack — labelled that way because it is configuration, never observed traffic. Each agent's `target` is a campus `{team, envId, unitId}` only when its route matches **exactly one** A2A-exposed unit's public address; zero or more than one match and `target` is `null`. |
+| `GET`/`POST` — *same release* | `/api/extensions/{own}/assets` | — (no query string at all) | List, or create, your own extension's stored assets. `{own}` is always the calling view's own extension id — the host decides it from the route, never the frame — and no `platformApi` declaration is needed for this door at all. See [Storing view state](#storing-view-state). |
+| `GET`/`PUT`/`DELETE` — *same release* | `/api/extensions/{own}/assets/{id}` | — | Read, replace, or delete one of your own extension's stored assets by id. Same `{own}` scoping and same no-declaration-needed rule as above. |
+| `POST` — *builds that include the unit-chat route* | `/api/env-canvas/*/units/*/chat` | — (no query string at all) | Send one message to a deployed worker and get its reply: `{reply, status, conversationId}`. **Needs** a `POST` grant for exactly this pattern. See [Talking to a deployed worker](#talking-to-a-deployed-worker). |
+| `GET` — *1.2.525-dev or later* | `/api/env-canvas/campus/digest` | `window` — exactly `24h` or `7d` | A "morning briefing" per member team and environment: `{units, busy, runs, errors, topUnit?}`. A count the host could not measure is `null`, never `0`. Also carries `viewerKey`, a pseudonymous per-viewer id (never an email) a view may use to key its own stored state, and English `highlights` that are a fallback only — build localized sentences from the counts. |
+| `GET` — *1.2.525-dev or later* | `/api/env-canvas/*/units/*/health` | — | Revision-scoped health evidence for one deployed unit: readiness, request counts by class, latency, and an `evidence` verdict. Server-cached for 60 seconds per unit, so polling it costs nothing extra. A local or Kubernetes unit answers `200` with `cannot_evaluate` evidence, not an error. |
+| `GET` — *1.2.525-dev or later* | `/api/env-canvas/*/units/*/runtime-logs` | — | The unit's recent log lines, the same ones its panel shows. **These can contain end-user message text** — treat them as the team's data and never send them anywhere outside the view. |
+| `GET` — *1.2.525-dev or later* | `/api/agent-graph/approvals` | `status` — exactly `pending` | The team's pending approvals. Resolved ones are not reachable from a view: a resolved row names the person who decided. |
+| `GET` — *1.2.525-dev or later* | `/api/audit/analytics/tokens` | `env`, `unit`, `flow`, `worker`, `channel`, `window`, `since`, `until` | Token totals per model over the window. No per-person filter. |
+| `POST` — *1.2.525-dev or later* | `/api/audit/cost-rates` | — (no query string at all) | Price a token estimate: send `{models: [...]}` (at most 50 ids), get `{costVisible, rates}`. A read that uses `POST` only so a model id containing a comma is not split. `costVisible: false` means the viewer may not see costs — show "unavailable", not zero. A model with no rate is left out; never price it at zero. **Needs** a `POST` grant for exactly this path. |
+| `GET` — *1.2.527-dev or later* | `/api/env-canvas/*/units/*/chat/history` | `limit` | The **viewer's own** chat history with that unit, oldest first: `{messages: [{role, text, conversationId, at}]}`. Nothing names another viewer. Kept 30 days, at most 200 messages per unit. |
+| `DELETE` — *1.2.527-dev or later* | `/api/env-canvas/*/units/*/chat/history` | — (no query string at all) | Forget the viewer's own history with that unit. A turn still running when you clear it does not write itself back. **Needs** a `DELETE` grant for exactly this pattern. |
+| `POST` — *1.2.527-dev or later* | `/api/env-canvas/campus/presence` | — (no query string at all) | Heartbeat about every 15 seconds with `{envId, unitId, hidden?}` (ids or `null`); the answer lists the **other** viewers in the viewer's own team seen in the last 45 seconds (`{id, name, initials, envId, unitId, at}`) plus `self: {hidden}`. `id` is a random per-visit id and `name` is never an email address. `hidden: true` is a lasting "hide me" the viewer chooses; omit `hidden` to keep whatever they chose. Limited to 30 heartbeats a minute per viewer. **Needs** a `POST` grant for exactly this path. |
+
+Two routes match the `/api/env-canvas/*` pattern by shape but are **never** proxied,
+whatever your describe declares: `/api/env-canvas/available-units` and
+`/api/env-canvas/capability-packs`. The host's list carves them out explicitly.
+
+### The grant is an intersection, not a request
+
+Declaring a route in `permissions.ui.platformApi` is necessary but not sufficient for
+any of the `GET` rows above the asset store — it only ever *narrows* what the table
+already allows. Ask for a route the host doesn't serve to views and you get
+`view_api_not_readable`, not a wider grant; ask for a query key the route doesn't
+accept and you get `view_api_query_not_allowed`. A view built to read campus metrics
+and links declares exactly those routes and nothing wider:
+
+```jsonc title="describe.json"
+"permissions": {
+  "ui": {
+    "platformApi": [
+      { "method": "GET", "path_pattern": "/api/env-canvas/campus" },
+      { "method": "GET", "path_pattern": "/api/env-canvas/campus/metrics" },
+      { "method": "GET", "path_pattern": "/api/env-canvas/campus/links" },
+      { "method": "GET", "path_pattern": "/api/env-canvas/*" },
+      { "method": "GET", "path_pattern": "/api/env-canvas/*/deployment" },
+      { "method": "GET", "path_pattern": "/api/env-canvas/*/units/*/metrics" },
+      { "method": "GET", "path_pattern": "/api/audit/runs/summary" },
+      { "method": "GET", "path_pattern": "/api/audit/runs/by-worker" }
+    ]
+  }
+}
+```
+
+The asset-store rows are absent from that list on purpose: the Designer decides access
+to your own extension's asset store purely from which extension is hosting the view, so
+declaring `GET`/`POST`/`PUT`/`DELETE` entries for `/api/extensions/<your-id>/assets...`
+changes nothing either way. Some published extensions declare them anyway for
+readability; it's harmless, just not load-bearing. The chat route is the opposite: it is
+absent from that list only because it is a separate decision — add
+`{ "method": "POST", "path_pattern": "/api/env-canvas/*/units/*/chat" }` if and only if
+your view talks to workers.
+
+The other write doors work the same way: `POST /api/audit/cost-rates`,
+`DELETE /api/env-canvas/*/units/*/chat/history` and
+`POST /api/env-canvas/campus/presence` each need their own grant for that exact method
+and pattern, and the host rebuilds each body from an allow-list, so a field it does not
+know is dropped rather than forwarded. Declare only the ones your view uses.
+
+### A minimal `describe.json` for a Designer view
+
+Everything a campus-style view needs, and nothing it doesn't:
+
+```jsonc title="describe.json"
+{
+  "runtime": {
+    "permissions": {
+      "network": [],
+      "secrets": [],
+      "callExtensionKinds": [],
+      "ui": {
+        "fetchHosts": [],
+        "platformApi": [
+          { "method": "GET",  "path_pattern": "/api/env-canvas/campus" },
+          { "method": "GET",  "path_pattern": "/api/env-canvas/campus/metrics" },
+          { "method": "GET",  "path_pattern": "/api/env-canvas/campus/links" },
+          { "method": "GET",  "path_pattern": "/api/env-canvas/*/units/*/metrics" },
+          { "method": "POST", "path_pattern": "/api/env-canvas/*/units/*/chat" }
+        ]
+      }
+    }
+  },
+  "contributions": {
+    "views": [{
+      "id": "office",
+      "surface": "designer",
+      "title_key": "view.office.label",
+      "title_fallback": "Worker Office",
+      "entry": "index.html",
+      "placement": { "slot": "designer.sidebar" },
+      "tools": []
+    }]
+  }
+}
+```
+
+The asset store needs no entry here. Drop the `POST` line if the view never chats with a
+worker — a grant you don't use is still one a reviewer has to reason about.
+
+## Navigating the host
+
+`greentic.navigate(to)` never takes a URL or a path — a view names a **destination**
+from a closed list, and the host resolves it to its own route:
+
+```js
+await greentic.navigate({ route: "env-canvas", envId: "…", unitId: "…" })
+await greentic.navigate({ route: "audit", envId: "…", unitId: "…", team: "…" })
+```
+
+- `route` is `"env-canvas"` or `"audit"`; anything else is ignored.
+- `envId` is required; `unitId` is optional and, when present, opens that unit's own
+  modal on the target canvas instead of the environment as a whole.
+- Both ids must match `^[A-Za-z0-9._~-]{1,128}$` — no `/`, `?`, `#` or `%`, so an id can
+  never reshape the path it's placed into.
+- `team` is optional and, when present, must be a valid team slug: lowercase letters,
+  digits and hyphens, 1–63 characters, never starting or ending with a hyphen. **A
+  malformed `team` refuses the WHOLE `navigate` call**, not just the team switch — so a
+  typo can never fall through to opening a same-named environment in the wrong team.
+  When a well-formed `team` names a team other than the one the viewer is currently
+  acting as, the host switches the active team first (the same membership-checked
+  `POST /api/teams/active` a team switcher uses) and only then navigates. **A refused
+  team switch — the viewer isn't a member — toasts the error and navigates nowhere.**
+- `navigate` only fires after a real user gesture (`navigator.userActivation.isActive`).
+  Calling it from your view's own load handler is silently ignored — the browsers that
+  support the check would otherwise let a view trap the Back button by re-navigating on
+  every mount.
+
+## Storing view state
+
+From the release that includes the campus routes (1.2.511-dev or later), a view may
+keep its own small amount of state across sessions through the write door in the
+`callApi` table above — building layouts, a chosen time window, whatever your view
+needs to remember.
+
+**Asset ids are minted by the server — never invent one.** `id` is the row's bare
+primary key across the whole store, not scoped per tenant or team, so a fixed literal
+id like `"my-view-state"` belongs to whichever tenant happens to create it first; every
+other tenant's write to that same id is silently refused (`404`, indistinguishable from
+"no such asset"). The pattern that works on every install:
+
+1. `GET /api/extensions/{own}/assets` on load. It returns every asset your extension
+   has stored for the caller's team, unfiltered — there is no query-string filtering
+   through this door, so if you keep more than one asset, tell them apart by
+   `assetType` or `name` client-side.
+2. Found your row already → remember its `id` and `PUT
+   /api/extensions/{own}/assets/{id}` to update it, sending `{ assetType, name, content
+   }`.
+3. Found nothing → `POST /api/extensions/{own}/assets` with `{ assetType, name, content
+   }` and **no `id` field** — the server mints one and hands it back in the response.
+   Remember that id for the next write.
+4. `DELETE /api/extensions/{own}/assets/{id}` removes a row you no longer need.
+
+Limits, as they stand in the Designer's code today — they apply to every caller of the
+asset routes, not only views, and are checked before anything is written:
+
+| Limit | Value | Refusal |
+| --- | --- | --- |
+| Body fields forwarded by the bridge | `assetType`, `name`, `content` — all three required by the server; `id`, timestamps and anything naming an extension are dropped | `invalid_request` if the body isn't a JSON object |
+| Extension id in the path | Unreserved characters (`A-Z a-z 0-9 . _ ~ -`), 1–128, not `.` or `..` — the same grammar the bridge uses | `400 extension_asset_bad_extension_id` |
+| `content` size | 256 KiB (measured in bytes) | `413 extension_asset_too_large` |
+| `name` length | 256 bytes | `422 extension_asset_field_too_long` |
+| `assetType` length | 64 bytes | `422 extension_asset_field_too_long` |
+| Writes (`POST`, `PUT`, `DELETE`) | 120 per minute per (tenant, team, user, extension), a fixed window shared by every Designer replica (*from 1.2.518-dev; earlier releases counted per process*) | `429 extension_asset_rate_limited` |
+| Extensions per user per window | A user may write to at most 32 different extensions in one window; a 33rd is refused until the window resets. A process that is already tracking its maximum number of users (4096) refuses a new one the same way. | `429 extension_asset_rate_limited` |
+
+The id, size and length checks run before the rate count, so a refused write of that kind
+does not use up your budget. Nothing is written to the database for any refused write.
+
+**How to react:** `extension_asset_bad_extension_id`, `extension_asset_too_large` and
+`extension_asset_field_too_long` are permanent. A retry would be refused again, so stop
+writing for the session and keep the state in memory. `extension_asset_rate_limited` is
+temporary: back off (the Worker Office view waits 30 seconds) and retry with the latest
+state. Debounce saves in the first place — one write every few seconds at most.
+
+Four more things worth knowing:
+
+- **It's team-shared, not per-person.** The store is keyed `(tenant, team,
+  extension_id, asset id)` — every member of the team who opens your view reads and
+  writes the same rows. Fine for shared state like "which floor is expanded"; wrong for
+  anything that should differ per viewer.
+- **`content` is opaque text.** The host never parses it — store whatever JSON (or
+  anything else) your view wants, serialized to a string, and parse it back yourself.
+- **Only your own extension's namespace.** `{own}` in every path is decided by the host
+  from which view is calling, never from anything the frame sends, so there's no way to
+  read or write another extension's assets even if you know its id.
+- **Degrade silently on older hosts.** A Designer that predates this release has no
+  asset door at all: a write is refused as an unrecognised method, and a `GET` falls
+  through to the ordinary read gate, which refuses it too — the assets routes aren't in
+  that allow-list either. Treat any of those refusals the same way you'd treat any
+  other: keep the state in memory for the session and don't surface an error for it.
+
+## Talking to a deployed worker
+
+Builds of the Designer that include the unit-chat route let a view send one message to a
+deployed env-canvas unit and read its reply — the "click a worker, ask it something"
+interaction. It is the only write a view can make outside its own asset store, and the
+bridge holds it to more than the read gate:
+
+```js
+const res = await greentic.callApi(
+  "POST",
+  `/api/env-canvas/${envId}/units/${unitId}/chat`,
+  { message: "What did you do today?", conversationId },
+)
+// res = { reply: "…" | null, status: "completed" | "input_required" | "working" | "failed", conversationId }
+```
+
+What the host enforces before anything leaves the browser:
+
+- **A declared grant.** Your extension must list `POST` for the pattern
+  `/api/env-canvas/*/units/*/chat` in `permissions.ui.platformApi`; otherwise
+  `view_api_not_granted`. The asset store is the only write that needs no grant.
+- **Exactly that path shape.** Ids of unreserved characters (`A-Z a-z 0-9 . _ ~ -`),
+  never `.` or `..`, no query string or fragment (`view_api_query_not_allowed`), and only
+  `POST` (`view_api_method_not_allowed`).
+- **A rebuilt body.** The bridge forwards only `message`, `conversationId` and, from
+  1.2.520-dev, an optional `messageId`, all of which must be strings (`invalid_request` otherwise). Anything else your page puts in
+  the body is dropped.
+
+What the server then checks:
+
+| Rule | Value in code |
+| --- | --- |
+| `message` | Trimmed, 1–4000 characters. |
+| `conversationId` | `^[A-Za-z0-9_-]{8,64}$`. Generate one per conversation and reuse it to keep context; a new id starts a fresh conversation. The server derives the worker-side session key from it together with the viewer's identity, so two viewers who send the same id do not share a conversation. |
+| Scope | The environment must belong to the viewer's **active team** and carry that unit; otherwise `404` (`env_unit_not_found` or the environment's own not-found). Switch team with [`navigate`](#navigating-the-host) first. |
+| Request body | At most 64 KiB; an oversized or unreadable body is `400 unit_chat_invalid`. |
+| Rate | 20 messages per minute per (viewer, environment, unit), shared by every Designer replica (*from 1.2.518-dev; earlier releases counted per process*) — `429 unit_chat_rate_limited`. Checked before anything else about the unit is looked up. The worker's own `429` maps to the same code. |
+| Timeout | 50 seconds (60 before 1.2.518-dev), kept under a default load-balancer idle timeout — `422 unit_chat_timeout`. With a `messageId` (below) a slow turn answers `working` instead and keeps running for up to 5 minutes. |
+| `messageId` (optional, *from 1.2.520-dev*) | `^[A-Za-z0-9_-]{8,64}$`. Generate one per user message and send it on every retry and poll of that message. The first call starts the turn; if it is still running after 50 seconds the answer is `200 {status: "working", messageId}` and the turn keeps running for up to 5 minutes. Re-send the same body to ask again: the Designer answers the stored state (from any replica) and never sends the message to the worker twice. Replies are kept for 10 minutes. Polls have their own budget of 60 per minute per (viewer, unit) and do not spend the 20-message budget. A turn that timed out or could not reach the worker can be retried with the same id; one the worker answered, or that failed on the worker, replays its stored result. The same id with a different `message` is `400 unit_chat_invalid`. Without a `messageId` the route behaves as described above. |
+| Reply | Capped at 8000 characters. A turn that ran and failed is a `200` with `reply: null, status: "failed"`, never the engine's own error text. |
+
+Which units can answer:
+
+| Lane | Works? | How |
+| --- | --- | --- |
+| env-canvas **Cloud Run** | Only when the unit has "Answer other AI agents" (A2A) switched on **and** has been redeployed since | The unit's own A2A endpoint, authenticated with the Designer's own Worker Office credential for that unit (see below). A unit without A2A deployed is `409 unit_chat_not_exposed`. |
+| env-canvas **local** | Yes, from the Designer replica that runs the local worker | The local worker on loopback. On a multi-replica Designer, a request served by a replica that doesn't supervise that worker is `409 unit_chat_other_replica` — retrying later may land on the right one. |
+| env-canvas **Kubernetes** | No | `422 unit_chat_unreachable` — a ClusterIP worker has no address the Designer can reach. |
+
+**The credential is the Designer's own, never a partner's.** Every unit on the Cloud Run lane gets a dedicated
+Worker Office credential, separate from the agent-to-agent credentials an operator issues
+to partners. It is created when the unit is deployed, never appears in the unit's
+credential panel, and cannot be revealed, renamed or revoked there. Chat uses it only
+after a deploy has shipped it to the running worker. Until then — a unit deployed before
+this feature, or one whose credential was just created — chat answers
+`409 unit_chat_no_credential`, and the fix is to redeploy the unit. The same code is
+returned if the worker refuses the credential. You never see or send this credential;
+the view only names the environment and unit.
+
+<Aside type="caution" title="Two things to design for">
+**Every message spends the worker's LLM budget.** The call runs as the signed-in viewer,
+but the tokens are the worker owner's. Send a message only from an explicit user action —
+never on load, on a timer, or to "warm up" a unit — and don't retry automatically on
+failure.
+
+**A reply is untrusted model output.** Render it as plain text (`textContent`, never
+`innerHTML`), don't follow links or run anything it contains, and don't feed it back into
+another call without the user seeing it first. The sandbox protects the host from your
+page; nothing protects your page from what a model says.
+</Aside>
+
+## Errors a view should expect
+
+Every refused or failed bridge call rejects with `{ code, message }`. The `code` is
+stable; the `message` is for logs, not for branching.
+
+**Refused by the host before any request** (the call never reached the server):
+
+| Code | Means |
+| --- | --- |
+| `view_api_invalid_path` | Not a plain `/api/...` path — traversal, percent-encoding, an empty or odd segment. |
+| `view_api_method_not_allowed` | A method the target doesn't accept from a view: anything but `GET` on the read list, a verb the asset door doesn't serve at that shape, anything but `POST` on the chat door. On an older Designer, **every** write gets this. |
+| `view_api_not_granted` | Your `permissions.ui.platformApi` doesn't declare this route (read list or chat). |
+| `view_api_not_readable` | You declared it, but the host doesn't serve that `GET` to views at all. |
+| `view_api_query_not_allowed` | A query key the route doesn't accept, or any query string on the asset or chat door. |
+| `view_api_not_own_extension` | An asset-store path naming an extension other than the one hosting the view. |
+| `invalid_request` | A write whose body isn't a JSON object, or a chat body without string `message` and `conversationId`. |
+| `not_implemented` | `greentic.fetch` on the Designer. |
+
+**Answered by the server** (the host forwards the server's code; a response with no code
+arrives as `http_<status>`, and a request that could not be sent as `network_error`):
+
+| Code | Status | Route |
+| --- | --- | --- |
+| `not_found` | 404 | Asset store: no such asset in your extension and team — or, on create/replace, an id that belongs to someone else. |
+| `extension_asset_bad_extension_id` | 400 | Asset store write: the path's extension id fails the grammar. Permanent. |
+| `extension_asset_too_large` | 413 | Asset store write: `content` over 256 KiB. Permanent for that content. |
+| `extension_asset_field_too_long` | 422 | Asset store write: `name` over 256 bytes or `assetType` over 64 bytes. Permanent for those values. |
+| `extension_asset_rate_limited` | 429 | Asset store write: over 120 writes per minute for this extension, or the per-user or per-process tracking cap is full. Back off and retry. |
+| `unit_chat_invalid` | 400 | Chat: bad `message` or `conversationId`, or a body over 64 KiB or unreadable. |
+| `env_unit_not_found` | 404 | Chat: the environment has no such unit (in the viewer's active team). |
+| `unit_chat_not_deployed` | 409 | Chat: no running deployment, or no route for that unit. |
+| `unit_chat_not_exposed` | 409 | Chat: Cloud Run unit without A2A exposure deployed. |
+| `unit_chat_no_credential` | 409 | Chat: the unit's Worker Office credential hasn't been shipped by a deploy yet (redeploy), or the worker refused it. |
+| `unit_chat_other_replica` | 409 | Chat, local lane: this Designer replica doesn't run that local worker. |
+| `unit_chat_unreachable` | 422 | Chat: Kubernetes or unknown lane, or the worker could not be reached. |
+| `unit_chat_failed` | 422 | Chat: the worker answered with something unusable. |
+| `unit_chat_timeout` | 422 | Chat: 50 seconds elapsed (60 before 1.2.518-dev). |
+| `unit_chat_rate_limited` | 429 | Chat: too many messages to this unit this minute. |
+
+**On an older Designer**, a route it doesn't know shows up one of two ways: the host gate
+doesn't list it yet (`view_api_not_readable`, or `view_api_method_not_allowed` for a
+write), or the host lists it and the server doesn't serve it (typically a `404`). Treat
+both as "this feature isn't here", hide the part of the UI that depends on it, and stop
+calling it for the session — don't surface an error, and don't retry in a loop.
 
 ## How the host serves and sizes your page
 
