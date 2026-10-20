@@ -101,7 +101,8 @@ If the tenant is invite-only, invite the user first. Otherwise sign-in ends with
 If some users have no `mail` attribute, set the tenant's identifier to `oid`+`tid`.
 Admin then identifies the person by their Entra object ID and tenant ID instead
 of by email, and takes the contact address from the first of `email`, `upn` and
-`preferred_username` that is present.
+`preferred_username` that is present. If none is present sign-in is refused
+with `email_claim_missing`.
 
 This setting has no field in the UI. Set `user_id_claim` to `oid_tid` through
 the tenant's OIDC client endpoint, using the same Client ID and scopes as before:
@@ -120,7 +121,7 @@ curl -X PUT "https://<your-admin-host>/api/admin/tenants/<tenant-id>/oidc-client
 <Aside type="note">
 The Designer still needs an email address to open a session. In `oid_tid` mode
 keep the `email` and `upn` optional claims from step 3. If no email address can
-be found for a user, the Designer refuses the session.
+be found for a user, sign-in is refused with `email_claim_missing`.
 </Aside>
 
 ## AD FS
@@ -138,8 +139,13 @@ keep the exact error and the Admin log lines.
   server that exists only on an internal network is not reachable from a cloud
   Admin. Publish it through Web Application Proxy or a reverse proxy, or run the
   Admin inside that network.
-- The AD FS TLS certificate must come from a CA that the Admin host trusts. A
-  self-signed certificate makes discovery fail.
+- The AD FS TLS certificate must come from a CA that the Admin trusts. Public
+  CAs work out of the box. For a private or internal CA, set the Admin
+  environment variable `GREENTIC_ADMIN_OIDC_EXTRA_CA_FILE` to the path of a PEM
+  file holding the CA certificate (Admin 1.2.63-dev or later). The file is read
+  once at startup, and a missing or invalid file stops the Admin from starting.
+  A self-signed server certificate without its CA in that file makes discovery
+  fail.
 
 ### 1. Register the application in AD FS
 
@@ -159,8 +165,7 @@ Active Directory attribute `E-Mail-Addresses` to the outgoing claim type
 `E-Mail Address`. Then decode a test ID token and confirm the claim is named
 exactly `email`.
 
-Without it the Designer refuses the session, because it has no email address
-for the user.
+Without it sign-in is refused with `email_claim_missing` and no user is created.
 
 ### 3. Configure the tenant in Admin
 
@@ -189,9 +194,10 @@ below quotes. Only `not_invited` is shown on screen.
 | The provider rejects the request before the login page, with `AADSTS50011` (Entra) or `invalid_request` / `MSIS...` (AD FS) | The redirect URI does not match exactly. Check scheme, host, path and trailing slash |
 | `AADSTS7000215` | The secret **Secret ID** was pasted instead of its **Value** |
 | `issuer mismatch`, or login fails after a discovery warning in the Admin log | The configured issuer is not identical to the `issuer` in the discovery document. For Entra this includes using `common` |
-| Sign-in succeeds at the provider but the Designer refuses the session | The ID token has no `email` claim. Add the optional claim (Entra) or the transform rule (AD FS) |
 | `not_invited` | The tenant is invite-only and the user was not invited |
 | `identity claim missing` | `user_id_claim` is `oid_tid` but the token has no `oid` or `tid`. Always the case with AD FS |
+| `idp_discovery_failed` | Admin could not load the provider's discovery document, or its `issuer` differs from the configured one. For tenants with an external provider Admin no longer falls back silently, so fix the issuer, reachability or certificate. The Admin log `warn` line shows the discovery URL and both issuers |
+| `email_claim_missing` | The ID token has no usable `email` claim. Add the optional claim (Entra) or the transform rule (AD FS), or use `oid_tid` on Entra |
 | `error sending request` in the Admin log | Admin cannot reach the provider, or does not trust its certificate |
 | `nonce mismatch` | The provider did not return the nonce, or a proxy altered the query string |
 
