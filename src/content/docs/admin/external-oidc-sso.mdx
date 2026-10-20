@@ -1,0 +1,205 @@
+---
+title: Sign-in with Microsoft Entra ID or AD FS
+description: Connect a tenant to Microsoft Entra ID (or AD FS over OIDC) so its users sign in to the Greentic Designer with their organisation account.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+A tenant can sign its users in with an external OpenID Connect (OIDC) identity
+provider. This page covers **Microsoft Entra ID** (formerly Azure AD) and
+**AD FS** (Active Directory Federation Services, for on-premises Active
+Directory). Both are configured the same way in Greentic Admin; only the
+provider side differs.
+
+<Aside type="note">
+This is the tenant **External OIDC** setting. It signs in **Designer users**.
+The tenant-manager passkey flow described in
+[Designer SSO Login](/admin/designer-sso-login/) is a different mechanism.
+</Aside>
+
+## What is supported
+
+| | Entra ID | AD FS |
+| --- | --- | --- |
+| Sign-in to the Designer (OIDC) | Supported | Supported through standard OIDC. Not yet tested against a real AD FS server |
+| User identifier | `email` (default) or Entra `oid` + `tid` | `email` only |
+| Directory sync and deactivation (SCIM, Microsoft Graph) | Supported | Not available. Users are created at first sign-in |
+| Group to team mapping | Not read from the token | Not read from the token |
+| SAML 2.0, LDAP, Kerberos | Not supported | Not supported |
+
+## Before you start
+
+- A Greentic tenant, and permission to edit its **SSO & users** tab.
+- The Admin must be reachable over **https** on a public domain. Microsoft only
+  allows `http` redirect URIs for `localhost`.
+- Your Admin **redirect URI**: `https://<your-admin-host>/oidc/callback`. The same
+  value is shown, read-only, in the External OIDC form.
+
+## Entra ID
+
+### 1. Register the application
+
+In the Azure portal open **Microsoft Entra ID → App registrations → New
+registration**.
+
+| Field | Value |
+| --- | --- |
+| Name | Any name, for example `greentic-designer-sso` |
+| Supported account types | **Single tenant only** |
+| Redirect URI | Platform **Web**, value `https://<your-admin-host>/oidc/callback`, exactly, with no trailing slash |
+
+<Aside type="caution">
+Use single tenant. A Greentic tenant has one configured issuer, so users from
+another Entra tenant are rejected with an issuer mismatch.
+</Aside>
+
+### 2. Create a client secret
+
+Open **Certificates & secrets → New client secret**. Copy the **Value** column
+immediately, because Azure shows it once. Do not copy the **Secret ID**; using it
+fails the token exchange with `AADSTS7000215`.
+
+### 3. Add the optional claims
+
+Open **Token configuration → Add optional claim**, choose token type **ID**, and
+add `email` and `upn`. Accept the prompt to turn on the Microsoft Graph email and
+profile permissions.
+
+Entra only sends the `email` claim when the user's `mail` attribute is filled.
+A user without a mailbox has no `mail`, so they get no `email` claim.
+
+### 4. Note the identifiers
+
+From the app's **Overview** page copy the **Application (client) ID** and the
+**Directory (tenant) ID**.
+
+### 5. Configure the tenant in Admin
+
+Open the tenant, then **SSO & users → External OIDC**, and fill in:
+
+| Field | Value |
+| --- | --- |
+| OIDC Issuer | `https://login.microsoftonline.com/<tenant-id>/v2.0` |
+| Client ID | The application (client) ID |
+| Client Secret | The secret **Value** from step 2 |
+| Scopes | `openid email profile` (default) |
+
+Save. The issuer must match the `issuer` field of the provider's discovery
+document exactly, so use your tenant ID and not `common` or `organizations`.
+
+### 6. Test
+
+Open `https://<your-designer-host>/t/<tenant-slug>` in a private window and
+choose the SSO button. After signing in at Microsoft you land back in the
+Designer, signed in.
+
+If the tenant is invite-only, invite the user first. Otherwise sign-in ends with
+`not_invited`.
+
+### Users who have no email address
+
+If some users have no `mail` attribute, set the tenant's identifier to `oid`+`tid`.
+Admin then identifies the person by their Entra object ID and tenant ID instead
+of by email, and takes the contact address from the first of `email`, `upn` and
+`preferred_username` that is present.
+
+This setting has no field in the UI. Set `user_id_claim` to `oid_tid` through
+the tenant's OIDC client endpoint, using the same Client ID and scopes as before:
+
+```bash
+curl -X PUT "https://<your-admin-host>/api/admin/tenants/<tenant-id>/oidc-client" \
+  -H "Authorization: Bearer <operator token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "client_id": "<client id>",
+        "scopes": "openid email profile",
+        "user_id_claim": "oid_tid"
+      }'
+```
+
+<Aside type="note">
+The Designer still needs an email address to open a session. In `oid_tid` mode
+keep the `email` and `upn` optional claims from step 3. A user for whom no email
+address can be found is refused.
+</Aside>
+
+## AD FS
+
+AD FS is treated as any generic OIDC provider. **Greentic has not yet tested this
+path against a real AD FS server**, so treat the first run as validation and
+keep the exact error and the Admin log lines.
+
+### Requirements
+
+- AD FS on Windows Server 2016 or later. Use 2019 or later: Admin always sends
+  PKCE, which AD FS 2016 RTM does not support.
+- Greentic Admin must reach the AD FS server for discovery, signing keys and the
+  token endpoint, and the user's browser must reach its login page. An AD FS
+  server that exists only on an internal network is not reachable from a cloud
+  Admin. Publish it through Web Application Proxy or a reverse proxy, or run the
+  Admin inside that network.
+- The AD FS TLS certificate must come from a CA that the Admin host trusts. A
+  self-signed certificate makes discovery fail.
+
+### 1. Register the application in AD FS
+
+In **AD FS Management → Application Groups → Add**, create an application with a
+**confidential** client and a shared secret.
+
+- Redirect URI: `https://<your-admin-host>/oidc/callback`, exactly.
+- Scopes: `openid`, `email`, `profile`.
+- Copy the **Client Identifier** and the generated **secret**; the secret is
+  shown once.
+
+### 2. Send an `email` claim
+
+AD FS does not send `email` by default. In the application's **Issuance
+Transform Rules** add a **Send LDAP Attributes as Claims** rule that maps the
+Active Directory attribute `E-Mail-Addresses` to the outgoing claim type
+`E-Mail Address`. Then decode a test ID token and confirm the claim is named
+exactly `email`.
+
+Without it the user is created with an empty email and the Designer refuses the
+session.
+
+### 3. Configure the tenant in Admin
+
+Use the same **External OIDC** form as for Entra:
+
+| Field | Value |
+| --- | --- |
+| OIDC Issuer | `https://<adfs-host>/adfs`. Copy the exact value of `issuer` from `https://<adfs-host>/adfs/.well-known/openid-configuration` |
+| Client ID | The Client Identifier |
+| Client Secret | The shared secret |
+| Scopes | `openid email profile` |
+
+Leave the user identifier at its default, `email`. Do not use `oid_tid` with AD
+FS: AD FS does not send `oid` or `tid`, and sign-in fails with
+`identity_claim_missing`.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| `Set this tenant's OIDC issuer before adding an OIDC client.` on save | Fixed in Admin 1.2.62-dev, which saves the issuer first. On an older Admin, save the issuer, then save again |
+| The provider rejects the request before the login page, with `AADSTS50011` (Entra) or `invalid_request` / `MSIS...` (AD FS) | The redirect URI does not match exactly. Check scheme, host, path and trailing slash |
+| `AADSTS7000215` | The secret **Secret ID** was pasted instead of its **Value** |
+| `issuer_mismatch`, or login fails after a discovery warning in the Admin log | The configured issuer is not identical to the `issuer` in the discovery document. For Entra this includes using `common` |
+| Sign-in succeeds at the provider but the Designer refuses the session | The ID token has no `email` claim. Add the optional claim (Entra) or the transform rule (AD FS) |
+| `not_invited` | The tenant is invite-only and the user was not invited |
+| `identity_claim_missing` | `user_id_claim` is `oid_tid` but the token has no `oid` or `tid`. Always the case with AD FS |
+| `error sending request` in the Admin log | Admin cannot reach the provider, or does not trust its certificate |
+| `nonce mismatch` | The provider did not return the nonce, or a proxy altered the query string |
+
+When reporting a failure, include the on-screen error code, the `warn` lines from
+the Admin log, and the ID token claims (without the signature).
+
+<Aside type="caution">
+Rotate the client secret after any test where it was displayed on screen or
+pasted into a chat or ticket.
+</Aside>
+
+## See also
+
+- [Designer SSO Login](/admin/designer-sso-login/) — the tenant-manager passkey flow
+- [Admin Access](/admin/admin-access/) — the Admin API

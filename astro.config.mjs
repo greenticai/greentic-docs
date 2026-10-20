@@ -165,6 +165,7 @@ export default defineConfig({
 						{ label: 'Tenant & Partnership Branding', slug: 'admin/tenant-branding' },
 						{ label: 'Admin Access', slug: 'admin/admin-access' },
 						{ label: 'Designer SSO Login', slug: 'admin/designer-sso-login' },
+						{ label: 'Entra ID & AD FS Sign-in', slug: 'admin/external-oidc-sso' },
 						{ label: 'Cloud Deploy Environments', slug: 'admin/cloud-deploy-environments' },
 						{ label: 'Google Cloud Credentials', slug: 'admin/cloud-credentials-gcp' },
 						{ label: 'AWS Credentials', slug: 'admin/cloud-credentials-aws' },
