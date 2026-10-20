@@ -23,7 +23,7 @@ The tenant-manager passkey flow described in
 | --- | --- | --- |
 | Sign-in to the Designer (OIDC) | Supported | Supported through standard OIDC. Not yet tested against a real AD FS server |
 | User identifier | `email` (default) or Entra `oid` + `tid` | `email` only |
-| Directory sync and deactivation (SCIM, Microsoft Graph) | Supported | Not available. Users are created at first sign-in |
+| Directory sync and deactivation | SCIM from Entra and the Microsoft Graph directory connector | Not available. AD FS cannot push SCIM and the Graph connector is Entra-only, so users are created at first sign-in |
 | Group to team mapping | Not read from the token | Not read from the token |
 | SAML 2.0, LDAP, Kerberos | Not supported | Not supported |
 
@@ -119,8 +119,8 @@ curl -X PUT "https://<your-admin-host>/api/admin/tenants/<tenant-id>/oidc-client
 
 <Aside type="note">
 The Designer still needs an email address to open a session. In `oid_tid` mode
-keep the `email` and `upn` optional claims from step 3. A user for whom no email
-address can be found is refused.
+keep the `email` and `upn` optional claims from step 3. If no email address can
+be found for a user, the Designer refuses the session.
 </Aside>
 
 ## AD FS
@@ -131,8 +131,8 @@ keep the exact error and the Admin log lines.
 
 ### Requirements
 
-- AD FS on Windows Server 2016 or later. Use 2019 or later: Admin always sends
-  PKCE, which AD FS 2016 RTM does not support.
+- AD FS on Windows Server 2019 or later. Admin always sends PKCE, and AD FS
+  supports PKCE from Windows Server 2019. Older versions are not covered here.
 - Greentic Admin must reach the AD FS server for discovery, signing keys and the
   token endpoint, and the user's browser must reach its login page. An AD FS
   server that exists only on an internal network is not reachable from a cloud
@@ -159,8 +159,8 @@ Active Directory attribute `E-Mail-Addresses` to the outgoing claim type
 `E-Mail Address`. Then decode a test ID token and confirm the claim is named
 exactly `email`.
 
-Without it the user is created with an empty email and the Designer refuses the
-session.
+Without it the Designer refuses the session, because it has no email address
+for the user.
 
 ### 3. Configure the tenant in Admin
 
@@ -175,19 +175,23 @@ Use the same **External OIDC** form as for Entra:
 
 Leave the user identifier at its default, `email`. Do not use `oid_tid` with AD
 FS: AD FS does not send `oid` or `tid`, and sign-in fails with
-`identity_claim_missing`.
+`identity claim missing` in the Admin log.
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
+In the Designer, a failed sign-in shows a generic `auth_failed` message. The
+specific reason is written to the Admin log as a `warn` line, which the table
+below quotes. Only `not_invited` is shown on screen.
+
+| Symptom or Admin log line | Likely cause |
 | --- | --- |
 | `Set this tenant's OIDC issuer before adding an OIDC client.` on save | Fixed in Admin 1.2.62-dev, which saves the issuer first. On an older Admin, save the issuer, then save again |
 | The provider rejects the request before the login page, with `AADSTS50011` (Entra) or `invalid_request` / `MSIS...` (AD FS) | The redirect URI does not match exactly. Check scheme, host, path and trailing slash |
 | `AADSTS7000215` | The secret **Secret ID** was pasted instead of its **Value** |
-| `issuer_mismatch`, or login fails after a discovery warning in the Admin log | The configured issuer is not identical to the `issuer` in the discovery document. For Entra this includes using `common` |
+| `issuer mismatch`, or login fails after a discovery warning in the Admin log | The configured issuer is not identical to the `issuer` in the discovery document. For Entra this includes using `common` |
 | Sign-in succeeds at the provider but the Designer refuses the session | The ID token has no `email` claim. Add the optional claim (Entra) or the transform rule (AD FS) |
 | `not_invited` | The tenant is invite-only and the user was not invited |
-| `identity_claim_missing` | `user_id_claim` is `oid_tid` but the token has no `oid` or `tid`. Always the case with AD FS |
+| `identity claim missing` | `user_id_claim` is `oid_tid` but the token has no `oid` or `tid`. Always the case with AD FS |
 | `error sending request` in the Admin log | Admin cannot reach the provider, or does not trust its certificate |
 | `nonce mismatch` | The provider did not return the nonce, or a proxy altered the query string |
 
