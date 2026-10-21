@@ -170,6 +170,7 @@ export default defineConfig({
 						{ label: 'Google Cloud Credentials', slug: 'admin/cloud-credentials-gcp' },
 						{ label: 'AWS Credentials', slug: 'admin/cloud-credentials-aws' },
 						{ label: 'Azure Credentials', slug: 'admin/cloud-credentials-azure' },
+						{ label: 'Model Deployments & Library', slug: 'admin/model-deployments' },
 						{ label: 'Per-Tenant LLM Providers', slug: 'admin/tenant-llm-providers' },
 						{ label: 'LLM Provider API Keys', slug: 'admin/llm-provider-keys' },
 						{ label: 'Credential Access Levels', slug: 'admin/credential-access-levels' },

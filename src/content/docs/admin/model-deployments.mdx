@@ -1,0 +1,139 @@
+---
+title: Model Deployments & Model Library
+description: Run an open-weights model (vLLM, Ollama, llama.cpp, SGLang, TGI or LMDeploy) in your own Kubernetes cluster from the admin console, upload the weights from the browser in an air gap, and offer it to tenants as an LLM provider.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Model Deployments & Model Library
+
+A platform admin can run an open-weights model inside the cluster Greentic
+already lives in, from **Models** in the admin console. When the model is
+healthy, the console registers it as an LLM provider, for every tenant or only
+the ones you pick. Nothing leaves your network: the admin never downloads
+anything, so the model image and its weights must already be somewhere the
+cluster can reach — or be uploaded through the **model library** described
+below.
+
+<Aside type="note">
+Only platform admins see **Models**. Tenants cannot deploy a model; they only
+consume the provider you register, and see it marked "managed" in their AI
+providers tab.
+</Aside>
+
+## Runtimes
+
+| Runtime | Weights | Needs a GPU | API key on the pod |
+| --- | --- | --- | --- |
+| vLLM | Hugging Face folder | yes | yes |
+| llama.cpp | a single `.gguf` file | no | yes |
+| Ollama | a model tag | optional | no |
+| SGLang | Hugging Face folder | yes | no |
+| TGI (Hugging Face Text Generation Inference) | Hugging Face folder | yes | yes |
+| LMDeploy | Hugging Face folder | yes | no |
+
+"No key" is deliberate. Where a server's only key option is a command-line
+flag, the console does not use it, because arguments are visible in `ps` and in
+`/proc`. Those pods are protected by a NetworkPolicy that admits only labelled
+clients and the namespaces you list.
+
+<Aside type="caution">
+vLLM, llama.cpp and Ollama have been run end to end. **SGLang, TGI and LMDeploy
+were added from the projects' documentation and have not yet been run against
+their real images.** Try one on a test model before relying on it. TGI has no
+served-model-name option, so Designer sends the weights path as the model name.
+</Aside>
+
+## Before you start
+
+1. **Let the admin reach the cluster.** With the Helm chart, set
+   `modelDeployments.enabled: true` and `modelDeployments.namespace` to a
+   namespace that already exists and is not the release namespace. This renders
+   a namespaced Role, with no wildcards. Alternatively paste a kubeconfig in
+   **Settings → Model cluster** (it is stored sealed and never shown again).
+2. **Have a GPU device plugin installed** for GPU models. The console only asks
+   for the resource named in Settings (default `nvidia.com/gpu`), capped by
+   **max GPUs**.
+3. **Pin images by digest.** The image reference must look like
+   `registry.local/vllm@sha256:…`. A tag alone is refused with
+   `image_not_pinned`.
+
+## Deploy a model
+
+1. Open **Models → New**.
+2. Pick the **runtime** first; it sets sensible defaults.
+3. Enter the digest-pinned image and the **served model name** — the name
+   Designer will send to the server.
+4. Choose where the weights come from: baked into the image, an existing
+   volume claim, or **From the model library**.
+5. Set replicas, GPUs, CPU and memory. **Extra arguments** are limited to an
+   allow-list per runtime; there is no free-form YAML. For llama.cpp, SGLang and
+   LMDeploy put each flag and its value on separate lines — `--flag=value` is
+   refused.
+6. Choose which LLM roles this model should serve, and whether it is
+   **shared** with every tenant or **restricted** to the tenants you grant.
+
+The status moves through *pending*, *running*, *stopped* and *failed*, and
+catches up within about 30 seconds. **Stop** scales to zero and keeps
+everything; **Start** brings it back; **Delete** removes the pods and the
+provider rows but never deletes storage. If the model owns roles, stop and
+delete name them first, because a Designer composer bound to such a role stops
+working until the model is back.
+
+## The model library (air-gapped weights)
+
+In an air gap there is no registry to pull weights from, and a 40 GB model
+cannot travel in an offline kit. **Models → Model library** uploads weights
+from your browser into a volume in the models namespace, and a deployment then
+picks the entry.
+
+Two formats are accepted:
+
+- a single **`.gguf`** file, for llama.cpp and Ollama;
+- one **`.tar`, `.tar.gz` or `.tgz`** archive holding a Hugging Face model
+  folder (safetensors plus `config.json`), for vLLM.
+
+**What you need**
+
+- `modelDeployments.enabled: true` in the Helm chart (it grants the Role the
+  upload uses).
+- A **loader image** in **Settings → Model cluster**: a small image with `sh`,
+  `dd`, `sha256sum` and `tar` — busybox or alpine is enough — already in a
+  registry the cluster can pull from. Until it is set, uploads are refused with
+  `loader_image_not_configured`.
+- A storage class that provisions `ReadWriteOnce` volumes (or a cluster
+  default).
+
+**How it behaves**
+
+1. **Upload model** asks for a name, the format, the file and, optionally, the
+   SHA-256 you expect. The console sends the file in 32 MiB pieces and shows
+   progress and speed. If the page reloads or the connection drops, the upload
+   resumes from the last byte the server confirmed.
+2. When the last piece arrives the entry becomes *verifying*. The cluster hashes
+   the file, compares it with your checksum, and for an archive checks every
+   path first — absolute paths, `..`, links and device files are refused — before
+   extracting it.
+3. The entry becomes *ready*. A failure leaves it *failed* with a fixed code
+   (for example `sha256_mismatch` or `archive_unsafe`) and keeps the volume so
+   you can see what happened; delete the entry to clear it.
+4. An upload left untouched for 24 hours is failed and its storage freed.
+
+<Aside type="caution">
+The volume is sized when the upload starts — the file plus 1 GiB for a `.gguf`,
+twice the archive plus 1 GiB for an archive — and a volume cannot shrink. Declare
+the size accurately; a generous guess is paid for until the entry is deleted.
+</Aside>
+
+An entry that a deployment uses cannot be deleted (`model_weights_in_use`).
+
+## Troubleshooting
+
+| Symptom | Cause |
+| --- | --- |
+| `loader_image_not_configured` | Set the loader image in **Settings → Model cluster**. |
+| `image_not_pinned` | Use a `@sha256:` reference, not a tag. |
+| `gpu_over_cap` | The GPU count is above **max GPUs** in Settings. |
+| `arg_not_allowed` | An extra argument is not on that runtime's allow-list, or uses `--flag=value` where a separate entry is required. |
+| `model_cluster_in_use` | The connection, namespace and kubeconfig are locked while any deployment exists. |
+| Status stays *pending* | The cluster could not schedule the pod. The **Events** tab on the deployment shows why (no GPU, no matching node, volume not bound). |
