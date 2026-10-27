@@ -1,0 +1,116 @@
+---
+title: Evaluating an Agentic Worker
+description: Write scenarios, run them against an agentic worker in the Designer, read the score, and gate a release on it
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Before you publish an [agentic worker](/concepts/agentic-workers/), you can measure how it
+behaves. In the Designer's AW composer you write **scenarios** (a user message plus what a good
+answer looks like), **run** them against the worker, and read a **score** with a history, so you
+can tell whether a later change made the worker better or worse.
+
+A run goes through the same path as **Test chat**, so you are scoring the worker you would see
+when you try it by hand.
+
+## Where to find it
+
+- The **Evaluate** tab in the AW composer.
+- A full-width page at `/aw-composer/<session>/evaluate` with **Scenarios** and **Results** tabs
+  and a summary strip.
+- **Evaluations** in the app navigation: one card per worker, so you can see which workers have
+  been scored and which have not.
+
+## Scenarios
+
+A scenario is a user message (or a short conversation) and a list of checks. There is no limit on
+the number of scenarios per worker. You can add them in several ways:
+
+| Source | What it does |
+| --- | --- |
+| Manual | Write the message and pick the checks yourself. |
+| AI-written | Ask the Designer to write scenarios from the worker's definition. You can steer them with your own instructions. One request writes at most 50. |
+| From a conversation | Turn a Test chat conversation into a scenario. Tools called in that conversation pre-fill the required tools. |
+| From knowledge | Draft questions from the worker's knowledge bases. |
+| Red-team pack | Add a ready-made set of adversarial scenarios. |
+| Import / export | Move scenarios between workers as a file. |
+
+### Checks
+
+- **No error** — the turn finished without an error.
+- **Tools** — tools that must be called, tools that must not be called, tool arguments, call
+  order, a call budget, regular expressions, and JSON schema checks on results.
+- **Guardrail** — an expected guardrail fired.
+- **Answer text** — phrases that must appear (any one, or all of them).
+- **AI judge** — grade the answer against criteria written in plain language. The judge can use
+  several votes and its own model, and checks that the answer is grounded in the retrieved
+  knowledge.
+
+Multi-turn scenarios and **mocked tools** (a tool that returns a fixed result instead of calling
+the real service) are supported, so a scenario does not need live credentials.
+
+<Aside type="note" title="Cost">
+Every run spends your workspace's LLM budget. The Run button states the cost as scenarios ×
+repeats model calls. A run that is interrupted starts again from the beginning, so its calls are
+paid again.
+</Aside>
+
+## Running
+
+- **Run** queues a run of all scenarios. Set **repeats** (up to 5) to run each scenario several
+  times; the score then also reports how consistently a scenario passes.
+- The **▶** button on a scenario runs only that one. This is a **partial run**: it is labelled
+  *Partial* in the history and is never used as a baseline, in the trend, or by a release gate.
+- Runs execute in the background. You can leave the page, **cancel** an active run, and come back.
+  Only one run per worker is active at a time.
+- A worker the Test chat lane cannot run (for example one missing a required runner) is reported
+  as **not testable**, with the reason. It is not reported as failed.
+
+## Reading the result
+
+The summary shows the overall pass rate, the rate per dimension, tokens, and latency (p50 and
+p95). Each scenario shows which checks passed and a trace of what the worker did.
+
+- **Baseline** — pin a finished run as the baseline. Later runs show the change against it.
+- **Compare** — put two runs side by side.
+- **Worker changed** — a banner appears when the worker's definition has changed since the run.
+- A run records a snapshot of the worker's configuration (model, tools, guardrails), so a score is
+  always tied to what was measured.
+
+## Quality gate and schedule
+
+In the evaluation settings you can turn on a **quality gate**. The required score is the baseline
+score minus a tolerance, so a change that makes the worker worse than its baseline is flagged.
+The gate can warn, or block, depending on its mode. You can also run evaluations on a **schedule**
+and trigger them through the API.
+
+In the Designer's local release pipeline, workers get an **evaluation**
+stage that looks for a finished, non-partial run on exactly the version being released, and queues
+one if there is none. A worker with no scenarios is *skipped*, never shown as passed.
+
+## API
+
+All routes are under the composer session and follow its write access:
+
+```text
+GET|POST   /api/aw-composer/{session}/eval/scenarios
+PATCH|DELETE /api/aw-composer/{session}/eval/scenarios/{id}
+POST       /api/aw-composer/{session}/eval/scenarios/auto-generate
+GET|POST   /api/aw-composer/{session}/eval/runs
+GET        /api/aw-composer/{session}/eval/runs/{run}
+POST       /api/aw-composer/{session}/eval/runs/{run}/cancel
+PUT        /api/aw-composer/{session}/eval/runs/{run}/baseline
+GET|PUT    /api/aw-composer/{session}/eval/settings
+GET        /api/aw-composer/{session}/eval/gate
+GET        /api/aw-composer/{session}/eval/compare?a=&b=
+```
+
+`POST .../eval/runs` accepts an optional `scenarioIds` list to run a subset (a partial run).
+
+## Limits to know about
+
+- Scenarios are not versioned. Two runs of the same worker version may have used different
+  scenarios.
+- Scores are only as good as the scenarios. A small or one-sided set gives a flattering result.
+- An AI judge is itself a model; use it with clear criteria, and prefer deterministic checks where
+  they are enough.
