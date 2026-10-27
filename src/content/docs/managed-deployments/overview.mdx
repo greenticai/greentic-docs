@@ -4,6 +4,7 @@ description: "How Greentic ships and runs your workloads for you: the Designer, 
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import Diagram from '../../../components/Diagram.astro';
 
 A **managed deployment** is a deployment you operate from the Designer instead of from a
 command line. You describe what should run, and Greentic builds it, ships it to the target you
@@ -28,13 +29,7 @@ environments can be driven with `gtc op`; see [Managing Environments](/operation
 
 ## The four parts
 
-```
- You ──▶ Designer ──▶ Admin console ──▶ Deployer ──▶ Runtime on your target
-         author,       tenants, teams,    ships a      runs the units and
-         deploy        approvals, release bundle to    answers your users
-                       catalogue,         the target
-                       rollouts, audit
-```
+<Diagram name="architecture" />
 
 - **The Designer** is where you build flows and agentic workers and where you deploy them. Its
   environment canvas shows each environment, its units and its channels, and drives every deploy.

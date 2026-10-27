@@ -4,6 +4,7 @@ description: How a deploy runs, how to ship only some units, and how staged roll
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import Diagram from '../../../components/Diagram.astro';
 
 ## Deploying
 
@@ -57,6 +58,8 @@ release up beside the old one and moves traffic across in steps, so a bad releas
 is serving only a small share of users.
 
 ### How it works
+
+<Diagram name="rollout" />
 
 1. **An admin starts the update** for an environment. The admin console signs one instruction per
    unit. The Designer will not act on an unsigned or tampered instruction.
