@@ -108,6 +108,7 @@ export default defineConfig({
 						{ label: 'Agent Knowledge (RAG)', slug: 'concepts/agent-knowledge' },
 						{ label: 'Knowledge Sources', slug: 'concepts/knowledge-sources' },
 						{ label: 'Evaluating an Agentic Worker', slug: 'concepts/agent-evaluation' },
+						{ label: 'Agentic Groups', slug: 'concepts/agentic-groups' },
 						{ label: 'Packs', slug: 'concepts/packs' },
 						{ label: 'Components', slug: 'concepts/components' },
 						{ label: 'Extensions', slug: 'concepts/extensions' },
