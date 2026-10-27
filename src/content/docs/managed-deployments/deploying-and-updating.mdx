@@ -1,0 +1,138 @@
+---
+title: Deploying and Updating
+description: How a deploy runs, how to ship only some units, and how staged rollouts, automatic rollback and release channels keep updates safe
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Diagram from '../../../components/Diagram.astro';
+
+## Deploying
+
+From the environment canvas, **Deploy** ships the environment to its target. You can ship all of
+it or only chosen units.
+
+| | Whole environment | Only some units |
+|---|---|---|
+| What is shipped | Every unit, the links and the channels | The units you choose |
+| What stays as it was | Nothing | Every other unit keeps running its current revision |
+| Targets | All | Kubernetes and Cloud Run |
+
+A unit-scoped deploy needs the units you leave out to be deployed already; otherwise it is
+refused with a message saying which unit has never been deployed. On Cloud Run, a unit that has drifted from
+what the Designer recorded (changed outside the Designer) also blocks a unit-scoped deploy until
+you deploy the whole environment.
+
+### The setup gate
+
+Before anything is built, the Designer asks what each unit still needs: settings, credentials, the
+messaging channel's own questions. It refuses the deploy and names the missing item rather than
+failing later. Some answers are filled in for you from what the workspace already knows, such as
+the tenant's sign-in issuer and brand, and a technical setting with a sensible default is applied
+without asking. Your own answer always wins over a default.
+
+A unit's answers belong to that unit. Typing a credential on one worker does not change another
+worker's.
+
+### One deploy at a time
+
+Only one deploy of an environment runs at once, even if several Designer replicas are serving it.
+A second request is refused with a clear message instead of queueing, because a deploy takes
+minutes.
+
+### Approval before deploy
+
+A workspace admin can switch on **deploy approval** for an environment. A deploy request is then
+recorded and sent to the approvals inbox, and nothing ships until an admin approves. The deploy runs
+under the approver's identity. See [Governance and Security](/managed-deployments/governance-and-security/).
+
+### Versions
+
+A flow or worker deployed from the canvas can get an automatic semantic version, so each deploy
+that carries a change saves a new version. See
+[Versions and Automatic Semver](/operations/versions-and-semver/).
+
+## Updating with a staged rollout
+
+An update does not have to replace what is running in one step. A **staged rollout** brings the new
+release up beside the old one and moves traffic across in steps, so a bad release is caught while it
+is serving only a small share of users.
+
+### How it works
+
+<Diagram name="rollout" />
+
+1. **An admin starts the update** for an environment. The admin console signs one instruction per
+   unit. The Designer will not act on an unsigned or tampered instruction.
+2. **The Designer checks it** before changing anything. It verifies the signature, expiry and
+   target, that the unit still runs the version the admin expected, that it has not drifted, that
+   the release is in the environment's channel, and that no irreversible data migration is in the way
+   of a rollback. A refused instruction changes nothing.
+3. **The new release is warmed up at 0% traffic**, beside the old one, which is kept.
+4. **Traffic moves in steps.** The default steps are 10%, 50% and 100%.
+5. **Each step soaks.** The Designer reads the new revision's health for a period (five minutes by
+   default) and continues only if the evidence is good.
+6. **The old revision is kept** at 0% after the update, as the rollback target.
+
+### Health and automatic rollback
+
+Health is judged from readiness and the server error rate. An error rate above the limit, or a
+revision that is not ready, is a breach. If the update was started with **automatic rollback**, a
+breach moves traffic back to the old revision and restores the unit's record. Without it, traffic is
+left where it is and an admin decides.
+
+An idle revision is never treated as healthy: no errors because nothing ran is not evidence. If
+health evidence is missing for the whole soak, the step waits for an admin to accept it, and when the
+instruction expires the update stops with traffic left as it is. An admin can then roll back.
+
+<Aside type="note">
+On Kubernetes, health is readiness only. There are no per-revision request counts, so every step above
+0% waits for an admin's manual acceptance.
+</Aside>
+
+### Rolling back
+
+An admin can sign a **rollback** at any time. If the previous revision is still available it is
+brought back by moving traffic, which is quick. Otherwise it is re-created from its recorded
+reference. A rollback is refused when it would cross a data migration that cannot be undone, and the
+message names the way forward instead.
+
+### Removing a unit
+
+A rollout can also **remove** a unit. The unit is retired through the deployer and then marked removed;
+its data is always kept. The unit stays on the canvas but later deploys skip it until someone
+re-enables it, or a later update restores it.
+
+### Updating the runtime itself
+
+A release can also move the **runtime image** a unit runs, with the same warm, steps and rollback
+flow, one unit at a time. On Kubernetes this needs a deployer that supports pinning the runtime.
+
+## Release channels
+
+An environment can follow a release channel, **stable** or **dev**, so that it only accepts releases
+you have promoted into it. This is the control that stops an experimental build reaching production.
+See [Release channels](/operations/environment-operations/#release-channels) for the screens and the
+exact checks.
+
+## Staying safe
+
+| Protection | What it does |
+|---|---|
+| Signed instructions | Only an instruction signed by your admin console, and verified against keys you pinned, starts an update. |
+| Fail closed | A signature, channel or baseline that cannot be checked is a refusal, never a guess. |
+| One at a time | An environment runs one rollout at a time, and a deploy is refused while one is in flight. |
+| Old revision kept | The previous revision stays available as the rollback target. |
+| Everything recorded | Every step is journalled before it is reported, so a restart resumes where it left off. |
+
+## Current limits
+
+- Staged rollouts were built and tested in code. They have not yet been run against a real Cloud Run
+  project or a real Kubernetes cluster.
+- The Local target does not support staged rollouts.
+- Advancing to the next traffic step is manual; it is not automatic yet.
+
+## Related pages
+
+- [Managed Deployments Overview](/managed-deployments/overview/)
+- [Environments and Targets](/managed-deployments/environments-and-targets/)
+- [Environment Operations in the Designer](/operations/environment-operations/)

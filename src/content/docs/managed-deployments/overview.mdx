@@ -1,0 +1,79 @@
+---
+title: Managed Deployments Overview
+description: "How Greentic ships and runs your workloads for you: the Designer, the admin console, the deployer and the runtime, and what each of them is responsible for"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Diagram from '../../../components/Diagram.astro';
+
+A **managed deployment** is a deployment you operate from the Designer instead of from a
+command line. You describe what should run, and Greentic builds it, ships it to the target you
+chose, starts it, watches it, and updates it in steps that can be undone. Your credentials stay
+inside Greentic's stores, and every change leaves a record.
+
+This section describes the solution end to end. If you prefer the command line, the same
+environments can be driven with `gtc op`; see [Managing Environments](/operations/environments/).
+
+## What you get
+
+| Capability | In one sentence |
+|---|---|
+| **A visual environment** | An environment is a canvas of units (your flows and agentic workers) linked to messaging channels. |
+| **One-click or scoped deploys** | Ship the whole environment, or only the units you changed. |
+| **Choice of target** | An environment targets your own machine, Kubernetes or Cloud Run. |
+| **Staged updates** | Roll a new release out in steps, watch its health, and roll back automatically or on demand. |
+| **Release channels** | Let an environment accept only releases you have promoted to its channel. |
+| **Approvals and audit** | Require approval before a deploy, and read who did what afterwards. |
+| **Secrets handled for you** | Credentials are asked once, stored sealed, and delivered to the workload without being written into a pack. |
+| **Air-gapped operation** | Run without internet access, importing releases offline. |
+
+## The four parts
+
+<Diagram name="architecture" />
+
+- **The Designer** is where you build flows and agentic workers and where you deploy them. Its
+  environment canvas shows each environment, its units and its channels, and drives every deploy.
+- **The admin console** is the control plane for a workspace. It holds tenants and teams,
+  cloud environments and their credentials, the release catalogue, release channels, the approvals
+  inbox, and signs the instructions that start a staged update.
+- **The deployer** (`greentic-deployer`) turns an environment description into running
+  infrastructure on a target. The Designer drives it for you; you can also run it yourself.
+- **The runtime** (`greentic-start`) is what actually runs your units on the target and answers
+  messages.
+
+<Aside type="note">
+A Designer can run on its own (standalone), without an admin console. Then there is no approvals
+inbox, release catalogue or channel; local and bundle-based deploys still work. See
+[Cloud Deploy Environments](/admin/cloud-deploy-environments/).
+</Aside>
+
+## How a deploy flows
+
+1. **Build.** The Designer packs each unit's flow or worker into a `.gtpack` and builds the
+   environment's bundle.
+2. **Check.** A setup gate asks for anything a unit still needs (settings and credentials) and
+   refuses the deploy, with a clear message, if something required is missing.
+3. **Ship.** The bundle is pushed to the registry for the target and the deployer applies it.
+4. **Verify.** On Kubernetes the Designer checks that the new worker became ready, and reverts
+   traffic to the previous revision if it did not.
+5. **Record.** The deploy is added to the unit's history and the audit log.
+
+[Deploying and Updating](/managed-deployments/deploying-and-updating/) walks through each step and
+how updates differ from first deploys.
+
+## Where to go next
+
+- [Environments and Targets](/managed-deployments/environments-and-targets/): what an environment is
+  and what each target can do.
+- [Deploying and Updating](/managed-deployments/deploying-and-updating/): whole and scoped deploys,
+  staged rollouts, rollback and release channels.
+- [Governance and Security](/managed-deployments/governance-and-security/): approvals, roles, audit,
+  secrets and air-gapped use.
+- [Environment Operations in the Designer](/operations/environment-operations/): export and import,
+  operator actions, audit log and release channel screens.
+
+## Current limits
+
+- The managed features were built and tested in code and automated tests. They have not yet been run
+  against a real Cloud Run project or Kubernetes cluster.
+- One worker is one running instance. More than one needs a shared state store that does not exist yet.

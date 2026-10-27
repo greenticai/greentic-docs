@@ -1,0 +1,102 @@
+---
+title: Governance and Security
+description: Who can do what in a managed deployment, how approvals and the audit log work, how secrets are handled, how workers are exposed to other systems, and how to run without internet access
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Who can do what
+
+| Role | Typical rights in a managed deployment |
+|---|---|
+| **Member** | Build and edit flows and workers, deploy where the workspace allows it, export an environment, see deploy history and the current release channel. |
+| **Workspace admin** | Everything a member can do, plus change an environment's release channel, switch deploy approval on or off, rotate the web chat key and cluster credential, read the audit log, and approve or reject deploys. |
+| **Platform operator** | Runs the admin console itself: configures cloud environments and credentials, controls which deploy targets a workspace may use, and manages the release catalogue. |
+
+Rights are decided by the admin console, not by the Designer. If the admin cannot be reached, the
+Designer fails open for ordinary reads so an outage does not lock people out, and fails closed for
+anything that decides what ships, such as a channel it cannot read or a signature it cannot verify.
+
+## Approvals
+
+A workspace admin can switch on **deploy approval** for an environment. From then on:
+
+1. A deploy request is recorded and appears in the approvals inbox. The deploy panel tells the
+   requester that approval is needed.
+2. Nothing ships until a workspace admin approves.
+3. On approval the deploy runs under the **approver's** identity, never the requester's. On rejection
+   nothing starts.
+4. The requester is notified of the decision either way.
+
+Approval gates the deploy request. Staged rollouts are authorised by the signed instruction described in
+[Deploying and Updating](/managed-deployments/deploying-and-updating/) instead.
+
+## Audit and history
+
+- **Audit log.** Workspace admins can read an environment's operator actions, newest first. It records
+  who did what and never stores a secret or a request body.
+- **Deploy history.** Any member can see what a unit ran before its latest deploy.
+- **Notifications.** A person is told when something happens while nobody is watching: a deploy
+  finishes or needs credentials, a worker stops unexpectedly, an approval is requested or decided.
+
+See [Environment Operations in the Designer](/operations/environment-operations/) for the screens.
+
+## Secrets
+
+Credentials follow one path so they are never written where they should not be.
+
+1. **Asked once.** The setup gate asks for what a unit needs, and the answer belongs to that unit.
+2. **Stored sealed.** Typed secrets are encrypted in the Designer's database. They are never written
+   into a pack, so an exported or published pack carries only the names of the secrets it needs.
+3. **Delivered at deploy.** Right before the deployer ships the environment, the Designer places the
+   values in the environment's own store, which the target delivers to the workload.
+4. **Optionally mirrored.** A workspace can switch on **Load secrets from the workspace admin** for a
+   Cloud Run environment. The values are then kept in the admin console, encrypted, and the workload
+   fetches them at start. This removes the size limit of the environment store, at the cost of
+   the workload needing the admin console to be reachable when it starts.
+
+Credentials for a model, tool server or other agent that a worker uses are staged the same way. A
+change to a credential takes effect on the next deploy.
+
+<Aside type="caution">
+A secret value is revealed only to someone who is allowed to reveal it. If you replace an access
+token, the old one keeps working for a grace period that starts when the next deploy ships the new one.
+</Aside>
+
+## Exposing a worker to other systems
+
+A deployed worker can be offered to callers outside your workspace, as an agent other agents can ask or
+as a tool server. This is off until you switch it on for the unit.
+
+- **Private by default.** A private unit accepts only callers that present a credential or sign in
+  through your workspace's identity provider. Whether a unit can be made **public** at all is decided by
+  your workspace admin.
+- **Credentials per caller.** Each caller gets its own named credential, so you can revoke one without
+  affecting the others. Replacing a credential keeps the old one valid for a grace period.
+- **Every change is audited,** and changes take effect on the next deploy.
+
+## Running without internet access
+
+The Designer, admin console and runtime can run in a network with no outbound internet access.
+
+- **Releases arrive offline.** The local admin imports a release from an offline package. The
+  Designer then finds it in the release catalogue like any other and can deploy or roll out to it.
+- **A local release pipeline** runs validation, checks, the build, tests, evaluation and a human
+  approval inside the Designer before a deploy, with no GitHub required.
+- **Kubernetes works offline; Cloud Run does not**, because it needs a route to Google.
+- **Binaries can be side-loaded** when the runtime cannot download its own updates.
+
+Every outbound path of the product, and which ones fail open, is recorded in the product's
+air-gapped contract; ask your Greentic contact for it.
+
+## Current limits
+
+- Only a deploy is gated by approval, not a staged rollout.
+- Some actions are not yet in the audit log, such as the individual steps of a rollout.
+- Roles are per workspace. There are no per-environment access levels or a separate approver role yet.
+
+## Related pages
+
+- [Managed Deployments Overview](/managed-deployments/overview/)
+- [Deploying and Updating](/managed-deployments/deploying-and-updating/)
+- [Tenants & Teams](/operations/tenants-and-teams/)

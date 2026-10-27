@@ -4,6 +4,7 @@ description: Export and import an environment, run operator actions, read the au
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import Diagram from '../../../components/Diagram.astro';
 
 The environment canvas in the Designer is where you deploy and look after an environment. This
 page covers the operator tools around a deploy: moving an environment between workspaces, running
@@ -88,6 +89,8 @@ and promotion only moves forward: a channel never loses a release.
 
 An environment follows **one** channel, or none.
 
+<Diagram name="channel-model" />
+
 | Setting | What it means |
 |---|---|
 | **Stable** or **Dev** | The environment is *enforced*. An update is accepted only if its release is in that channel. |
@@ -115,6 +118,8 @@ with the channel included. Before anything changes, the Designer checks three th
 1. the environment follows the channel the update was signed for;
 2. the release is in that channel;
 3. the channel could be read.
+
+<Diagram name="update-check" />
 
 If any of the three fails, the update is refused with `release_not_in_channel` and nothing is
 changed. A refusal is recorded but does not block a later valid update. If the Designer cannot read
