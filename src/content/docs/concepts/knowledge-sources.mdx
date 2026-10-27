@@ -1,0 +1,161 @@
+---
+title: Knowledge Sources
+description: Keep a knowledge base filled automatically from S3, Google Drive, OneDrive, SharePoint, PostgreSQL, MySQL and MongoDB, on a schedule, with malware scanning, OCR and PII checks
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A **knowledge source** keeps a [knowledge base](/concepts/agent-knowledge/) filled from the place
+your documents and data already live, without uploading them by hand. You connect a base to a
+system once, choose how often to refresh it, and Designer reads new and changed items on that
+schedule.
+
+A source belongs to one knowledge base. A base can have any number of sources, and you can mix
+them with files you upload yourself.
+
+## Add a source
+
+1. Open **Knowledge**, then open a base and choose the **Sources** tab.
+2. Choose **Add source**. A dialog opens with three steps:
+   - **Connection** — a name, the system to connect to, and its access details. Use **Test
+     connection** to check them before you go on.
+   - **Schedule** — how often to run, and the time zone. *Manual only* means the source runs only
+     when you press **Run now**. Common schedules (hourly, daily, weekly) are one click; a custom
+     schedule shows the next three run times as you type it.
+   - **Safety and processing** — malware scan, personal-data check and text recognition (see
+     [below](#safety-and-processing)).
+3. On the last step choose **Save**.
+
+When you create a **new knowledge base**, the dialog has two steps: first create the base, then
+upload files and add as many sources as you like.
+
+Opening an existing source uses the same dialog, and every step is available at once, so you can
+jump straight to the one you want to change.
+
+<Aside type="caution" title="Changing where a source points removes its saved secrets">
+Saved passwords and keys are sealed for the destination the source was set up with. If you
+change its connection settings (for example the bucket or the host), the saved secrets are
+removed and you must enter them again. This stops an edit from sending an old credential to a
+different server.
+</Aside>
+
+## Connectors
+
+| Connector | What it reads | Main settings |
+|-----------|---------------|---------------|
+| **Amazon S3 / S3-compatible** | `pdf`, `xlsx`, `csv`, `txt` and `md` objects in a bucket | Bucket, region (default `us-east-1`), prefix, custom endpoint (MinIO, R2 and similar), path-style addressing; secrets: access key id, secret access key, optional session token |
+| **Google Drive** | Files in a folder and its sub-folders. Google Docs become text, Sheets become CSV | Folder id; secrets: OAuth client id, client secret, refresh token (`drive.readonly`) |
+| **Microsoft OneDrive** | Files in a folder and its sub-folders | Tenant, drive id (empty means your own drive), folder path; secrets: client id, client secret, refresh token (`Files.Read.All`, `offline_access`) |
+| **Microsoft SharePoint** | Files in a site's document library and its sub-folders | Tenant, site address, document library, folder path; secrets as for OneDrive, with `Sites.Read.All` |
+| **PostgreSQL**, **MySQL** | Tables or `SELECT` queries, one CSV document each | Host, port, database, user, password, TLS mode, and the list of tables and queries |
+| **MongoDB** | Collections, one CSV document each | Same connection settings, TLS, authentication database, collections (optionally with a filter and projection) and a maximum number of documents |
+
+Things to know:
+
+- Only `pdf`, `xlsx`, `csv`, `txt` and `md` are stored. Other files in the source are counted as
+  *skipped*. Images are accepted only to be turned into text by OCR.
+- An item over **10 MiB** is skipped.
+- Cloud drives use a pasted refresh token. There is no sign-in screen in this version.
+- Database connectors are **read-only**: one query per item, at most **50,000 rows**, a
+  30-second time limit. A free-text query must start with `SELECT` or `WITH`. Even so, give the
+  connector an account that can only read.
+- Servers on loopback, link-local and private-network addresses are refused on purpose.
+- Anything an [extension](#connectors-from-extensions) offers also appears in the list.
+
+## What happens in a run
+
+A run lists what is in the source, compares it with what it read last time, and reads only what
+changed.
+
+- A **new** item is stored and added to the base.
+- A **changed** item replaces its earlier document. The old document is deleted only if this
+  source created it and no other base uses it.
+- An **unchanged** item is neither read nor processed again. Items with no change marker from the
+  remote system are read on every run.
+- An item that **disappeared** from the source is removed from the base — but only when the run
+  listed the whole source. A run that could not finish listing, or was cut off, deletes nothing.
+  Documents you uploaded yourself are never touched.
+
+A run reads up to **2,000 items**. Each run records how many items it found, added, updated,
+left unchanged, removed, skipped and failed, plus short notes, in the source's run history.
+
+Documents change the base; if it has already been prepared for search, the usual automatic
+re-sync picks up the change. Sources never call the embedding provider themselves.
+
+### Schedules
+
+- Schedules use five-field cron or one of the presets, in the time zone you choose.
+- The minimum interval is **5 minutes**.
+- If a scheduled time is missed (for example during a restart) the source runs **once**, not once
+  per missed time.
+- A scheduled run acts as the person who turned the schedule on, and checks first that they can
+  still edit the base. If not, the run fails and reads nothing.
+- Only one run of a source can be active at a time. **Run now** while one is running answers that
+  a run is in progress.
+
+## Safety and processing
+
+Every item passes these checks, in this order, before it is stored:
+
+1. **Malware scan (ClamAV).** The default, whenever a scanner is configured, is *Required*. The
+   scan runs on the original file. An item that cannot be scanned — scanner missing, unreachable,
+   too slow, or any answer other than clean — is **not stored** and is counted as failed. An
+   infected item is failed with the signature name, and is not tried again until it changes.
+2. **Text recognition (OCR).** Turns scanned PDFs (those with no text layer) and images
+   (`png`, `jpg`, `jpeg`, `tif`, `tiff`) into text, stored as `<name>.txt`. Set the languages as
+   Tesseract codes joined with `+`, for example `eng+ind`; the default is English. Up to 50 pages
+   are read per document. If the OCR tools are not installed on the host the item is skipped, with
+   a note naming the missing tool.
+3. **Personal data (PII).** *Off*, *Flag*, *Redact* or *Block*.
+   - *Flag* stores the item and notes how many of each kind were found. Values are never written
+     to notes.
+   - *Redact* stores the text with detected personal data replaced.
+   - *Block* does not store an item that contains any.
+   - *Redact* and *Block* need a PII extension installed. Without one the item is **failed**,
+     never stored unchecked. With *Flag* the item is stored and a note says the check could not
+     run.
+
+These checks apply to source runs, **not** to files you upload by hand. The Sources dialog shows
+only the options the host can actually run: for example the PII options are greyed out until a PII
+extension is installed.
+
+<Aside type="note" title="For the administrator of a self-hosted Designer">
+Set `GREENTIC_CLAMAV_ADDR` to the `host:port` of a `clamd` daemon (optionally
+`GREENTIC_CLAMAV_TIMEOUT_SECS`, default 30) to turn the malware scan on. The Designer image
+includes Tesseract (English and Indonesian) and `pdftoppm`; set `GREENTIC_TESSERACT_BIN` or
+`GREENTIC_PDFTOPPM_BIN` only if you run your own binaries. A scanner outage fails items closed
+rather than letting them through, so monitor `clamd` like any other dependency.
+</Aside>
+
+## Secrets and access
+
+- Passwords, keys and tokens are **sealed** when saved and are never shown again. Leaving a secret
+  field empty when editing keeps the saved value; the remove control deletes it.
+- Error messages and notes never contain a credential or the content of a document.
+- Testing a connection is limited to 10 times a minute per person.
+- Anyone who can edit the knowledge base can manage its sources. A workspace administrator can
+  turn the whole Knowledge library off, which also hides this tab.
+
+## Connectors from extensions
+
+An [extension](/extensions/extension-tools/) can add its own connector by offering the capability
+`cap://knowledge/connector`. It exposes four tools — `knowledge_connector_describe`,
+`knowledge_connector_test`, `knowledge_connector_list` and `knowledge_connector_fetch` — and the
+Sources form is drawn from the field list the extension describes, so no change to Designer is
+needed. Platform refusals are returned as values, `{ "ok": false, "error": { "code": … } }`, and
+only the code is shown to the operator. The connector is named `ext:<extension id>:<name>`, so an
+extension can never pose as a built-in one.
+
+Personal-data detection works the same way, through `cap://knowledge/pii` and two tools,
+`knowledge_pii_analyze` and `knowledge_pii_redact`. The Presidio-based extension is a separate
+package; Designer itself contains no PII engine, so the rules can change without a Designer
+release.
+
+The full contracts are in the Designer repository:
+`docs/knowledge-connector-contract-v1.md` and `docs/knowledge-pii-contract-v1.md`.
+
+<Aside type="caution" title="New feature">
+Knowledge sources are new. The built-in connectors are covered by automated tests, but your
+first connection to a real S3 bucket, drive or database may show a setting the tests could not.
+Use **Test connection** first, start with *Manual only*, and report anything unexpected.
+</Aside>
