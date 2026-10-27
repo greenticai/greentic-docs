@@ -15,19 +15,40 @@ them with files you upload yourself.
 
 ## Add a source
 
-1. Open **Knowledge**, then open a base and choose the **Sources** tab.
-2. Choose **Add source**. A dialog opens with three steps:
-   - **Connection** — a name, the system to connect to, and its access details. Use **Test
-     connection** to check them before you go on.
-   - **Schedule** — how often to run, and the time zone. *Manual only* means the source runs only
-     when you press **Run now**. Common schedules (hourly, daily, weekly) are one click; a custom
-     schedule shows the next three run times as you type it.
-   - **Safety and processing** — malware scan, personal-data check and text recognition (see
-     [below](#safety-and-processing)).
+1. Open **Knowledge**, then open a base and choose the **Sources** tab. Each source shows its
+   status, schedule, last run and next run, with **Run now**, **Edit**, **Delete** and a run
+   history.
+
+   ![The Sources tab of a knowledge base, showing one source with its status, schedule, last and next run, and the Run now, Edit and Delete buttons](/images/knowledge-sources-list.png)
+
+2. Choose **Add source**. A dialog opens with three steps, shown along its top:
+
+   **Connection** — a name, the system to connect to, and its access details. Use **Test
+   connection** to check them before you go on; a successful test lists a few items it found.
+
+   ![The Connection step of the Add source dialog for Amazon S3, with the bucket, region, prefix and key fields filled in and a successful connection test listing three files](/images/knowledge-sources-step-connection.png)
+
+   **Schedule** — how often to run, and the time zone. *Manual only* means the source runs only
+   when you press **Run now**. Common schedules (hourly, daily, weekly) are one click; a custom
+   schedule shows the next three run times as you type it.
+
+   ![The Schedule step set to every day at 09:00 in the Asia/Jakarta time zone, with the next three run times listed](/images/knowledge-sources-step-schedule.png)
+
+   **Safety and processing** — malware scan, personal-data check and text recognition (see
+   [below](#safety-and-processing)).
+
+   ![The Safety and processing step, with malware scan set to Required, personal-data checks off, and the OCR switch](/images/knowledge-sources-step-safety.png)
+
 3. On the last step choose **Save**.
 
-When you create a **new knowledge base**, the dialog has two steps: first create the base, then
-upload files and add as many sources as you like.
+When you create a **new knowledge base**, the dialog has two steps. First name the base and
+choose **Create base**:
+
+![The first step of the New knowledge base dialog, with a name, an optional description and the search model credential](/images/knowledge-new-base-step-1.png)
+
+Then upload files and connect sources — add as many as you like, then choose **Done**:
+
+![The second step of the New knowledge base dialog, with a file drop area and a Connect sources section with an Add source button](/images/knowledge-new-base-step-2.png)
 
 Opening an existing source uses the same dialog, and every step is available at once, so you can
 jump straight to the one you want to change.
