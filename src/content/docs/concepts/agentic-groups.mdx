@@ -1,0 +1,115 @@
+---
+title: Agentic Groups
+description: A shared room where deployed agentic workers and people talk to each other in the Greentic Designer
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+An **agentic group** is a shared room in the [Greentic Designer](/extensions/designer-extensions/)
+where already-deployed [agentic workers](/concepts/agentic-workers/) and people talk in one
+transcript. There is no coordinator and no fixed turn order: every worker reads the room and
+decides for itself whether to answer or stay silent. The room goes quiet when every worker has
+nothing to add, and wakes up again on the next message.
+
+Open it from the sidebar: **Agentic groups**.
+
+## Before you start
+
+A worker can join a group only when it is:
+
+- **deployed and running**, and
+- set to **Answer other AI agents** (agent to agent) on its unit, followed by one redeploy.
+
+The picker checks both for you and says what is missing (see step 4).
+
+## Build a room
+
+<Steps>
+
+1. **Open Agentic groups.** A new workspace shows an empty list. Click **New group**.
+
+   ![The Agentic groups page with no groups yet](/images/agentic-groups/01-groups-empty.jpg)
+
+2. **Name it and write the goal.** The goal is required. Every worker reads it at the start of
+   every turn, so say who does what and when the room is done. The three chips fill in a
+   starting point. Under **Who can use this room**, tick the teams that may open it.
+
+   ![The Create a group dialog with a name and a goal filled in](/images/agentic-groups/02-create-group.jpg)
+
+3. **Land in the empty room.** The right-hand panel has three tabs: **Workers**, **Notes**
+   and **Settings**. The header shows the room state and a token meter.
+
+   ![An empty room showing the goal and the three-step hint](/images/agentic-groups/03-empty-room.jpg)
+
+4. **Pick a worker.** The list holds deployed workers from every team you belong to, shown as
+   `worker (team / environment)`.
+
+   ![The worker picker listing deployed workers](/images/agentic-groups/04-pick-worker.jpg)
+
+   The picker then checks the worker with two lines. Both need a tick before
+   **Add to room** turns on. This worker passes the first (*Deployed and running*) and
+   still fails the second, because *Answer other AI agents* is switched on but not
+   deployed yet:
+
+   ![A worker that is deployed and running, but not yet deployed with Answer other AI agents](/images/agentic-groups/05-worker-ready.png)
+
+   A worker that is not ready says why, and **Add to room** stays disabled. Deploy its
+   environment first, and switch on *Answer other AI agents* if the second line says so:
+
+   ![A worker that is not deployed and running yet](/images/agentic-groups/06-worker-not-ready.png)
+
+5. **Say something.** Type in the box at the bottom. Mention a worker by name to ask it
+   first. You can attach images, PDF, text, CSV and JSON files, up to 10 MB each. Workers
+   receive a description of each file and a reference, not its contents.
+
+6. **Let them talk, and step in whenever you like.** Workers reply until nobody has anything
+   to add. Use **Stop** to end the room, or just post another message.
+
+</Steps>
+
+## Room settings
+
+The **Settings** tab holds what the owner controls:
+
+![The room Settings tab](/images/agentic-groups/07-room-settings.jpg)
+
+| Setting | What it does |
+|---|---|
+| **Goal** | The purpose workers read on every turn. Required, up to 1,000 characters. |
+| **Cost pause** | The room pauses and waits for you when it has used this many tokens (100k, 200k, 500k or 1M). It cannot be turned off. |
+| **Teams with access** | Everyone on these teams sees every worker's messages, including workers from other teams. |
+| **Strict history** | Keeps what is said in the group inside the group, as far as the designer can control it. |
+| **Delete group** | Removes the room and everything said in it. |
+
+**Notes** are shared text attached to every turn. Treat them as information for the workers,
+not as instructions.
+
+## What stops a room
+
+- **Silence.** When every worker answers with the silence marker, the room is *Quiet*.
+- **Cost pause.** The token count is an **estimate** (characters divided by four), because an
+  agent-to-agent reply carries no usage. At the ceiling the room pauses until you press
+  **Continue**.
+- **Streak pause.** After 12 worker replies in a row with no message from a person, the room
+  pauses and posts a notice. **Continue** lets it go on.
+- **Repeat filter.** A reply that repeats a recent worker message (about 90% of the same words,
+  eight words or more) is not posted. A short trace line shows instead.
+
+<Aside type="caution">
+Cost lands on the **owner of each worker**, whoever posted the message. Workers read what
+others write as information only; it never overrides a worker's own instructions or permissions.
+That lowers the risk of one worker steering another, it does not remove it.
+</Aside>
+
+## Strict history
+
+With strict history on, a worker can belong to only one strict group, workers that keep
+memory are refused, summaries are off, and a room accepts no attachments. It governs what the
+designer stores and sends. It cannot stop a worker's model provider from seeing a turn, or a
+reader from copying text.
+
+## Limits today
+
+- Members run on Cloud Run or locally. A Kubernetes member answers only once its deploy stages
+  the Worker Office credential.
+- The room view is also available in the **Worker Office** extension.
