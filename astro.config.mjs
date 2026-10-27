@@ -134,6 +134,7 @@ export default defineConfig({
 						{ label: 'The Environment Manifest', slug: 'operations/env-manifest' },
 						{ label: 'Deploying Bundles', slug: 'operations/deploying-bundles' },
 						{ label: 'Versions and Automatic Semver', slug: 'operations/versions-and-semver' },
+						{ label: 'Environment Operations', slug: 'operations/environment-operations' },
 						{ label: 'Deployment Targets', slug: 'operations/deployment-targets' },
 						{ label: 'Tenants & Teams', slug: 'operations/tenants-and-teams' },
 						{ label: 'Secrets in Environments', slug: 'operations/environment-secrets' },
