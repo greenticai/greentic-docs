@@ -44,6 +44,8 @@ schema tag and creates a **new** environment from it. Import never overwrites an
 
 The deploy-approval switch is applied only when a workspace admin imports.
 
+![The Environments page lists each environment with its state, and has an Import button at the top right](/images/designer-environments-page.png)
+
 ## Operator actions
 
 The deploy panel has an **Actions** section, visible to workspace admins, for maintenance
@@ -59,6 +61,8 @@ audit entry.
 | Re-enable a removed unit | Unit | Any member | Lets the next deploy ship a unit that a rollout had removed. The unit stays on the canvas while it is removed. |
 
 The older routes for these three still work and call the same code.
+
+![The deploy panel with the Actions section open, showing Rotate the chat signing key, then the Release channel section with its Not enforced yet badge and selector, then the Export section with its Download export button](/images/designer-deploy-panel.png)
 
 ## Audit log and deploy history
 
@@ -80,6 +84,8 @@ and old entries are removed by count, not by age.
 before its latest deploy, with the pack name and version, the digests, the revision, and which
 saved version it was built from. The newest five entries are kept, for at least thirty days.
 Registry addresses and internal ids are deliberately left out.
+
+![The Previous deploys card in a unit's modal, listing earlier versions with how long ago each ran and its build digest](/images/designer-previous-deploys.png)
 
 ## Release channels
 
