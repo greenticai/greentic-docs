@@ -1,0 +1,136 @@
+---
+title: Versions and Automatic Semver
+description: How a flow or agentic worker gets a semantic version when you deploy it from the Designer, how to choose the bump, and how those versions feed releases
+---
+
+Every flow and [agentic worker](/concepts/agentic-workers/) project in the Designer keeps **saved
+versions**: named snapshots you can compare, restore, fork, release and promote. Each saved
+version has a number (`v1`, `v2`, …). With **automatic versioning** turned on for a project, a
+deploy from the environment canvas saves a version for you and gives it a **semantic version**
+(`MAJOR.MINOR.PATCH`, for example `0.1.3`), so you no longer have to press **Save as version**
+before the release pipeline can use it.
+
+## Why it exists
+
+The Designer's local release pipeline can only pick saved versions that a person (or a deploy
+through this feature) created. Before, the order was: save a version by hand, deploy, and only then
+create a release. Now a deploy that carries a change saves the version itself.
+
+## Choosing automatic or manual
+
+The first time a project is deployed from the environment canvas, the Designer asks how its
+versions should work:
+
+- **Automatic** — each deploy that carries a change saves a new version with the next semantic
+  version.
+- **Manual** — nothing changes. You save versions yourself, as before, and they carry no semantic
+  version.
+
+For **Automatic** you also choose the **first version**. The default is `0.1.0`. If the project has
+already been released to the Store, the default is the last released version plus one patch, and
+the first version must be higher than the last released one. Only plain `MAJOR.MINOR.PATCH` is
+accepted (no pre-release or build suffix).
+
+The choice belongs to the **project**, not to the environment, so two units built from the same
+project share one choice. If you can only read a project, the Designer does not ask you about it
+and does not save versions for it.
+
+## What a deploy does
+
+When at least one unit you are deploying is in an automatic project that has changed, or in a
+project you have not chosen a mode for yet, the Designer shows a short dialog before it deploys:
+
+- for each project, the current and the next version, for example `0.1.2 → 0.1.3`
+  (`— → 0.1.0` for the first one);
+- **Patch** (the default), **Minor** or **Major**. Minor sets the patch to zero, and major sets
+  both minor and patch to zero. The choice applies to this deploy only and is not remembered;
+- for a project with no mode yet, the Automatic / Manual choice and the first version.
+
+If nothing needs asking and nothing has changed, the Deploy button deploys at once, as before. The
+same dialog appears when you update a single unit from its modal and when you apply a proposal
+from the AI assistant that ends in a deploy.
+
+A version is saved **only when the project's content differs from its newest saved version**. If
+nothing changed, the deploy ships that existing version and saves no new one. Units that are not in
+the deploy's scope are never moved to the new version.
+
+The first deploy of a unit that has never been deployed is covered too: its project is asked about
+and, in automatic mode, the unit ships the version that was just saved.
+
+## Version numbers and semantic versions
+
+The semantic version runs **beside** the number, it does not replace it. The number still names the
+version in comparisons, restore and fork. Semantic versions are compared as versions, not as text,
+so `0.10.0` is higher than `0.9.0`. Versions saved before you turned automatic versioning on keep
+no semantic version and show as `v3`.
+
+In an automatic project:
+
+- **Save as version** gives the version the next patch. The dialog tells you which one. "No
+  changes" still applies: saving an unchanged project is refused, as before. The label is free
+  text and never part of the version.
+- The automatic version the Designer saves **before a restore** gets a patch version the same way.
+- **Fork** copies the content only. The new project has no semantic version and has not chosen a
+  mode yet.
+
+## Releases and Promote
+
+- In the local release dialog, a version with a semantic version is listed as `v3 · 0.1.2`, followed by
+  its label.
+- In the version history the semantic version is shown next to the number.
+- **Promote** to the Store prefills the version's semantic version. You can still edit it. The
+  Store's own rule is unchanged: the version must be higher than the last released one, otherwise
+  the Designer answers `409 version_not_increasing`.
+
+## Deploy approval
+
+When an environment requires deploy approval, the version is saved when the request is **raised**,
+under the requester. The approver ships exactly that plan and cannot change the bump, and nothing is
+saved at approval time.
+
+If the plan cannot be shipped any more (for example, a saved version was deleted or changed in
+between), the request ends as **failed** instead of deploying something else. The requester is
+notified, and the Approvals inbox shows the request as *Approved, but the deploy did not start*,
+with the reason. Raise the deploy again to continue. A request that was raised before this feature
+existed can never save a version under the approver: if its project would need one, it fails the
+same way.
+
+## Where it applies
+
+Automatic semantic versions apply to **deploys from the environment canvas**. The other deploy
+routes keep their existing behaviour and still save their own automatic deploy snapshots without a
+semantic version: the session-level Kubernetes deploy, operator environments, per-unit Cloud Run,
+agentic worker deploy, and the GitHub release version.
+
+## API
+
+```text
+PUT  /api/sessions/{id}/versioning-mode
+PUT  /api/env-canvas/{env}/units/{unit}/versioning-mode
+GET  /api/env-canvas/{env}/versioning-preview?units=a,b&bump=patch
+POST /api/env-canvas/{env}/deploy        {"units"?: [...], "bump"?: "patch"|"minor"|"major"}
+```
+
+The two `PUT` routes take `{"mode": "auto"|"manual", "initialVersion"?: "0.1.0"}`. The preview
+changes nothing; it returns, per unit, the mode, the current and next version, whether the project
+changed, and a `group` number shared by units that belong to the same project. A deploy that saved
+versions returns them as `mintedVersions` (`versionNo` and `semver`). Errors you can meet:
+
+| Code | Meaning |
+| --- | --- |
+| `409 env_deploy_versioning_unset` | A project in the deploy has no mode yet. Choose one and deploy again. |
+| `422 env_deploy_versioning_failed` | The version could not be saved, or the approved plan can no longer be shipped. |
+| `422 versioning_initial_invalid` | The first version is not plain `MAJOR.MINOR.PATCH`, or not higher than the last released one. |
+| `409 version_semver_conflict` | Two saves raced for the same semantic version. Try again. |
+| `400 versioning_mode_invalid` | The mode request could not be read. |
+
+## Limits to know about
+
+- Older versions are not renumbered; only versions saved after you choose Automatic carry a
+  semantic version.
+- A version is saved **before** the deploy finishes. If the deploy then fails, the version stays; a
+  later deploy of unchanged content reuses it instead of saving another.
+- The semantic version belongs to the project. Two environments that deploy the same project see
+  the same series.
+- A deploy captures the project as it is stored when the deploy starts. Edits that are still being
+  autosaved may not be included.
