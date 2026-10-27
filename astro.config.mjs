@@ -128,6 +128,15 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Managed Deployments',
+					items: [
+						{ label: 'Overview', slug: 'managed-deployments/overview' },
+						{ label: 'Environments and Targets', slug: 'managed-deployments/environments-and-targets' },
+						{ label: 'Deploying and Updating', slug: 'managed-deployments/deploying-and-updating' },
+						{ label: 'Governance and Security', slug: 'managed-deployments/governance-and-security' },
+					],
+				},
+				{
 					label: 'Environments & Deployment',
 					items: [
 						{ label: 'Overview', slug: 'operations/overview' },

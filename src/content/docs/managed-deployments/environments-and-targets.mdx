@@ -1,0 +1,103 @@
+---
+title: Environments and Targets
+description: What an environment, a unit and a channel are in the Designer, and what each deploy target (local, Kubernetes, Cloud Run) supports
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Environments, units and channels
+
+An **environment** is one deploy target with everything running on it. In the Designer it is a
+canvas with three kinds of things on it:
+
+| Thing | What it is |
+|---|---|
+| **Unit** | One deployed workload: a flow or an agentic worker, built from a project and identified by its bundle id. |
+| **Channel** | A messaging endpoint your users talk to, such as web chat, Slack or Teams. |
+| **Link** | The wire from a channel to a unit, saying which unit answers that channel. |
+
+A unit can also be a **system of record** (SoRLa) that other units read and write. It is deployed
+beside the workers and is not a bundle.
+
+A channel can be set to **route by intent**. The Designer then generates a small router unit that
+classifies each message and forwards it to the right unit, instead of linking the channel to the
+units directly.
+
+Every environment belongs to a workspace and a team, so one workspace can keep several
+environments (for example staging and production) side by side.
+
+## Choosing a target
+
+| | **Local** | **Kubernetes** | **Cloud Run** |
+|---|---|---|---|
+| Where it runs | A supervised runtime process on the Designer's own host | A cluster you provide | Google Cloud Run in your project |
+| Whole-environment deploy | Yes | Yes | Yes |
+| Deploy only some units | No | Yes | Yes |
+| Staged rollout and rollback | No | Yes | Yes |
+| Scales to zero when idle | Not applicable | No | Yes, by default |
+| How a unit is reached | Loopback on the host | A service inside the cluster, optionally exposed by the environment | Its own service address |
+| Needs a registry | No | Yes | Yes |
+
+Use **Local** to try something on your own machine, **Kubernetes** when you already operate a
+cluster, and **Cloud Run** when you want scale-to-zero without running servers.
+
+<Aside type="note">
+The Designer can also deploy to the cloud targets the deployer supports on the command line. See
+[Deployment Targets](/operations/deployment-targets/) for the single-VM, AWS, Azure and GCP paths
+that are driven with `gtc` rather than from the canvas.
+</Aside>
+
+### Local
+
+The local target starts a runtime process on the Designer's host and restarts it after the
+Designer restarts. It is meant for development and demonstrations. It cannot deploy a subset of
+units and does not support staged rollouts, because one process serves every unit.
+
+### Kubernetes
+
+Each environment keeps one persistent store of what is deployed, so a redeploy converges on the
+same workloads instead of piling up new ones. A few behaviours worth knowing:
+
+- **Exposure.** By default the router is reachable only inside the cluster. An environment can
+  ask for a node port or a load balancer, and the Designer shows the resulting address once the
+  cluster has provided it.
+- **Namespace.** An environment deploys into the namespace set on its cloud environment in the
+  admin console. Give each environment on one cluster its own namespace, or two will overwrite each
+  other.
+- **Readiness.** After a deploy the Designer waits for the new worker to become ready. If it does
+  not become ready in time, the deploy is marked failed and traffic is returned to the revision that
+  was serving before.
+- **Cleanup.** The Designer keeps the current revision and one to roll back to, and retires older
+  ones.
+- **This cluster.** A Designer that itself runs in a pod can deploy into its own cluster using its
+  own service account, with no separate credential, once an operator has granted that account the
+  access it needs. A registry is still required.
+
+### Cloud Run
+
+Each unit becomes its own Cloud Run service, created one after another, so a large environment
+takes several minutes to bring up. Defaults to know:
+
+- **One instance per unit, scaling to zero.** A worker never runs more than one instance, and
+  an idle environment costs nothing. An environment that contains a **cron trigger** is kept warm
+  instead, because a sleeping instance cannot fire a schedule; the deploy tells you that one
+  instance is then billed around the clock. You can also choose to keep webhook-driven channels
+  warm, which avoids slow first replies at the same cost.
+- **Memory is sized for you** from the number of bundles in the environment, with a floor of 512 Mi.
+- **A revision that never becomes ready is undone.** If a new revision does not start, the Designer
+  puts the previous traffic split back so the next deploy does not trip over it.
+- **Registry access.** The service that runs your workload must be able to read the bundle from
+  your registry. The Designer's setup script grants this, and a refused deploy explains the missing
+  grant.
+
+## Credentials and cloud environments
+
+The admin console holds each tenant's **cloud environments** and the credentials the deployer uses.
+An operator configures them once; tenant administrators then deploy from the Designer without
+handling cloud credentials. See [Cloud Deploy Environments](/admin/cloud-deploy-environments/).
+
+## Related pages
+
+- [Managed Deployments Overview](/managed-deployments/overview/)
+- [Deploying and Updating](/managed-deployments/deploying-and-updating/)
+- [Deployment Targets](/operations/deployment-targets/)
