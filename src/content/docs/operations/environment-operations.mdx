@@ -1,0 +1,141 @@
+---
+title: Environment Operations in the Designer
+description: Export and import an environment, run operator actions, read the audit log and deploy history, and control which releases an environment accepts with release channels
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The environment canvas in the Designer is where you deploy and look after an environment. This
+page covers the operator tools around a deploy: moving an environment between workspaces, running
+maintenance actions, seeing who did what, and controlling which releases an environment will accept.
+
+| You want to | Use |
+|---|---|
+| Copy an environment's layout to another workspace | [Export and import](#export-and-import-an-environment) |
+| Rotate a key or credential, or bring back a removed unit | [Operator actions](#operator-actions) |
+| See who changed an environment, or what a unit ran before | [Audit log and deploy history](#audit-log-and-deploy-history) |
+| Make an environment accept only releases you have promoted | [Release channels](#release-channels) |
+
+## Export and import an environment
+
+An export describes what to deploy, not what is running. It is a single document
+(`greentic.env-canvas-export.v1`) that holds:
+
+- the canvas, with each unit's bundle reference (not the pack bytes);
+- each channel's routing configuration;
+- the deploy-approval switch.
+
+It never holds setup answers, secrets, endpoint secret references, interop tokens, deploy history
+or anything a deploy produced (revisions, traffic splits, health, credential references). Any
+member of the workspace can export. In the deploy panel, the **Export** section downloads the file,
+named after the environment.
+
+On the **Environments** page, the **Import** button reads the file in your browser, checks its
+schema tag and creates a **new** environment from it. Import never overwrites anything:
+
+- it always creates fresh ids in your own workspace and team;
+- the whole document is checked before anything is written, and if a step fails after the
+  environment exists, what was written is removed;
+- the importing workspace keeps its own host configuration, bindings and identity;
+- setup answers do not travel, so the copy needs its setup filled in before it can deploy;
+- units whose pack is not on this host are listed after the import, so you know what to publish
+  or install first.
+
+The deploy-approval switch is applied only when a workspace admin imports.
+
+## Operator actions
+
+The deploy panel has an **Actions** section, visible to workspace admins, for maintenance
+operations on an environment or one of its units. All actions go through one door, so they share the
+same checks, in the same order: the action exists, the request fits it, you are allowed to run it,
+you confirmed it, and only then is the environment looked up. A refused or failed action leaves no
+audit entry.
+
+| Action | Scope | Who can run it | Notes |
+|---|---|---|---|
+| Rotate the web chat signing key | Environment | Workspace admin | Asks for confirmation. Every open chat is signed out at the next whole-environment deploy. |
+| Rotate the Kubernetes credential | Environment | Workspace admin | Lets you choose whether to abandon units already deployed. |
+| Re-enable a removed unit | Unit | Any member | Lets the next deploy ship a unit that a rollout had removed. The unit stays on the canvas while it is removed. |
+
+The older routes for these three still work and call the same code.
+
+## Audit log and deploy history
+
+**Audit log.** Workspace admins can read an environment's operator actions, newest first (the
+latest 100 by default, up to 500, and the newest 2,000 are kept). Each entry shows who did it, the
+action, the unit if there was one, and a short description. An entry is written only after the
+action succeeded, and a logging failure never fails the action. Nothing sensitive is stored: no
+secret, token or request body, only the credential's id where one is involved.
+
+The log records, among others: a deploy being requested, a removed unit re-enabled, the web chat
+key and Kubernetes credential rotated, the deploy-approval policy changed, the lifecycle and
+switches of a unit's agent-to-agent and tool-server access, a rollout finishing, and a release
+channel being changed.
+
+Not every action is logged yet. Steps of a rollout other than its final result are not recorded,
+and old entries are removed by count, not by age.
+
+**Deploy history.** Any member can open a unit and see **Previous deploys**: what the unit ran
+before its latest deploy, with the pack name and version, the digests, the revision, and which
+saved version it was built from. The newest five entries are kept, for at least thirty days.
+Registry addresses and internal ids are deliberately left out.
+
+## Release channels
+
+A release channel controls which releases an environment will accept as an update. There are two
+channels, **stable** and **dev**. A release has to be **promoted** into a channel from the admin,
+and promotion only moves forward: a channel never loses a release.
+
+An environment follows **one** channel, or none.
+
+| Setting | What it means |
+|---|---|
+| **Stable** or **Dev** | The environment is *enforced*. An update is accepted only if its release is in that channel. |
+| **Not set** | *Not enforced yet.* Updates are authorised as before and are not checked against a channel. This is the default, so nothing changes for existing environments until an admin chooses a channel. |
+
+### Setting the channel
+
+In the deploy panel, the **Release channel** section shows the current channel, an **Enforced** or
+**Not enforced yet** badge, and a selector. Only a workspace admin can change it; other members see
+the state. Saving opens a confirmation, because the change affects how updates are signed:
+
+<Aside type="caution">
+Every designer that serves this environment must already run a build that includes release
+channels. A designer without it refuses the channel-carrying authorisation the admin will now sign,
+and updates for this environment will not run until that designer is upgraded.
+</Aside>
+
+Each change is recorded in the environment's audit log as a release channel change.
+
+### What happens to an update
+
+When an environment has a channel, the admin checks that the release is in it and signs the update
+with the channel included. Before anything changes, the Designer checks three things:
+
+1. the environment follows the channel the update was signed for;
+2. the release is in that channel;
+3. the channel could be read.
+
+If any of the three fails, the update is refused with `release_not_in_channel` and nothing is
+changed. A refusal is recorded but does not block a later valid update. If the Designer cannot read
+the channel at all, it refuses rather than guessing: an unknown channel is never treated as a pass.
+
+<Aside type="note">
+An environment with no channel keeps the older behaviour exactly. Choosing a channel is the only
+thing that turns the check on.
+</Aside>
+
+## Limits
+
+- These tools were built and tested in code and automated tests. They have not yet been run against
+  a real Cloud Run project or Kubernetes cluster.
+- Export is a description of an environment, not a backup: it carries no secrets or deploy results
+  by design.
+- Release channels apply to application releases. Runtime binaries have their own policy.
+
+## Related pages
+
+- [Versions and Automatic Semver](/operations/versions-and-semver/)
+- [Managing Environments](/operations/environments/)
+- [Deploying Bundles](/operations/deploying-bundles/)
+- [Tenants & Teams](/operations/tenants-and-teams/)
