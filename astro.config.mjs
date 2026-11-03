@@ -105,6 +105,7 @@ export default defineConfig({
 						{ label: 'Agentic Workers in the Designer', slug: 'concepts/agentic-workers-designer' },
 						{ label: 'Agent Types', slug: 'concepts/agent-types' },
 						{ label: 'Agent Memory', slug: 'concepts/agent-memory' },
+						{ label: 'Conversation Context in Flows', slug: 'concepts/conversation-context' },
 						{ label: 'Agent Knowledge (RAG)', slug: 'concepts/agent-knowledge' },
 						{ label: 'Knowledge Sources', slug: 'concepts/knowledge-sources' },
 						{ label: 'Evaluating an Agentic Worker', slug: 'concepts/agent-evaluation' },

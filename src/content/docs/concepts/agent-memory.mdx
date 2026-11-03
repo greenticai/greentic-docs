@@ -28,11 +28,13 @@ Short-term memory is the worker's scratchpad within a conversation. It is served
 always-on in-memory provider, so nothing extra is needed to build it — the model gets
 `remember` / `recall` behaviour when `memory.short_term` is enabled.
 
-<Aside type="caution" title="A worker still needs a conversation state store to run">
+<Aside type="caution" title="Where the conversation state lives">
 Short-term working memory is separate from the **conversation state store** that lets a
-`dw.agent` node run at all. On a server the runner needs `GREENTIC_AW_REDIS_URL`; without it,
-`dw.agent` nodes are disabled. For local / desktop runs, a runner built with the
-`desktop-agent-ephemeral` feature keeps that state in memory with no external infra.
+`dw.agent` node run. The runner picks that store with `GREENTIC_AW_STATE_BACKEND`
+(`redis`, `memory` or `disk`). With nothing set it uses `redis` when `GREENTIC_AW_REDIS_URL` is
+present and otherwise `memory`. The `memory` backend lives in the process, so it is lost when
+the worker restarts or scales to zero. Use `redis` (with `GREENTIC_AW_REDIS_URL`) or `disk`
+(with `GREENTIC_AW_STATE_PATH`) when a conversation must survive that.
 </Aside>
 
 ## Long-term memory
@@ -59,7 +61,9 @@ declares memory but the running binary or environment can't serve it.
 
 | Variable | Purpose |
 |----------|---------|
-| `GREENTIC_AW_REDIS_URL` | **Required on a server.** Conversation state store; unset → `dw.agent` nodes disabled. |
+| `GREENTIC_AW_STATE_BACKEND` | Conversation state store: `redis`, `memory` or `disk`. Default: `redis` if `GREENTIC_AW_REDIS_URL` is set, else `memory`. |
+| `GREENTIC_AW_REDIS_URL` | Redis URL for the `redis` backend. `redis` selected with no URL disables `dw.agent` nodes. |
+| `GREENTIC_AW_STATE_PATH` | File used by the `disk` backend. |
 | `GREENTIC_CHRONICLE_*` | Long-term memory (Chronicle) connection. Absent → long-term tier inactive. |
 
 <Aside type="tip" title="Authoring">
@@ -72,3 +76,4 @@ block and build with `gtc worker build`.
 
 - [Agent Types](/concepts/agent-types/) — single_turn, agent_graph, deep_worker
 - [Agent Knowledge (RAG)](/concepts/agent-knowledge/) — retrieval over an attached corpus
+- [Conversation Context in Flows](/concepts/conversation-context/) — carry context across deterministic and agentic steps
