@@ -9,7 +9,26 @@ Every new message enters a [flow](/concepts/flows/) at its entry. A deterministi
 the current turn, so a follow up such as "ACI" or "what about free ports?" reaches it with none of
 the earlier context, and the step fails.
 
-The **conversation router** pattern fixes this with what ships today. An
+There is no variable that hands the whole conversation to a deterministic step. Two approaches
+cover the need, and which one fits depends on the shape of your flow.
+
+## Choose an approach
+
+**The whole conversation is with one agentic worker.** Mark the worker step as **Conversational**
+in the step inspector. The flow stays on that worker, which receives every new message, until the
+worker ends the conversation and the flow moves on to the next step. Use this when the person is
+simply talking to the agent.
+
+- The step's Message must include what the person types, `{{in.text}}`. Otherwise every later
+  message is replaced by the Message, and the build is refused with an explanation.
+- The worker is normally the last step of the flow. The exception is a main menu that hands a
+  turn to the worker and takes the person back when the worker ends the conversation.
+- Conversational applies to a single turn worker. It is not emitted for agent graph or deep
+  worker kinds.
+
+**Free form follow ups feed deterministic steps.** The person writes "what about mirror ports?" and
+the answer must come from a fixed flow that needs a full query. Turning a fragment into a full
+query is a language task, so use the conversation router described on this page. An
 [agentic worker](/concepts/agentic-workers/) is the first step of the flow. It reads the whole
 conversation, rewrites the latest message into one complete standalone query, and labels it. The
 rest of the flow routes on that label, so every deterministic step receives a full query instead
@@ -33,8 +52,8 @@ Why it works:
 - **The router is the first step.** A flow that opens with an agentic worker starts at it, so it
   runs on every message. Put nothing in front of it that would take the entry, such as a card.
 - **Its memory spans turns.** Agent memory is keyed by tenant and session, so a router that is
-  entered again on every message still sees the earlier turns. You do not need to mark the
-  router as conversational.
+  entered again on every message still sees the earlier turns. Do not mark the router as
+  Conversational, because it must run again on every message.
 - **The flow enforces what a deterministic step needs.** A required detail, such as the port type,
   is checked in a branch condition. A model that skips a clarification rule still cannot send an
   incomplete query onward.
