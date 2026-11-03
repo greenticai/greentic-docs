@@ -1,0 +1,64 @@
+---
+title: Shared Context
+description: Let an agentic worker keep a record of a signed in person across conversations, and share the current run with the flows and playbooks it calls
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Shared Context is set in the **Sharing** section of an
+[agentic worker](/concepts/agentic-workers/) in the Designer composer. It has two independent
+controls, **User history** and **Flows and playbooks this worker calls**.
+
+<Aside type="note" title="Not the memory of one conversation">
+Shared Context does not make a worker remember the earlier messages of the conversation it is in.
+For that, see [Conversation Context in Flows](/concepts/conversation-context/) and
+[Agent Memory](/concepts/agent-memory/).
+</Aside>
+
+## User history
+
+User history lets a worker keep and read a record of each **signed in** person across
+conversations. The record is stored by the workspace admin, not by the worker.
+
+| Mode | What the worker does |
+|------|----------------------|
+| **Off** | Keeps and reads nothing. This is the default. |
+| **Read** | Reads the history that is already kept, including entries written earlier. Adds nothing. |
+| **Read and write** | Also keeps the first part of each reply it gives a signed in person, word for word (up to 480 characters), for 90 days. |
+
+Things to know before turning it on:
+
+- **Every worker in the same environment that has user history turned on can read this history.**
+- **Visitors who are not signed in are never remembered.**
+- **It works only on deployed workers.** A worker deployed to Cloud Run or Kubernetes from an
+  environment keeps it. Run Demo, Test chat, local environments and direct deploys do not.
+- **Publish the worker again after changing it.** A deployed unit gets the history door only when
+  its pack was published from the composer session that has user history turned on.
+- The workspace admin must provide the user history door. An environment deploy that needs it and
+  cannot reach it is refused instead of shipping a worker without history.
+
+## Flows and playbooks this worker calls
+
+When a worker calls a flow or a playbook as a tool, you choose what that tool may see of the
+current run, one tool at a time.
+
+| Mode | What it means |
+|------|---------------|
+| **Don't share** | The tool sees only what the worker passes to it. This is the default. |
+| **Read** | The flow or playbook can see what the worker already did in the same reply. |
+| **Read and write** | It can also write to the run, so the worker sees what the flow or playbook did. |
+
+An agent that belongs to another party (an A2A agent) is never shared with.
+
+Run context is used in deployed workers, in Run Demo, and in Test chat for flows. A worker used
+inside a flow shares run context according to the sharing it was published with. A worker
+installed from the Store, or published by name, shares nothing until it is published again from a
+composer session.
+
+## Which one do I need
+
+| I want | Use |
+|--------|-----|
+| The agent to follow the thread of the current conversation | [Conversational worker or conversation router](/concepts/conversation-context/) |
+| A worker to recognise a returning signed in person | User history |
+| A flow or playbook the worker calls to see the current run | Run context for that tool |
