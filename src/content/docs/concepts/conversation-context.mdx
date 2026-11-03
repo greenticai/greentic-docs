@@ -1,0 +1,138 @@
+---
+title: Conversation Context in Flows
+description: Keep the context of a conversation across deterministic and agentic steps with a conversation router
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every new message enters a [flow](/concepts/flows/) at its entry. A deterministic step sees only
+the current turn, so a follow up such as "ACI" or "what about free ports?" reaches it with none of
+the earlier context, and the step fails.
+
+The **conversation router** pattern fixes this with what ships today. An
+[agentic worker](/concepts/agentic-workers/) is the first step of the flow. It reads the whole
+conversation, rewrites the latest message into one complete standalone query, and labels it. The
+rest of the flow routes on that label, so every deterministic step receives a full query instead
+of a fragment.
+
+## The shape
+
+```text
+router (agentic worker, the first step of the flow)
+  -> save_q  (Set Variable, query = {{node.router.reply}})
+  -> triage  (Conditional Branch on node.router.reply)
+       [FREE_PORTS] and port type known    -> deterministic "free ports" flow
+       [OVERUTILISED] and port type known  -> deterministic "over-utilised" flow
+       [AGENTIC]                           -> agentic planner (message {{vars.query}})
+       [FREE_PORTS] / [OVERUTILISED] without a port type -> ask "ACI or Gi ports?"
+       default                             -> show the router's [CLARIFY] question
+```
+
+Why it works:
+
+- **The router is the first step.** A flow that opens with an agentic worker starts at it, so it
+  runs on every message. Put nothing in front of it that would take the entry, such as a card.
+- **Its memory spans turns.** Agent memory is keyed by tenant and session, so a router that is
+  entered again on every message still sees the earlier turns. You do not need to mark the
+  router as conversational.
+- **The flow enforces what a deterministic step needs.** A required detail, such as the port type,
+  is checked in a branch condition. A model that skips a clarification rule still cannot send an
+  incomplete query onward.
+
+## The router prompt
+
+The prompt has two jobs. It builds one complete query, and it picks a label.
+
+```text
+You are the request router for a network operations assistant. Read the WHOLE
+conversation, not only the latest message.
+
+STEP 1. Build ONE complete standalone query for what the user wants NOW.
+- A follow up such as "what about X?" changes ONLY what the user names and
+  KEEPS every other detail of the previous request (the action such as
+  "find free", the node such as node-101, the port type ACI or Gi).
+  Example: previous "find free ACI ports on node-101", then "what about mirror
+  ports?" becomes "find free ACI mirror ports on node-101".
+- A reply of just "ACI" or "Gi" answers your previous question. Complete the
+  request you asked about.
+- NEVER invent a port type. The port type is known ONLY if the user wrote
+  "ACI" or "Gi" somewhere in the conversation.
+
+STEP 2. Choose the label with these rules, checked in this order.
+1. If the port type or the node was never written by the user ->
+   [CLARIFY] Do you mean ACI ports or Gi ports on <node>?
+2. If the query mentions mirror, span, analysis, troubleshooting, or anything
+   other than plain free or over-utilised ports -> [AGENTIC]
+3. If the query is about over-utilised ports -> [OVERUTILISED]
+4. If the query is about plain free or unused ports -> [FREE_PORTS]
+
+Reply with exactly ONE line: the label followed by the standalone query (or
+the question for CLARIFY). Nothing else.
+```
+
+Adapt the labels and rules to your own flows. Keep the instruction to read the whole conversation
+and the rule never to invent a missing detail.
+
+## The branch conditions
+
+Use a Conditional Branch on the router's reply. Branches are tried in order and the first match
+wins. Each branch is wired by an edge whose branch is its port, plus one default edge.
+
+```json
+{ "id": "triage", "type": "conditional_branch", "config": {
+  "source_node": "router",
+  "branches": [
+    { "port": "free", "label": "Free ports",
+      "condition": "node.router.reply contains \"[FREE_PORTS]\" && (node.router.reply contains \"aci\" || node.router.reply contains \" gi \")" },
+    { "port": "over", "label": "Over-utilised",
+      "condition": "node.router.reply contains \"[OVERUTILISED]\" && (node.router.reply contains \"aci\" || node.router.reply contains \" gi \")" },
+    { "port": "agentic", "label": "Agentic",
+      "condition": "node.router.reply contains \"[AGENTIC]\"" },
+    { "port": "needtype", "label": "Port type missing",
+      "condition": "node.router.reply contains \"[FREE_PORTS]\" || node.router.reply contains \"[OVERUTILISED]\"" }
+  ] } }
+```
+
+`contains` lowercases both sides, so a reply of `[FREE_ports]` from a sloppy model still matches
+`[FREE_PORTS]`. A compound condition (`&&`, `||`, parentheses) is supported.
+
+Save the standalone query with a Set Variable step right after the router. Read it back as
+`{{vars.query}}` in later steps, for example as the message of the agentic planner. Strip the
+label in the deterministic flow, or pass only the text after it.
+
+## Checklist when it does not work
+
+1. **Is the router the first step the flow reaches?** If a card or another step takes the entry,
+   the router does not run on each message.
+2. **Does the prompt tell the model to read the whole conversation** and to build a standalone
+   query? A prompt that only classifies the latest message loses the context.
+3. **Does a branch check the details a deterministic step needs?** Do not rely on the model alone.
+4. **Is the model strong enough?** Smaller models need more prompt iterations, and the check in
+   the flow is still worth keeping.
+5. **Does the test run on the same runtime version you deploy?** A local runtime of another
+   version can behave differently from the one shipped with the Designer.
+6. **Is there a long pause between messages?** See the note below on where memory lives.
+
+<Aside type="caution" title="Where the router's memory lives">
+Agent memory is held by the runner. With the default `memory` backend it lives in the process, so
+it carries across messages while the worker keeps running, and it is lost when the worker
+restarts or scales to zero between messages. For a deployment with pauses or restarts, select a
+durable agent state backend on the runner with `GREENTIC_AW_STATE_BACKEND` (`redis` together with
+`GREENTIC_AW_REDIS_URL`, or `disk`). See [Agent Memory](/concepts/agent-memory/).
+</Aside>
+
+## Limits
+
+- **The router remembers what the user said and what it replied**, not what the deterministic
+  flows returned. A follow up such as "the second port in that list" cannot be resolved this way.
+- **Routing is on text markers.** Each new deterministic flow is one more label in the prompt and
+  one more branch. That scales, but not for free.
+- **Label quality depends on the model.** Keep the guard in the flow.
+- **Run Demo shows the router's own reply too.** Treat it as a trace line when judging the demo.
+
+## Not the same as Shared Context
+
+Shared Context in the Designer is a different feature. User history lets a
+worker keep a per person record across conversations, and run context lets a tool the worker
+calls see the current run. Neither gives an agent memory of earlier messages inside one
+conversation. Use the conversation router for that.
