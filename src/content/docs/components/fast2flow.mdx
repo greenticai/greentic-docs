@@ -613,6 +613,37 @@ greentic-fast2flow policy print-default
 greentic-fast2flow policy validate --file ./my-policy.json
 ```
 
+## Jev Decision Tier
+
+[Jev](https://typesafe.ai) is a typed decision model (not a text LLM). With the `bm25_then_jev` strategy a routed channel asks Jev to pick a target when keyword scoring is not confident enough.
+
+**Order:** host router (BM25) → Jev → embedded LLM → miss policy. The tier is **fail-open**: a timeout, an error, a low-confidence answer or a missing key falls through to the next tier.
+
+**Tuning** (per channel, in the `jev` block of the router pack's `assets/fast2flow.json`):
+
+| Field | Range | Default | Meaning |
+|---|---|---|---|
+| `timeout_ms` | 100–10000 | 2000 | Hard budget for the Jev call |
+| `min_confidence` | 0–1 | 0.5 | Jev's own threshold, separate from the BM25 one |
+
+The pack stores only the **name** of the key (`jev/api_key`), never the key, an endpoint or a model.
+
+<Aside type="caution">
+Choosing Jev sends the first 2000 characters of the visitor's message to `api.typesafe.ai`. The designer says so on the card before the option can be chosen.
+</Aside>
+
+### Where the API key comes from
+
+In the Designer's **Route by intent** card, each routed channel picks one key source:
+
+| Source | Behaviour |
+|---|---|
+| **Workspace** (default) | The active `greentic.jev` credential of the workspace (extension credential `jev/api_key`). |
+| **A specific credential** | One named admin credential of the `greentic.jev` extension. It is authoritative: if it is gone or unreadable there is **no fallback** to another key. |
+| **Own key** | A key typed into the Designer and stored for that environment only. |
+
+Only names are saved with the routing configuration, never a key or a secret URI. A missing or stale key **never blocks a deploy** (the runtime fails open); the `extension-secrets` step of the deploy reports it instead.
+
 ## LLM Fallback
 
 When the deterministic BM25 strategy returns a low-confidence `Continue`, the LLM fallback picks the destination card instead of giving up. **It runs inside `greentic-start`**, backed by [greentic-llm](https://github.com/greenticai/greentic-llm) (rig-core, 9 providers) — no external binary, so it works embedded.
