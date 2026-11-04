@@ -9,8 +9,8 @@ Every new message enters a [flow](/concepts/flows/) at its entry. A deterministi
 the current turn, so a follow up such as "ACI" or "what about free ports?" reaches it with none of
 the earlier context, and the step fails.
 
-There is no variable that hands the whole conversation to a deterministic step. Two approaches
-cover the need, and which one fits depends on the shape of your flow.
+By default nothing carries the earlier messages into a deterministic step. Three approaches cover
+the need, and which one fits depends on the shape of your flow.
 
 ## Choose an approach
 
@@ -26,6 +26,11 @@ simply talking to the agent.
 - Conversational applies to a single turn worker. It is not emitted for agent graph or deep
   worker kinds.
 
+**A few recent messages are enough.** Switch on **Keep the conversation in this flow** on the
+Start node. Every step of that flow can then read the last few messages as `{{history}}`, for
+example to put the earlier question into a lookup. See [Keep the conversation in a
+flow](#keep-the-conversation-in-a-flow).
+
 **Free form follow ups feed deterministic steps.** The person writes "what about mirror ports?" and
 the answer must come from a fixed flow that needs a full query. Turning a fragment into a full
 query is a language task, so use the conversation router described on this page. An
@@ -33,6 +38,56 @@ query is a language task, so use the conversation router described on this page.
 conversation, rewrites the latest message into one complete standalone query, and labels it. The
 rest of the flow routes on that label, so every deterministic step receives a full query instead
 of a fragment.
+
+## Keep the conversation in a flow
+
+A flow can keep the last few turns of its conversation and hand them to its steps as `{{history}}`.
+It is off unless you switch it on, so every other flow behaves exactly as before.
+
+### Switch it on
+
+Select the **Start** node of the flow and turn on **Keep the conversation in this flow**. **Turns to
+keep** sets how many turns are kept, from 1 to 10 (10 when you leave it alone). A turn is one
+message from the person and the flow's reply.
+
+### What `{{history}}` contains
+
+`{{history}}` is a list of entries, oldest first. Each entry has a `role` (`user` or `assistant`)
+and a `text`. Read one entry as `{{history[0].text}}`, or pass the whole list to a step that
+accepts structured input.
+
+- At most twice the turns to keep, so 20 entries at the most.
+- Each `text` is cut to 2000 characters.
+- Only turns that finished before the current message are in it. The current message is still
+  `{{in.text}}`.
+- It is present only in a flow that switched it on. In any other flow `{{history}}` is empty.
+- Use it in the settings of a step. Routing conditions, such as a Conditional Branch, do not see
+  it. To branch on what it says, save what you need with a Set Variable step first.
+
+### When a turn is recorded
+
+- A turn is recorded when the flow completes or parks successfully. A flow that fails records
+  nothing for that turn.
+- The assistant text is the flow's reply: its `text`, `reply`, `response.reply` or
+  `payload.text`. A card contributes no text.
+- History is kept per conversation, apart from the other flows and conversations, and is dropped
+  after 24 hours without a message. It needs a conversation id from the channel. Without one,
+  nothing is read or written.
+- A failure to read or write the history never fails the turn. The step simply sees no history.
+
+### Where it runs
+
+Run Demo and a deployment both serve it, as long as the runtime is recent enough: Designer
+1.2.678-dev or later, which ships `greentic-start` with the feature. On an older runtime the pack
+still builds, and `{{history}}` renders as an empty string without any error. If a deployed flow
+shows no history, check the runtime version first.
+
+### History or the router
+
+History hands over what was said, and nothing more. It does not rewrite a fragment such as "what
+about mirror ports?" into a full question. When the step needs a complete standalone query, pair
+`{{history}}` with a step that rewrites it, or use the conversation router below, which does the
+rewrite itself and labels the result.
 
 ## The shape
 
