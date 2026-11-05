@@ -37,6 +37,49 @@ the worker restarts or scales to zero. Use `redis` (with `GREENTIC_AW_REDIS_URL`
 (with `GREENTIC_AW_STATE_PATH`) when a conversation must survive that.
 </Aside>
 
+## How much of the conversation a worker keeps
+
+A worker does not hand the whole conversation to the model for ever. At the end of every turn
+the runtime trims the conversation to a **history window**, and that trimmed conversation is
+what the model sees on the next turn. The window is counted in **messages** — yours, the
+worker's and tool results. System messages are not counted and are never dropped. (The
+setting is named `max_history_turns`, but it counts messages, not exchanges.)
+
+| Preset | History window | Also |
+|--------|----------------|------|
+| **Light** | 10 messages | 4 rounds of thinking and tool calls, 30 seconds per turn |
+| **Standard** (default, and a worker with no preset) | 20 messages | 8 rounds, 60 seconds |
+| **Heavy** | 40 messages | 20 rounds, 180 seconds |
+
+To change only the window, set **Conversation history (messages)** in the composer's **Limits**
+tab (`limits.max_history_turns`). It accepts 1 to 100 and leaves the preset's other limits
+alone. Leave it empty to use the preset's window; a value outside the range is clamped, not
+rejected. The empty field shows the window the chosen preset gives.
+
+### Summarise older history
+
+By default the messages that fall out of the window are simply dropped. Switch on **Summarise
+older history** (`limits.compact_history`, off by default) and they are folded into one note
+instead, kept before the conversation and updated each time more falls out. The worker then
+still knows what the first messages said, in compressed form.
+
+<Aside type="caution" title="It costs a model call">
+Summarising uses **one extra model call every time the window overflows**, which in a long
+conversation is every turn. If that call fails the older messages are dropped, as if the
+setting were off. A runtime built before this setting existed ignores it without an error
+and drops the oldest messages.
+</Aside>
+
+### In a flow
+
+The **Agentic Worker** (`dw.agent`) node has the same two settings as per-node overrides,
+**Conversation history (messages)** (`max_history_turns`) and **Summarise older history**
+(`compact_history`). Leave them unset to use the worker's own. A worker bound by several nodes
+in one flow must use the same value in each.
+
+The window only shapes what is kept. Where the conversation is kept, and whether it survives a
+restart, is the state store described above.
+
 ## Long-term memory
 
 Long-term memory persists facts **across** conversations, backed by

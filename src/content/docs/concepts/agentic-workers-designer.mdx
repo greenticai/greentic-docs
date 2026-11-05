@@ -27,6 +27,7 @@ Open the dashboard → **Agentic Worker** tab → **New Project**. The Studio is
 | **LLM** | Provider + model (e.g. OpenAI `gpt-4o-mini`) |
 | **Tools** | The tool extensions the worker may call |
 | **Memory** | Short-term / long-term memory providers |
+| **Limits** | Execution budget preset and how much conversation the worker keeps |
 | **Channels** | Messaging channels (webchat, Slack, …) |
 
 A sticky **Manifest Preview** shows the worker taking shape. When you're happy, click
@@ -39,6 +40,17 @@ The Studio form path is self-contained — it does not need a composer extension
 maps directly to the worker's `AgentConfig`, the same shape described in
 [Agentic Workers](/concepts/agentic-workers/#1-the-agent-config).
 </Aside>
+
+### Limits — how much room a worker gets
+
+The **Limits** tab picks one of three presets — **Light**, **Standard** or **Heavy** — that
+bound how many rounds of thinking and tool calls a worker gets per turn, how long a turn may
+take, and how many messages it remembers. Standard is what a worker gets when you choose
+nothing. Below the presets, **Conversation history (messages)** overrides only the window, and
+**Summarise older history** keeps what falls out of it as a short note instead of dropping it.
+Both apply in **Test chat** and **Run Demo**, and on a deployed worker whose runtime supports
+them. The numbers and the cost of summarising are in
+[How much of the conversation a worker keeps](/concepts/agent-memory/#how-much-of-the-conversation-a-worker-keeps).
 
 ### Effective prompt — seeing what the model actually gets
 
