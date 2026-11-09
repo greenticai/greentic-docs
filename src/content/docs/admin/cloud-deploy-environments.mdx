@@ -51,13 +51,16 @@ environment has:
   against your own cloud account, using credentials you supply.
 
 <Aside type="caution">
-**Only `greentic_cloud` has a working deploy pipeline in the admin console
-today.** The Terraform lineage behind `aws`, `azure` and `gcp` was retired, and
-a deploy to one of those environments is refused up front with "this target's
-deploy pipeline has been retired" rather than queued and failed later. The
-environment row, its region and its config are still stored, and the toggles
-below still control which targets may be created — but do not expect a deploy
-to run. Check the current behaviour before planning a BYOC rollout.
+**The admin console itself deploys only to `greentic_cloud`.** The Terraform
+lineage behind `aws`, `azure` and `gcp` was retired, so a deploy started from
+the admin console to one of those environments is refused up front with "this
+target's deploy pipeline has been retired" rather than queued and failed later.
+
+Bring-your-own-cloud environments are deployed from the **Designer's
+environment canvas** instead, which reads the environment you configure here.
+**Azure** deploys to Azure Container Apps this way; see
+[Azure Credentials](/admin/cloud-credentials-azure/) for the resources and
+service principal it needs. Check a target's page before planning a rollout.
 </Aside>
 
 Where each cloud's credentials come from, and what they look like:
