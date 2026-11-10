@@ -1,0 +1,159 @@
+---
+title: Resources (Qdrant, Redis and other services)
+description: Connect a vector store, a cache or another shared service to the workers that need it, from the Designer's Resources page, and what a deploy does with it.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Some extensions need a service that is not part of the worker: a Qdrant vector store, a Redis
+cache, and so on. The Designer calls these **resources**. You tell it once where the service is,
+and every worker whose extension needs that kind of service is connected to it at deploy time. You
+never type the address into a worker.
+
+Extension authors declare the need; see
+[Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).
+
+<Aside type="caution" title="What has and has not been verified">
+Adding a resource, the deploy gate and the staging of the connection into a Kubernetes
+environment have been run, with a Qdrant stand-in on a local cluster. **Not verified:** a call to
+a real Qdrant Cloud or Upstash endpoint end to end, the network grant on a deployed workload, and
+the whole feature on **Cloud Run**. Treat the first real run as a test and record what you see.
+</Aside>
+
+## Install the extension first
+
+A kind of resource appears on the Resources page only when an installed extension declares it (or
+the admin already holds a resource of that kind). A designer does **not** install a new extension
+id by itself, so an operator has to install it from the Store first, for example
+`greentic.rag-qdrant` for Qdrant or `greentic.redis` for Redis. When an admin is attached,
+installing is an operator action. The kind list is cached for about 30 seconds; if **Add a
+resource** stays disabled with "No installed extension needs a resource yet", wait and reload.
+
+Do not confuse this with [Scaling a Unit Out](/operations/scaling-a-unit/). That feature takes a
+Redis URL of its own so that several copies of a unit can share state. It is unrelated to the
+Redis resource used by the `greentic.redis` extension.
+
+## The Resources page
+
+Open **Resources** in the left navigation. Each row shows the kind, who provides it (the level),
+how it is run, whether it is locked and its status. A connection value is never shown, only
+"Connection: set".
+
+If the page says your workspace admin does not manage resources yet, the admin is too old to serve
+them. Nothing on this page works until the admin is upgraded.
+
+### Connect one you already run
+
+Choose **Add a resource**, pick the kind, then **Connect one you already run** (an external
+resource) and fill in:
+
+- **Name**: 1 to 80 characters.
+- **Host**: a bare DNS name, IPv4 or IPv6 address. No `https://`, no path, no port, no spaces.
+- **Port** and **Scheme** (default `https`). If an installed extension declares which schemes it
+  accepts, other schemes are refused.
+- **Password or API key**: stored sealed and never shown again.
+- **Extra settings**: some extensions need one. `greentic.rag-qdrant` and `greentic.redis` need a
+  namespace prefix (`collection_prefix` and `key_prefix`): lowercase letters, digits and single
+  underscores, ending in `__`, for example `gt__`.
+
+An extension for a database or a broker cannot open a TCP connection. It talks to an **HTTPS REST
+gateway** in front of the service, so enter the gateway's address. For Redis that means an
+Upstash REST URL or a REST proxy, not a `redis://` server. The kind's hint says so in the dialog.
+
+Adding the resource does not contact the service and does not check that the host will be
+reachable by the extension. A host the extension is not allowed to reach is accepted here and only
+fails when a worker uses it (`network not allowed for url`).
+
+### Let the platform run it
+
+**Let the platform run it** asks the admin to provision a managed instance for you. This is more
+limited than it sounds:
+
+- It needs an admin provisioner. Today the only one is for **Redis ACL** slices, and it is **off**
+  unless the platform sets `GREENTIC_INFRA_PROVISIONER=redis-acl`. Nothing starts a Redis or a
+  Qdrant for you; the provisioner carves a per-tenant slice out of an instance a platform admin
+  has already registered.
+- **Qdrant is not provisionable.** Asking for a managed Qdrant answers "The platform cannot run
+  this kind of resource yet".
+- Managed requests need a workspace admin.
+- A managed resource shows **Being set up** while the admin works on it, then **Ready**, or
+  **Failed**.
+
+<Aside type="caution" title="Misleading conflict message">
+Until a Designer fix lands, requesting a managed resource while the platform provisioner is off
+can answer "That conflicts with a resource that already exists" instead of saying that the
+platform cannot provision it. If you see that and no such resource exists, the cause is the
+disabled provisioner. Use **Connect one you already run** instead, or ask a platform admin.
+</Aside>
+
+## Levels and locks
+
+A resource is defined at one of four levels: **team**, **workspace**, **partnership** and
+**platform**. For each kind, the admin works out the one resource a team gets: normally the level
+closest to the team wins. A higher level can **lock** a kind, and then the highest locked
+definition wins and nothing below it can override it. Creating a resource at or below a lock is
+refused. The Designer never resolves levels or evaluates locks; it shows what the admin decided.
+
+Who can do what:
+
+| Action | Who |
+|---|---|
+| Add an external team resource | A member who may use the team |
+| Remove a team resource | An admin, or the person who added it |
+| Remove a workspace-level or managed resource | A workspace admin |
+| Lock or unlock a kind | A workspace admin |
+| Platform and partnership resources | Admins of that level, in the admin console |
+
+The admin is the real authority and can still refuse an action with a "not allowed" message.
+Removing a resource that deployed units still reference is refused, and the message lists the
+units.
+
+## What a deploy does
+
+When you deploy an environment, the Designer reads which kinds each unit's extensions need and
+checks the admin for each one:
+
+1. **Everything ready:** it writes one connection per kind into the environment's secret store
+   before the environment is shipped, and the deploy report shows an `infra-resources` step
+   ("connected 1 resource(s): ..."). No value appears in the step.
+2. **Something missing:** the deploy is refused before anything is built, naming the unit, the
+   extension and the kind. If you may create the resource, the refusal offers **Provide**, which
+   opens the same Add dialog. After adding it, deploy again; the admin answer can be up to 30
+   seconds old.
+3. **Being set up or Failed:** the deploy is refused and no Provide is offered. Wait for the
+   resource, or fix or replace it.
+4. **The admin cannot be asked:** the refusal says it could not verify. That is not the same as
+   "no resource". Try again.
+
+Other refusals you may meet: the admin does not support resources yet; the deploy target cannot
+connect resources; a unit is wired to a resource that is gone; two units in one environment are
+wired to different resources of the same kind (one connection per kind is staged per
+environment, so wire them to the same one).
+
+### Which environments connect
+
+Only the **Cloud Run** and **Kubernetes** environment-canvas lanes connect resources. Local, AWS
+ECS and Azure Container Apps targets are refused before the admin is asked. A unit-scoped deploy
+checks only the units it builds, and does not restage the connection of units it re-ships
+unchanged; use a whole-environment deploy after changing a resource.
+
+### Changing a resource later
+
+A resource edit or lock change does not mark deployed units "redeploy to apply" in every case.
+Deploy the environment again for the change to reach the workers. A unit panel shows when the
+connection staged for a kind changed after the unit last deployed.
+
+## Check that it worked
+
+Judge a resource on a **deployed** unit. Run Demo and in-process Test chat do not serve the
+connection, so the extension answers that the resource is not connected there.
+
+## Troubleshooting
+
+| What you see | Meaning |
+|---|---|
+| `network not allowed for url` in a tool result | The extension's sandbox does not allow that host. Use a host the extension supports (Qdrant Cloud: `*.qdrant.io`; Redis: `*.upstash.io`), or an extension version that declares the `infra://` grant. |
+| The tool result says `source: "legacy"` | The connection was not found at run time and the extension fell back to its old settings. Check the `infra-resources` step, and that you did a whole-environment deploy. |
+| "no `collection` is configured for this tenant" | A Qdrant resource is connected but the extension's own configuration has no collection. |
+| Tool result names `collection_prefix` or `key_prefix` | The resource has no namespace prefix in its extra settings. |
+| `401` or `403` from the service | The stored credential is wrong. Remove the resource and add it again. |

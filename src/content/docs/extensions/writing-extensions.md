@@ -149,3 +149,5 @@ An extension should carry everything needed to install and run its capability:
 - user-facing strings in `i18n/`
 - the vendored WIT contract under `wit/`
 </content>
+
+If your extension needs a shared service such as Qdrant or Redis, declare it instead of hard-coding an address: see [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).

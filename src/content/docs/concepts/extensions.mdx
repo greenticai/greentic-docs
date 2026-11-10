@@ -195,3 +195,5 @@ Design extensions are published as signed `.gtxpack` artifacts with the [`gtdx` 
 - **Standalone `.gtxpack` design extensions** — the `design` / `bundle` / `deploy` / `provider` kinds installed into `GREENTIC_EXTENSIONS_DIR` and published with the [`gtdx` CLI](/extensions/publishing-extensions/). These power agentic-worker tools, guardrails, and Designer compose-time helpers. Covered by [Design Extensions](#design-extensions-gtxpack).
 
 When deciding which to author: a pack that offers a runtime capability, deployer contract, or static route uses `.gtpack` metadata; an agentic-worker tool, guardrail, or Designer composer ships as a `.gtxpack` design extension.
+
+An extension that needs a shared service such as Qdrant or Redis declares the need and lets the operator connect it: see [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).
