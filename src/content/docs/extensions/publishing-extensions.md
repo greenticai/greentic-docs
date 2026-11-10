@@ -95,3 +95,5 @@ Version the extension and its describe intentionally:
 - Branch-suffix conventions used by CI: `research` → `-research`, `develop` → `-dev`, `main` → a stable version with no prerelease suffix.
 
 For automated, CI-driven publishing on a version bump, see [Extension CI](/extensions/github-action/).
+
+Publishing a `describe.json` whose `permissions.network` contains `infra://` grant tokens needs `gtdx` 1.2.26 or later; see [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).

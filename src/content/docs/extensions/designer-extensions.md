@@ -75,3 +75,4 @@ Separately, Greentic has **design-time extensions** (`.gtxpack`) that surface in
 - Design extensions (tools, guardrails, composers): [Writing Extensions](/extensions/writing-extensions/) and [Guardrail Extensions](/extensions/guardrail-extensions/)
 - The `gtdx` CLI: [gtdx CLI](/extensions/gtdx-cli/)
 - Local-WASM MCP tools (`gtdx new --kind mcp`): [Creating MCP Tools](/mcp/creating-tools/)
+- Extensions that need a shared service (Qdrant, Redis): [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/); operators: [Resources](/operations/resources/)
