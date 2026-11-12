@@ -10,31 +10,28 @@ There are two ways to provide it. You can **connect** a service you already run,
 can **host** a dedicated instance for you. This page explains the model. The steps are in the
 pages linked at the end.
 
-<Aside type="note" title="Status and roadmap">
+<Aside type="note" title="Status and roadmap (12 November 2026)">
 **Live today**
-- Managed Qdrant hosting on AWS ECS Fargate with EFS storage.
-- https through the shared load balancer, and a per-resource API key.
-- Deleting the resource removes the instance and its data.
+- Managed **Qdrant**, **Redis** and **RabbitMQ** on AWS ECS Fargate with EFS storage.
+- https through the shared load balancer, and a per-resource key.
+- Hosting targets as a platform setting with a Check button, the image policy `any`, and custom CPU and memory per resource within per-target ceilings.
+- Deleting the resource removes the instance, its data, its secret and its load balancer rule.
 - Admin log lines per AWS step, and CloudWatch container logs.
-- The hosting spec for Qdrant is built into the admin.
 
-**Merged, active after the next releases**
-- Hosting targets and the image policy (platform settings).
-- Per-provider overrides in the extension declaration.
-- The Designer reading the `hosting` declaration.
-- The `greentic.rag-qdrant` 0.6.5 declaration. It is not yet published to the Store.
+**Merged, but not published and not available**
+- **MongoDB**, which needs an admin release for `auth.template` and a published `greentic.mongodb` version.
+- **PostgreSQL and MySQL** through the SQL gateway, which need a published `greentic.sql` version that declares hosting.
 
-**In progress, not available**
-- Hosting for Redis, RabbitMQ, PostgreSQL, MySQL and MongoDB. Each needs a database and a gateway in one instance.
+**In development, not available**
+- Provisioning logic running inside extensions. Today an extension only declares.
 - Kubernetes hosting beyond a private ClusterIP service (proven only on a local kind cluster), and a real Kubernetes cluster target.
-- Provisioning logic running inside extensions. This is a design, not a feature.
 </Aside>
 
 ## Who does what
 
 | Party | Role |
 |---|---|
-| The extension | Declares **what** it needs (`x-requires`) and, if the service can be hosted, **what runs and how** (`hosting`): image, port, health path, data path, sizes, and optional settings per provider. |
+| The extension | Declares **what** it needs (`x-requires`) and, if the service can be hosted, **what runs and how** (`hosting`): image, port, health path, data path, sizes, extra containers (`sidecars`) and optional settings per provider. |
 | The platform admin | **Deploys and connects.** It validates the declaration, runs the instance on a hosting target, creates a per-resource credential and publishes the connection. It holds no knowledge of a particular service. |
 | The Designer and the runtime | Read the staged connection (`secret://infra/<kind>`) and pass it to your extension at run time. They do not interpret the hosting declaration. |
 
@@ -46,7 +43,7 @@ The platform needs no code change for it, apart from an administrator admitting 
 - **Connect** a service you already run: you give a host, a port, a scheme and a credential. The
   platform stores them sealed. This works today for any kind an installed extension declares.
 - **Host**: you ask the platform to run it. The platform starts an instance on a hosting target,
-  generates a key for it, and connects it. Today this is Qdrant on AWS ECS.
+  generates a key for it, and connects it. Today this is Qdrant, Redis and RabbitMQ on AWS ECS. See the [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/).
 
 ## What a hosting target is
 
@@ -76,6 +73,7 @@ meter this yet, so enable hosting only for workspaces you intend to carry the co
 
 ## Next
 
+- [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/): what is hosted today and what each kind runs.
 - [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/): the declaration format.
 - [Hosting Targets](/admin/hosting-targets/): how a platform admin sets up where instances run.
 - [Resources (Qdrant, Redis and other services)](/operations/resources/): the operator's side.
