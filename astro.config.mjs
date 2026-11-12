@@ -168,6 +168,7 @@ export default defineConfig({
 						{ label: 'Extension Tools & Node Types', slug: 'extensions/extension-tools' },
 						{ label: 'Extension Views', slug: 'extensions/extension-views' },
 						{ label: 'Infrastructure Resources', slug: 'extensions/infrastructure-resources' },
+						{ label: 'Hosted Kinds Catalog', slug: 'extensions/hosted-kinds-catalog' },
 						{ label: 'Designer Compatibility', slug: 'extensions/designer-compatibility' },
 						{ label: 'Extension Catalog & Wizard', slug: 'extensions/designer-extensions' },
 						{ label: 'Messaging & Events', slug: 'extensions/provider-extensions' },

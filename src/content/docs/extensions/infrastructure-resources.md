@@ -20,23 +20,22 @@ for any resource.
 </Aside>
 
 
-<Aside type="note" title="Status and roadmap">
+<Aside type="note" title="Status and roadmap (12 November 2026)">
 **Live today**
 - Declaring a need with `x-requires` (`kind`, `label`, `hint`, `schemes`), the Resources page, the deploy gate, and staging the connection into Cloud Run and Kubernetes environments.
-- Managed Qdrant hosting on AWS ECS Fargate with EFS storage: https through the shared load balancer, a per-resource API key, deletion that removes everything, admin log lines and CloudWatch container logs. The hosting spec for Qdrant is built into the admin.
+- Hosting declarations, including `sidecars`, `extras`, sidecar `args`, per-provider `targets` sections, and the size options, applied by the admin.
+- Managed hosting of **Qdrant**, **Redis** (REST gateway plus Redis) and **RabbitMQ** on AWS ECS Fargate with EFS storage, with https through the shared load balancer, a per-resource key, deletion that removes everything, admin log lines and CloudWatch container logs. `greentic.redis` 0.1.3 and `greentic.rabbitmq` 0.1.2 are published and declare hosting.
+- Hosting targets as a platform setting with a Check button, the image policy `any`, and custom CPU and memory per resource within per-target ceilings (see [Hosting Targets](/admin/hosting-targets/)).
 
-**Merged, active after the next releases**
-- Hosting targets and the image policy in the admin (see [Hosting Targets](/admin/hosting-targets/)).
-- Per-provider overrides (`hosting.targets`) in the extension declaration.
-- The Designer reading the `hosting` declaration.
-- The `greentic.rag-qdrant` 0.6.5 declaration. It is **not yet published** to the Store.
+**Merged, but not published and not available**
+- **MongoDB** (RESTHeart plus MongoDB Community). The declaration is merged in the `greentic.mongodb` repository (0.1.2), but the Store lists 0.1.1 only, and the declaration needs `auth.template`, which no released admin supports yet.
+- **PostgreSQL and MySQL** through the SQL gateway. The gateway is merged in the `greentic.sql` repository, but the Store lists `greentic.sql` 1.4.1 without a hosting declaration.
 
-**In progress, not available**
-- Hosting for Redis, RabbitMQ, PostgreSQL, MySQL and MongoDB. They need a database and a gateway in one instance.
-- Kubernetes hosting beyond a private ClusterIP service, which has been proven only on a local kind cluster, and a real Kubernetes cluster target.
-- Provisioning logic running inside extensions. This is a design only.
+**In development, not available**
+- Provisioning logic that runs inside extensions. Today the extension only declares, and the admin acts.
+- Kubernetes hosting beyond a private ClusterIP service, proven only on a local kind cluster. A real Kubernetes cluster target has not been run.
 
-See [Hosted Infrastructure](/concepts/hosted-infrastructure/) for the model.
+See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/) for what runs in each kind, and [Hosted Infrastructure](/concepts/hosted-infrastructure/) for the model.
 </Aside>
 
 ## 1. Declare the need with `x-requires`
@@ -141,14 +140,17 @@ Only `image`, `tag` and `port` are required. Unknown fields are refused at every
 | `env` | Fixed extra environment: literal configuration only. | none |
 | `run_as.uid` | User id, 1 to 65534. Root is refused. | `1000` |
 | `sizes.<name>` | Named sizes `small`, `medium`, `large`, each with `cpu` and `memory_mib`. | platform defaults |
+| `auth.template` | A configuration value with a `{{token}}` placeholder that the platform renders and injects as `auth.env`. See [below](#authtemplate-render-the-key-into-a-configuration-value). Not supported by a released admin yet. | none |
+| `extras` | Literal, non-secret connection facts published in the staged connection. See [below](#extras-facts-for-the-connection). | none |
+| `sidecars` | Extra containers that run in the same task or pod. See [below](#sidecars-more-than-one-container). | none |
+| `targets` | Per-provider sections that override the common fields. | none |
 
 The size, shape and secret rules the admin applies:
 
 - Paths are absolute, use only `[A-Za-z0-9/._~-]`, contain no `..` or `//`, and are at most 128 characters.
 - `env` has at most 16 entries, values at most 256 characters with no control characters.
 - Variable names are `[A-Z_][A-Z0-9_]*`. The prefixes `AWS_`, `ECS_`, `KUBERNETES_`, `LD_`, `DYLD_` and `GREENTIC_`, and names such as `PATH` and `HOME`, are refused.
-- No secrets in `env`. Names containing KEY, SECRET, TOKEN, PASSWORD, CREDENTIAL or AUTH are refused, and so are values that look like secrets (for example an `sk-` or `ghp_` prefix, a PEM block, a URL with a user name, or any unbroken token of 32 characters or more). You cannot set the auth variable to a literal either. The platform generates a per-resource key and injects it.
-- `sizes` must be a valid Fargate cpu and memory pair, with memory at most 16 GiB.
+- No secrets in `env`. See [the secret-name guard](#the-secret-name-guard) for exactly which names and values are refused. You cannot set the auth variable to a literal either. The platform generates a per-resource key and injects it.
 - The declaration must be an object of at most 4096 bytes serialised and 6 levels deep. The Designer drops one that is larger, and the kind still works as a connect-only kind.
 
 ### Per-provider overrides: `hosting.targets`
@@ -173,6 +175,140 @@ member, every other member replaces.
 - A section is validated by the same parser and the same image policy as a flat declaration, after merging. If a known section fails, the whole declaration is refused. Nothing is applied partially.
 - An unknown target kind (`gcp`, `vm`, and so on) is ignored with a warning, so an extension can declare a provider before the admin knows it.
 - A storage class is a setting of the Kubernetes target, not of the extension.
+
+### Sidecars: more than one container
+
+A kind that needs a service and a gateway in one instance lists the extra containers in
+`sidecars`. The first user is `cache/redis`: the extension speaks the Upstash REST protocol
+(https and a bearer token), so the platform hosts stock Redis together with a REST gateway.
+
+```json
+{
+  "kind": "cache/redis",
+  "hosting": {
+    "image": "hiett/serverless-redis-http", "tag": "sha256:<64 hex>", "port": 8079,
+    "auth": { "env": "SRH_TOKEN", "header": "Authorization" },
+    "health": { "path": "/" },
+    "env": { "SRH_MODE": "env", "SRH_PORT": "8079", "SRH_CONNECTION_STRING": "redis://127.0.0.1:6379" },
+    "run_as": { "uid": 999 },
+    "extras": { "isolation": "dedicated" },
+    "sidecars": [{
+      "name": "redis-server", "image": "redis", "tag": "sha256:<64 hex>",
+      "data": { "path": "/data" }, "run_as": { "uid": 999 },
+      "health": { "cmd": ["redis-cli", "ping"] },
+      "essential": true, "start": "healthy"
+    }]
+  }
+}
+```
+
+- **The primary container is the one the load balancer targets.** It alone gets the port, the target group, the Service and the key. Containers of one task or pod share a network namespace, so a sidecar is reached on `127.0.0.1`.
+- A sidecar has a `name` (`[a-z][a-z0-9-]{0,30}`, unique, and not the kind name), an `image` and a `tag` (same rules as the primary, checked against the same image policy), and optionally `env`, `args`, `data.path`, `run_as.uid`, `health.cmd`, `essential` (default `true`) and `start`.
+- `start` is `start` or `healthy`. It is the condition the primary waits for before it starts. `healthy` needs a `health.cmd`.
+- `health.cmd` is an argument list of at most 6 entries, each `[A-Za-z0-9._:/=-]` and at most 64 characters, the first not starting with `-`. It runs without a shell.
+- **A sidecar declares no port.** None is exposed. Only the primary's port is opened.
+- **At most 3 sidecars**, and **at most one container of the task has `data`**. Only that container gets the volume. The access point uses that container's user id.
+- **A sidecar never receives the key** and has no `auth`.
+- The containers share the task's CPU and memory. There are no per-container limits.
+
+### `args`: listen on localhost only
+
+Most images can bind the loopback address only if you tell them. A sidecar may therefore declare
+`args`, a list that replaces the image's default command. The image's entrypoint is kept.
+
+```json
+"args": ["mongod", "--bind_ip", "127.0.0.1", "--wiredTigerCacheSizeGB", "0.25"]
+```
+
+- At most 16 entries, each at most 128 characters from `[A-Za-z0-9._:/=,@%+-]`. No whitespace, quotes, `$`, `;`, backticks or `..`. The list is run directly and never through a shell.
+- No entry may look like a secret. A password must never be passed as an argument, because it would sit in the task definition.
+- Absent means the image default.
+- Changing `args` registers a new task definition and restarts the instance.
+
+### `extras`: facts for the connection
+
+`extras` is a map of literal, non-secret facts that the platform publishes in the staged
+connection, next to the platform's own `host_id`. Use it for what your extension needs to know
+about a hosted instance, for example `{ "isolation": "dedicated" }`, or `username` and `vhost` for
+RabbitMQ.
+
+- At most 8 entries. A key is lowercase snake_case, up to 32 characters, never `host_id`, and never contains `key`, `secret`, `token`, `password`, `credential` or `auth`.
+- A value is 1 to 128 characters with no control characters. A value that looks like a secret is refused.
+- A literal in `extras` that must agree with a literal in `env` (a user name, for example) has to be kept in step by you. Test that they match.
+
+### `auth.template`: render the key into a configuration value
+
+Normally the generated key is injected as the value of `auth.env`. Some services take the key only
+as part of a larger configuration string. For those, `auth.template` holds that string with a
+`{{token}}` placeholder. The platform substitutes the key and injects the result as `auth.env`,
+from the secret store, never as a plain environment value. `greentic.mongodb` uses it to put the
+key into RESTHeart's configuration.
+
+```json
+"auth": {
+  "env": "RHO",
+  "header": "Authorization",
+  "template": "/mclient/connection-string->\"mongodb://127.0.0.1:27017\";...;password:\"{{token}}\";..."
+}
+```
+
+The template itself contains no secret, only the placeholder. **No released admin supports
+`auth.template` yet.** An admin that does not know the field refuses the whole declaration, so the
+kind cannot be hosted until the admin is released. The declaration is merged in `greentic.mongodb`
+0.1.2 and is not published.
+
+### The secret-name guard
+
+The platform refuses to run a declaration whose `env` (the primary's, a sidecar's) or `extras`
+could carry a secret. The check is a table, not a ban on words.
+
+- A name reads as secret when one of its `_`-separated segments ends with `SECRET`, `TOKEN`, `PASSWORD`, `PASSWD`, `CREDENTIAL`, `CREDENTIALS` or `APIKEY`, or its last segment is `KEY`, `AUTH` or `PASS`, or ends with `KEY`. A name such as `KEYSPACE` or `MAX_KEYS_PER_REQUEST` is fine.
+- A secret-looking name is still refused, with two exceptions that databases need. The exact names `POSTGRES_HOST_AUTH_METHOD`, `MYSQL_ALLOW_EMPTY_PASSWORD`, `MYSQL_RANDOM_ROOT_PASSWORD`, `MARIADB_ALLOW_EMPTY_ROOT_PASSWORD` and `MARIADB_RANDOM_ROOT_PASSWORD` are allowed, and so are flag-style names (ending in `_AUTH_METHOD`, or with an `ALLOW` segment). In both cases the value must be a short token of at most 24 characters from `[A-Za-z0-9_-]`, such as `trust`, `scram-sha-256`, `yes` or `1`.
+- A secret-looking **value** is refused under every name: an `sk-`, `ghp_` or `AKIA` prefix, `Bearer `, a PEM block, a URL with a user name, or any unbroken token of 32 characters or more.
+
+### Custom CPU and memory per resource
+
+A hosted resource has a size class (`small`, `medium` or `large`; default `small`). A platform
+admin can also give a resource a **custom size** that replaces the class's CPU and memory. The
+class still decides the disk, and it bounds what a tenant may ask for.
+
+| Class | CPU units | Memory (MiB) |
+|---|---|---|
+| `small` | 512 | 1024 |
+| `medium` | 1024 | 2048 |
+| `large` | 2048 | 4096 |
+
+A custom size is `{ "cpu": 1024, "memory_mib": 3072 }`, in CPU units (1024 is one vCPU) and MiB.
+It can be sent when a resource is created, or changed with
+`PUT /api/admin/tenants/{id}/infra-resources/{family}/{name}/size`, with the body
+`{ "custom": { ... } }`, or `{ "size": "medium" }` to go back to a class. The admin checks it in
+this order, and each failure is a fixed `422`:
+
+1. `infra_size_custom_invalid`: the pair is not valid for the target. On AWS ECS it must be a Fargate pair. Nothing is rounded.
+2. `infra_size_above_target_limit`: above the target's ceiling (`maxCpu`, `maxMemoryMib`).
+3. `infra_size_not_allowed`: above the tenant's existing size quota.
+
+Valid Fargate pairs:
+
+| CPU units | Memory (MiB) |
+|---|---|
+| 256 | 512 to 2048, in steps of 512 |
+| 512 | 1024 to 4096, in steps of 1024 |
+| 1024 | 2048 to 8192, in steps of 1024 |
+| 2048 | 4096 to 16384, in steps of 1024 |
+| 4096 | 8192 to 30720, in steps of 1024 |
+| 8192 | 16384 to 61440, in steps of 4096 |
+| 16384 | 32768 to 122880, in steps of 8192 |
+
+On Kubernetes, CPU is 128 to 65536 units and memory 256 to 262144 MiB. Memory request equals the
+limit, and the CPU request is `cpu * 1000 / 1024` millicores.
+
+Which size applies, from strongest to weakest: the custom size on the resource, the extension's
+declared `sizes` for the class, then the platform's class default. Changing a size puts a `ready`
+or `failed` resource back to `provisioning` with the same host and key, and the instance is
+replaced with the new size. Asking for the size it already has changes nothing.
+
+The ceiling is a setting of the hosting target, see [Hosting Targets](/admin/hosting-targets/#size-ceiling).
 
 ### When the platform refuses a declaration
 
@@ -199,9 +335,11 @@ extensions declare the same kind, the first by extension id with a valid declara
 6. Choose `sizes` that are valid cpu and memory pairs.
 7. Republish the extension. The platform admin decides whether the image repository is admitted.
 8. If the service does not speak HTTP (a database or a broker), your extension talks to an HTTP
-   gateway, and the hosting image must contain both the service and that gateway. **The gateway
-   image belongs to your extension's repository, never to the admin.** Hosting for these kinds is
-   not available yet; see the status box above.
+   gateway, and the instance must contain both the service and that gateway. Declare the gateway
+   as the primary container and the service as a `sidecar`, bound to `127.0.0.1` with `args`.
+   **The gateway image belongs to your extension's repository, never to the admin.** Redis,
+   RabbitMQ and Qdrant are hosted this way today. MongoDB, PostgreSQL and MySQL are merged but
+   not published. See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/).
 9. Remember what your extension reads at run time is still the staged connection (section 3
    below), whether the service is hosted or one you connect.
 
