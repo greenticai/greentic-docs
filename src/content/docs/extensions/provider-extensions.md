@@ -65,6 +65,12 @@ When `requires_setup: true`, the capability offer must point at setup QA data. A
 
 Messaging and event integrations should be packs instead of loose components because the runtime behavior depends on more than code. The pack can carry components, flows, setup questions, i18n strings, static assets, and capability metadata together. That makes the integration installable, observable, controllable, and replaceable across deployments.
 
+## Related: hosted services
+
+Messaging and event extensions do not declare hosted services. An extension that needs a shared
+service, such as a vector store, does so with `x-requires`; see
+[Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).
+
 ## Publishing
 
 Messaging and event extensions are signed `.gtxpack` artifacts published to a registry such as `store.greentic.cloud`. See [Publishing Extensions](/extensions/publishing-extensions/) for keys, signing, and distribution.

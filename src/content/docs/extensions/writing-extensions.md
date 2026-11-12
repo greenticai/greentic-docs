@@ -139,6 +139,12 @@ See [Publishing Extensions](/extensions/publishing-extensions/) for the distribu
 trust details, and the [gtdx CLI reference](/extensions/gtdx-cli/) for every command and
 flag.
 
+## Needing a Shared Service
+
+If your extension needs a vector store, a cache or a database, declare it with `x-requires`
+instead of hard-coding an address, and optionally add a `hosting` object so the platform can run
+it. See [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).
+
 ## What Belongs in an Extension
 
 An extension should carry everything needed to install and run its capability:
