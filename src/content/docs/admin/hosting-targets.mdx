@@ -1,0 +1,168 @@
+---
+title: Hosting Targets
+description: Add the places where the platform runs hosted infrastructure such as Qdrant, check them, set a default, choose an image policy, and read the logs.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A **hosting target** is a place where the platform runs hosted infrastructure for extensions, for
+example a dedicated Qdrant instance. A platform admin adds targets as a platform setting. Several
+targets can be live at once. Every hosted resource keeps the target it was created on.
+
+What to run, and with which sizes and environment, comes from the extension's `hosting`
+declaration. The admin only deploys and connects. See
+[Hosted Infrastructure](/concepts/hosted-infrastructure/).
+
+<Aside type="note" title="Status and roadmap">
+**Live today**
+- Managed Qdrant on AWS ECS Fargate with EFS storage, configured by deploy-time settings. https through the shared load balancer, a per-resource API key, deletion that removes everything, admin log lines and CloudWatch container logs. The Qdrant hosting spec is built into the admin.
+
+**Merged, active after the next releases**
+- Hosting targets as a platform setting (everything in this page except the live items above), including the Check button, the default target and import from the current deployment.
+- The image policy (`any` or `allowlist`).
+- Per-provider overrides in the extension declaration.
+
+**In progress, not available**
+- Hosting for Redis, RabbitMQ, PostgreSQL, MySQL and MongoDB.
+- Applying the Kubernetes `storageClass`, `publicHostDomain` and `ingressClass` settings. They are stored and validated, but the Kubernetes adapter still creates a private ClusterIP service on the default storage class.
+- Kubernetes hosting beyond that, proven only on a local kind cluster. A real Kubernetes cluster target has not been run.
+- Other target kinds (GCP, VM) and provisioning logic inside extensions (a design only).
+</Aside>
+
+Only a platform admin can manage hosting targets. Every change is audited.
+
+## Target kinds and fields
+
+### AWS ECS
+
+Runs each instance as an ECS Fargate service with its data on EFS. The admin uses its own AWS
+identity; no credential is stored in the target.
+
+| Field | Meaning |
+|---|---|
+| `region` | AWS region. |
+| `cluster` | ECS cluster. |
+| `vpcId` | VPC. |
+| `subnets` | List of subnets. |
+| `securityGroup` | Shared security group. |
+| `efsId` | EFS file system for instance data. |
+| `executionRoleArn` | Execution role for the tasks. It must read the per-resource secrets (`greentic/infra/*`), mount EFS and write the log group. |
+| `taskRoleArn` | Optional task role. |
+| `listenerArn` | Optional https listener of the shared load balancer. |
+| `certificateArn` | Optional certificate. |
+| `dnsDomain` | Optional domain for instance hostnames (`*.<dns domain>`). |
+| `installationId` | Identifies this admin installation. Every object created is tagged with it. |
+| `logGroup` | Optional log group. Default `/ecs/greentic-infra-hosts`. |
+
+The admin's AWS permissions are listed in its IAM statement. Every object the adapter creates is
+tagged `greentic:infra=<installation id>` and `greentic:managed=true`. It changes or deletes only
+objects that carry both tags.
+
+### Kubernetes
+
+| Field | Meaning |
+|---|---|
+| `namespace` | Namespace for instances. |
+| `installationId` | Identifies this admin installation. |
+| `storageClass` | Optional. Stored and validated, **not applied yet**. |
+| `publicHostDomain` | Optional. Stored and validated, **not applied yet**. |
+| `ingressClass` | Optional. Stored and validated, **not applied yet**. |
+| credential | Optional kubeconfig, sealed and never shown again. Without one the admin uses its in-cluster identity. |
+
+The target view says that the three optional fields are not applied.
+
+## Add a target
+
+1. Open the hosting targets settings as a platform admin.
+2. Choose the kind (`aws_ecs` or `kubernetes`), give it a name (1 to 64 characters of `a-z`, `0-9`, `-`, unique) and fill in the fields above.
+3. Save. The target starts as `unchecked`.
+4. Press **Check**.
+
+You can also use the API: `GET` and `POST /api/admin/infra-resources/targets`,
+`PUT` and `DELETE /api/admin/infra-resources/targets/{id}`.
+A change to a target resets its status to `unchecked`. The kind of a target never changes.
+
+## The Check button
+
+Check stores the result as `ready` or `invalid` with the time it ran, and shows each step.
+
+- **AWS ECS:** the settings are valid, the cluster is active, the file system is readable, the
+  listener is readable (when set), and an IAM simulation of the permissions the adapter needs.
+  The simulation runs only when the admin knows its own role (`GREENTIC_INFRA_ADMIN_PRINCIPAL_ARN`).
+  Otherwise Check reports that it was not evaluated.
+- **Kubernetes:** the settings are valid, a client can be built, and the namespace is readable.
+
+## Default target and enabling
+
+- At most one target is the **default**. A disabled target cannot be the default.
+- When you create a managed resource without naming a target, the platform uses the default
+  enabled target if it can run that kind. A named target must exist, be enabled and have a usable
+  adapter. Nothing falls back from an explicit choice.
+- Disabling a target keeps serving the resources already on it. It only stops accepting new ones.
+- Without any target, the older deploy-time configuration (`GREENTIC_INFRA_PROVISIONER`) keeps
+  working unchanged.
+
+## Import from the current deployment
+
+If the platform already runs hosted instances from deploy-time `GREENTIC_INFRA_*` settings, use
+**Import from the current deployment** to build a target from them. It answers
+`409 infra_target_env_not_configured` when there is nothing to import.
+
+## Image policy
+
+The image policy decides which container repositories a hosting declaration may use. It is a
+platform admin setting and every change is audited.
+
+| Policy | Meaning |
+|---|---|
+| `any` (default) | Every syntactically valid repository is admitted. |
+| `allowlist` | Only the listed repository prefixes. An entry matches itself and anything nested under it, so `qdrant/qdrant` does not match `qdrant/qdrant-evil`. An empty stored list falls back to `GREENTIC_INFRA_HOST_IMAGE_ALLOW`, whose initial value is `qdrant/qdrant`. |
+
+**What this means for security.** In `any` mode the platform runs an image chosen by an extension
+that the platform published. Even then it still requires a pinned tag or digest (never `latest`),
+refuses unknown fields and secrets in `env`, and refuses reserved variable names and a root user.
+Only a platform-owned, published extension can supply a spec. Use `allowlist` if you want to
+decide yourself which repositories may run in your account. A change takes effect on the next read
+with no restart. A fresh install no longer allows only `qdrant/qdrant`.
+
+## Deleting a resource and a target
+
+- **Deleting a hosted resource destroys the instance and its data.** For AWS this removes the
+  service, task definitions, target group, load balancer rule, EFS access point and secret. There
+  is no undo.
+- **Deleting a target** is refused with `409 infra_target_in_use` while resources or parked
+  clean-up items still name it.
+
+## Where the logs are
+
+- **Admin log.** Each AWS step writes an `infra host:` line with the host id, the AWS action, the
+  AWS error code and a truncated message. Request bodies and secret values are never logged.
+- **Container logs.** CloudWatch log group `/ecs/greentic-infra-hosts` (or your `logGroup`), with
+  the host id as the stream prefix. This is where you see why a container did not start.
+- **What the console shows.** The admin API and console show a fixed phrase only. The detail is in
+  the two places above.
+
+The execution role needs `logs:CreateLogStream` and `logs:PutLogEvents` on the group, and
+`logs:CreateLogGroup` unless you create the group yourself.
+
+## What stays with the operator on AWS
+
+The platform does not create these. You maintain them:
+
+- **Security group ingress** for the port a hosted instance listens on, from the load balancer's
+  group. A port that is not open fails health checks.
+- **Wildcard DNS**: `*.<dns domain>` pointing at the load balancer. The admin has no Route 53
+  permissions.
+- **A publicly trusted certificate** on the https listener (ACM). A proxied provider such as
+  Cloudflare in front of the load balancer also works. Without a certificate the load balancer
+  serves http only.
+- **The shared security group, the listener, the execution role and the EFS file system.**
+
+Each hosted instance is one Fargate task running around the clock plus an EFS access point. This
+is not metered yet.
+
+## See also
+
+- [Hosted Infrastructure](/concepts/hosted-infrastructure/)
+- [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/)
+- [Cloud Deploy Environments](/admin/cloud-deploy-environments/)

@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Resources for Extensions
-description: Declare that your extension needs a shared service such as Qdrant or Redis, read the connection at run time, and reach the operator's host without hard-coding it.
+description: Declare that your extension needs a shared service such as Qdrant or Redis, optionally say how the platform can host it, read the connection at run time, and reach the operator's host without hard-coding it.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -17,6 +17,26 @@ on a Kubernetes (kind) cluster with a Qdrant stand-in. A call to a real Qdrant C
 endpoint has **not** been run end to end. The network grant (`infra://`, below) has been
 exercised only in unit tests, not on a deployed workload. The Cloud Run lane has not been run
 for any resource.
+</Aside>
+
+
+<Aside type="note" title="Status and roadmap">
+**Live today**
+- Declaring a need with `x-requires` (`kind`, `label`, `hint`, `schemes`), the Resources page, the deploy gate, and staging the connection into Cloud Run and Kubernetes environments.
+- Managed Qdrant hosting on AWS ECS Fargate with EFS storage: https through the shared load balancer, a per-resource API key, deletion that removes everything, admin log lines and CloudWatch container logs. The hosting spec for Qdrant is built into the admin.
+
+**Merged, active after the next releases**
+- Hosting targets and the image policy in the admin (see [Hosting Targets](/admin/hosting-targets/)).
+- Per-provider overrides (`hosting.targets`) in the extension declaration.
+- The Designer reading the `hosting` declaration.
+- The `greentic.rag-qdrant` 0.6.5 declaration. It is **not yet published** to the Store.
+
+**In progress, not available**
+- Hosting for Redis, RabbitMQ, PostgreSQL, MySQL and MongoDB. They need a database and a gateway in one instance.
+- Kubernetes hosting beyond a private ClusterIP service, which has been proven only on a local kind cluster, and a real Kubernetes cluster target.
+- Provisioning logic running inside extensions. This is a design only.
+
+See [Hosted Infrastructure](/concepts/hosted-infrastructure/) for the model.
 </Aside>
 
 ## 1. Declare the need with `x-requires`
@@ -73,6 +93,117 @@ Other rules:
 - **A missing declaration means "needs nothing"** and never fails a build.
 - **Older Designers** ignore `hint` and `schemes` (no hint, no scheme check) and load the
   extension as before.
+
+
+## Declare how the service can be hosted: `hosting`
+
+An `x-requires` entry may also say how the platform can run the service as a dedicated instance.
+The extension **declares**; the admin **deploys and connects**. Without `hosting`, the kind can
+only be connected to a service you already run.
+
+```json
+{
+  "kind": "vector-store/qdrant",
+  "label": "Qdrant",
+  "schemes": ["https"],
+  "hosting": {
+    "image": "qdrant/qdrant",
+    "tag": "v1.12.5",
+    "port": 6333,
+    "protocol": "http",
+    "auth":   { "env": "QDRANT__SERVICE__API_KEY", "header": "api-key" },
+    "health": { "path": "/healthz" },
+    "data":   { "path": "/qdrant/storage" },
+    "env":    { "QDRANT__STORAGE__SNAPSHOTS_PATH": "/qdrant/storage/snapshots" },
+    "run_as": { "uid": 1000 },
+    "sizes":  { "small": { "cpu": 512, "memory_mib": 1024 } }
+  }
+}
+```
+
+This is the declaration `greentic.rag-qdrant` 0.6.5 carries on each tool. As with the rest of
+`x-requires`, it lives inside a free-form schema string, so older Designers and admins ignore it.
+
+### Fields
+
+Only `image`, `tag` and `port` are required. Unknown fields are refused at every level.
+
+| Field | Meaning | Default |
+|---|---|---|
+| `image` | Container repository: lowercase `[a-z0-9./_-]`, at most 128 characters, no tag, digest or registry port. | required |
+| `tag` | A pinned tag, or `sha256:<64 hex>` (rendered as `repo@sha256:...`). `latest`, an empty or a malformed tag is refused. | required |
+| `port` | The service port, 1024 to 65535. The container never runs as root. | required |
+| `protocol` | `http`. | `http` |
+| `auth.env` | Environment variable that sets the service API key. | none |
+| `auth.header` | Header clients send the key in. | none |
+| `health.path` | Absolute readiness path. | none |
+| `data.path` | Absolute directory to persist. Never `/`. | none (no volume) |
+| `env` | Fixed extra environment: literal configuration only. | none |
+| `run_as.uid` | User id, 1 to 65534. Root is refused. | `1000` |
+| `sizes.<name>` | Named sizes `small`, `medium`, `large`, each with `cpu` and `memory_mib`. | platform defaults |
+
+The size, shape and secret rules the admin applies:
+
+- Paths are absolute, use only `[A-Za-z0-9/._~-]`, contain no `..` or `//`, and are at most 128 characters.
+- `env` has at most 16 entries, values at most 256 characters with no control characters.
+- Variable names are `[A-Z_][A-Z0-9_]*`. The prefixes `AWS_`, `ECS_`, `KUBERNETES_`, `LD_`, `DYLD_` and `GREENTIC_`, and names such as `PATH` and `HOME`, are refused.
+- No secrets in `env`. Names containing KEY, SECRET, TOKEN, PASSWORD, CREDENTIAL or AUTH are refused, and so are values that look like secrets (for example an `sk-` or `ghp_` prefix, a PEM block, a URL with a user name, or any unbroken token of 32 characters or more). You cannot set the auth variable to a literal either. The platform generates a per-resource key and injects it.
+- `sizes` must be a valid Fargate cpu and memory pair, with memory at most 16 GiB.
+- The declaration must be an object of at most 4096 bytes serialised and 6 levels deep. The Designer drops one that is larger, and the kind still works as a connect-only kind.
+
+### Per-provider overrides: `hosting.targets`
+
+Add a `targets` object with one section per hosting target kind, `aws_ecs` and `kubernetes`. A
+section holds the same members as the common declaration, except `protocol`. The section for the
+target a resource runs on is merged over the common fields: `env` and `sizes` merge member by
+member, every other member replaces.
+
+```json
+"hosting": {
+  "image": "qdrant/qdrant", "tag": "v1.12.5", "port": 6333,
+  "sizes": { "small": { "cpu": 512, "memory_mib": 1024 } },
+  "targets": {
+    "aws_ecs":    { "sizes": { "small": { "cpu": 1024, "memory_mib": 2048 } } },
+    "kubernetes": { "env": { "QDRANT__LOG_LEVEL": "info" } }
+  }
+}
+```
+
+- A flat declaration with no `targets` stays valid and means the same on every target.
+- A section is validated by the same parser and the same image policy as a flat declaration, after merging. If a known section fails, the whole declaration is refused. Nothing is applied partially.
+- An unknown target kind (`gcp`, `vm`, and so on) is ignored with a warning, so an extension can declare a provider before the admin knows it.
+- A storage class is a setting of the Kubernetes target, not of the extension.
+
+### When the platform refuses a declaration
+
+The admin checks the declaration when it ingests your extension from the Store, and again when it
+builds its registry. A declaration is applied only when all of these hold:
+
+1. The extension is published by the platform (store-synced or uploaded by the platform, never a workspace's private upload), is published and has no sync conflict.
+2. The image passes the platform's image policy (`any` by default, or an allow-list; see [Hosting Targets](/admin/hosting-targets/)).
+3. Every field passes the rules above.
+
+A failure skips that declaration with a fixed code in the admin log, such as
+`hosting_tag_not_pinned`. The extension's own text is never echoed. The kind then falls back to the
+built-in spec (Qdrant only) or cannot be hosted, and a request to host it is answered with
+`422 infra_kind_not_provisionable`. The declaration is never partly applied. When several
+extensions declare the same kind, the first by extension id with a valid declaration wins.
+
+### Checklist: write a hosted-kind extension
+
+1. Add a `hosting` object to the `x-requires` entry for your kind.
+2. Pin the image by tag or by digest. Never `latest`.
+3. Put no secrets in `env`. Declare `auth.env` and `auth.header` and let the platform inject the key.
+4. Use a port of 1024 or higher and a non-root `run_as.uid`.
+5. Give a `health.path` and a `data.path`, so the instance is checked and keeps its data.
+6. Choose `sizes` that are valid cpu and memory pairs.
+7. Republish the extension. The platform admin decides whether the image repository is admitted.
+8. If the service does not speak HTTP (a database or a broker), your extension talks to an HTTP
+   gateway, and the hosting image must contain both the service and that gateway. **The gateway
+   image belongs to your extension's repository, never to the admin.** Hosting for these kinds is
+   not available yet; see the status box above.
+9. Remember what your extension reads at run time is still the staged connection (section 3
+   below), whether the service is hosted or one you connect.
 
 ## 2. There is no list of kinds
 
@@ -201,6 +332,8 @@ install before relying on it.
 ## See also
 
 - [Resources (Qdrant, Redis and other services)](/operations/resources/): the operator side.
+- [Hosted Infrastructure](/concepts/hosted-infrastructure/): the model in plain words.
+- [Hosting Targets](/admin/hosting-targets/): where the platform runs hosted instances.
 - [Writing Extension Packs](/extensions/writing-extensions/)
 - [Extension Tools & Node Types](/extensions/extension-tools/)
 - [Publishing Extension Packs](/extensions/publishing-extensions/)

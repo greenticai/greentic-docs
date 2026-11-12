@@ -73,8 +73,10 @@ limited than it sounds:
   unless the platform sets `GREENTIC_INFRA_PROVISIONER=redis-acl`. Nothing starts a Redis or a
   Qdrant for you; the provisioner carves a per-tenant slice out of an instance a platform admin
   has already registered.
-- **Qdrant is not provisionable.** Asking for a managed Qdrant answers "The platform cannot run
-  this kind of resource yet".
+- **Qdrant is run through a hosting target, not this provisioner.** On a platform that has an
+  enabled AWS ECS hosting target, a managed Qdrant is started as a dedicated instance. Without
+  one, asking for a managed Qdrant answers "The platform cannot run this kind of resource yet".
+  See [Hosted Infrastructure](/concepts/hosted-infrastructure/).
 - Managed requests need a workspace admin.
 - A managed resource shows **Being set up** while the admin works on it, then **Ready**, or
   **Failed**.

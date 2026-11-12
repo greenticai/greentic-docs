@@ -1,0 +1,81 @@
+---
+title: Hosted Infrastructure
+description: How an extension declares the shared service it needs and how the platform can run that service for you, in plain words.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Some extensions need a service that is not part of the worker, such as a Qdrant vector store.
+There are two ways to provide it. You can **connect** a service you already run, or the platform
+can **host** a dedicated instance for you. This page explains the model. The steps are in the
+pages linked at the end.
+
+<Aside type="note" title="Status and roadmap">
+**Live today**
+- Managed Qdrant hosting on AWS ECS Fargate with EFS storage.
+- https through the shared load balancer, and a per-resource API key.
+- Deleting the resource removes the instance and its data.
+- Admin log lines per AWS step, and CloudWatch container logs.
+- The hosting spec for Qdrant is built into the admin.
+
+**Merged, active after the next releases**
+- Hosting targets and the image policy (platform settings).
+- Per-provider overrides in the extension declaration.
+- The Designer reading the `hosting` declaration.
+- The `greentic.rag-qdrant` 0.6.5 declaration. It is not yet published to the Store.
+
+**In progress, not available**
+- Hosting for Redis, RabbitMQ, PostgreSQL, MySQL and MongoDB. Each needs a database and a gateway in one instance.
+- Kubernetes hosting beyond a private ClusterIP service (proven only on a local kind cluster), and a real Kubernetes cluster target.
+- Provisioning logic running inside extensions. This is a design, not a feature.
+</Aside>
+
+## Who does what
+
+| Party | Role |
+|---|---|
+| The extension | Declares **what** it needs (`x-requires`) and, if the service can be hosted, **what runs and how** (`hosting`): image, port, health path, data path, sizes, and optional settings per provider. |
+| The platform admin | **Deploys and connects.** It validates the declaration, runs the instance on a hosting target, creates a per-resource credential and publishes the connection. It holds no knowledge of a particular service. |
+| The Designer and the runtime | Read the staged connection (`secret://infra/<kind>`) and pass it to your extension at run time. They do not interpret the hosting declaration. |
+
+The result is that adding a new kind of service means publishing an extension with a declaration.
+The platform needs no code change for it, apart from an administrator admitting the image.
+
+## Connect or host
+
+- **Connect** a service you already run: you give a host, a port, a scheme and a credential. The
+  platform stores them sealed. This works today for any kind an installed extension declares.
+- **Host**: you ask the platform to run it. The platform starts an instance on a hosting target,
+  generates a key for it, and connects it. Today this is Qdrant on AWS ECS.
+
+## What a hosting target is
+
+A hosting target is the place hosted instances run: an AWS ECS cluster, or a Kubernetes
+namespace. A platform admin adds it as a setting. Several can exist, and each hosted resource keeps
+the target it was created on for life. See [Hosting Targets](/admin/hosting-targets/).
+
+## Trust model
+
+- **Only platform-published extensions can supply a hosting spec.** A private upload from a
+  workspace is never used, nor is an extension that is unpublished or in a sync conflict.
+- **Policy checks.** The image must have a pinned tag or digest, and must pass the platform's
+  image policy: any valid repository (the default), or an allow-list of repository prefixes. Every
+  field is validated, secrets in `env` are refused, and the container runs as a non-root user.
+- **A per-resource credential.** The platform generates a key for each instance and injects it
+  through the variable the extension named. The extension author never sets or sees it.
+- **Internal and public endpoints.** The platform targets reach the instance through an address
+  the platform owns. On AWS that is an https hostname behind the shared load balancer, protected
+  by the key. On Kubernetes, the instance is a private ClusterIP service with no public address.
+- **The workspace sees the connection, not the key.** The Resources page shows "Connection: set"
+  and never the value.
+
+## Cost
+
+A hosted instance is a running task or pod plus storage, around the clock. The platform does not
+meter this yet, so enable hosting only for workspaces you intend to carry the cost for.
+
+## Next
+
+- [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/): the declaration format.
+- [Hosting Targets](/admin/hosting-targets/): how a platform admin sets up where instances run.
+- [Resources (Qdrant, Redis and other services)](/operations/resources/): the operator's side.
