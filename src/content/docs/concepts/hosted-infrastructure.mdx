@@ -10,7 +10,7 @@ There are two ways to provide it. You can **connect** a service you already run,
 can **host** a dedicated instance for you. This page explains the model. The steps are in the
 pages linked at the end.
 
-<Aside type="note" title="Status and roadmap (12 November 2026)">
+<Aside type="note" title="Status and roadmap (13 November 2026)">
 **Live today**
 - Managed **Qdrant**, **Redis** and **RabbitMQ** on AWS ECS Fargate with EFS storage.
 - https through the shared load balancer, and a per-resource key.
@@ -18,12 +18,11 @@ pages linked at the end.
 - Deleting the resource removes the instance, its data, its secret and its load balancer rule.
 - Admin log lines per AWS step, and CloudWatch container logs.
 
-**Merged, but not published and not available**
-- **MongoDB**, which needs an admin release for `auth.template` and a published `greentic.mongodb` version.
-- **PostgreSQL and MySQL** through the SQL gateway, which need a published `greentic.sql` version that declares hosting.
+- **MongoDB** (`greentic.mongodb` 0.1.2) and **PostgreSQL and MySQL** through the SQL gateway (`greentic.sql` 1.5.0), published in the Store.
+- On AWS ECS the platform opens each host port on the security group itself (admin 1.2.81-dev).
 
 **In development, not available**
-- Provisioning logic running inside extensions. Today an extension only declares.
+- Provisioning logic running inside extensions. Today an extension only declares. The engine is merged but off by default, and it has been proven only with an IAM user, not yet with the platform role.
 - Kubernetes hosting beyond a private ClusterIP service (proven only on a local kind cluster), and a real Kubernetes cluster target.
 </Aside>
 

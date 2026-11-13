@@ -1,6 +1,6 @@
 ---
 title: Hosted Kinds Catalog
-description: Which kinds of infrastructure the platform can host for extensions today (Qdrant, Redis, RabbitMQ), which are merged but not yet published (MongoDB, PostgreSQL, MySQL), what runs in each instance, and what the operator has to prepare.
+description: Which kinds of infrastructure the platform can host for extensions today (Qdrant, Redis, RabbitMQ), also MongoDB, PostgreSQL and MySQL, what runs in each instance, and what the operator has to prepare.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -11,19 +11,19 @@ runs inside each hosted instance, and how far each one has got. The model is in
 [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/). Where
 instances run is set up in [Hosting Targets](/admin/hosting-targets/).
 
-<Aside type="note" title="Status and roadmap (12 November 2026)">
+<Aside type="note" title="Status and roadmap (13 November 2026)">
 **Live today**
 - Managed **Qdrant**, **Redis** and **RabbitMQ** on an AWS ECS Fargate hosting target, with data on EFS.
 - Redis is hosted as a REST gateway plus a Redis server in one task (`greentic.redis` 0.1.3 is published).
 - RabbitMQ is hosted as the official image with its management API (`greentic.rabbitmq` 0.1.2 is published).
 - Hosting targets as a platform setting with a Check button, the image policy `any`, custom CPU and memory per resource with per-target ceilings, and deletion that removes the instance, its data, its secret and its load balancer rule.
 
-**Merged, but not published and not available**
-- **MongoDB** (RESTHeart gateway plus MongoDB Community). The `greentic.mongodb` 0.1.2 declaration is merged in the extension repository, but the Store lists only 0.1.1, which has no hosting declaration. The declaration also uses `auth.template`, which an admin release has to add.
-- **PostgreSQL and MySQL** through the read-only SQL gateway. The gateway is merged in the `greentic.sql` repository. The Store lists `greentic.sql` 1.4.1, which has no hosting declaration, and the declaration in the repository is a draft.
+- **MongoDB** (RESTHeart gateway plus MongoDB Community) is published as `greentic.mongodb` 0.1.2 and live.
+- **PostgreSQL and MySQL** through the read-only SQL gateway are published as `greentic.sql` 1.5.0 and live.
+- Since admin 1.2.81-dev the ECS adapter opens each host port on the security group itself (see the checklist below).
 
 **In development, not available**
-- Provider logic that runs inside extensions (provisioning written as extension code instead of a declaration).
+- Provider logic that runs inside extensions (provisioning written as extension code instead of a declaration). It is merged but off by default, and it has been proven only with an IAM user, not yet with the platform role.
 - Kubernetes hosting beyond a private ClusterIP service. That has been proven only on a local kind cluster. None of the kinds below has been run on a real Kubernetes cluster.
 </Aside>
 
@@ -44,9 +44,9 @@ instances run is set up in [Hosting Targets](/admin/hosting-targets/).
 | `vector-store/qdrant` | `greentic.rag-qdrant` 0.6.5 | Live | Qdrant | 6333 | 512 / 1024 MiB (`small`) |
 | `cache/redis` | `greentic.redis` 0.1.3 | Live | REST gateway and Redis | 8079 | 512 / 1024 MiB (`small`) |
 | `queue/rabbitmq` | `greentic.rabbitmq` 0.1.2 | Live | RabbitMQ with the management plugin | 15672 | 512 / 1024 MiB |
-| `database/mongodb` | `greentic.mongodb` 0.1.2 | Merged, not published | RESTHeart and MongoDB Community | 8080 | 1024 / 2048 MiB |
-| `database/postgres` | `greentic.sql` | Merged gateway, hosting not published | SQL gateway and PostgreSQL | 8080 | Draft: 512 / 1024 MiB |
-| `database/mysql` | `greentic.sql` | Merged gateway, hosting not published | SQL gateway and MySQL | 8080 | Draft: 1024 / 2048 MiB |
+| `database/mongodb` | `greentic.mongodb` 0.1.2 | Published | RESTHeart and MongoDB Community | 8080 | 1024 / 2048 MiB |
+| `database/postgres` | `greentic.sql` | Published | SQL gateway and PostgreSQL | 8080 | 512 / 1024 MiB |
+| `database/mysql` | `greentic.sql` | Published | SQL gateway and MySQL | 8080 | 1024 / 2048 MiB |
 
 Sizes are CPU units (1024 is one vCPU) and MiB of memory. An extension can declare larger or
 smaller sizes. A custom size on the resource replaces both.
@@ -78,20 +78,20 @@ smaller sizes. A custom size on the resource replaces both.
 - **Queues.** The hosted broker starts empty. Queues still have to be created on it.
 - **Owned by.** `greentic.rabbitmq` declares everything.
 
-### MongoDB (`database/mongodb`) — merged, not published
+### MongoDB (`database/mongodb`)
 
-- **What is merged.** `greentic.mongodb` 0.1.2 in its repository declares hosting. The Store lists only 0.1.1.
-- **What it would run.** Two containers. The primary is RESTHeart Community (`softinstigate/restheart`) on port 8080, behind the load balancer. The sidecar is MongoDB Community (`mongo`), started with `--bind_ip 127.0.0.1`, no exposed port and no authentication of its own. Both are pinned by digest.
-- **Authentication.** RESTHeart's default `admin` account is disabled. The platform renders a configuration value (`RHO`) in which one user, `gw`, has the generated key as its password, and injects it from the secret store. The connection carries `extras.auth = basic` and `extras.user = gw` with the bare key as the credential. This needs the `auth.template` field, described in [the declaration reference](/extensions/infrastructure-resources/#authtemplate-render-the-key-into-a-configuration-value). **A released admin does not support `auth.template` yet**, so the declaration is refused until the admin is released.
+- **Extension.** `greentic.mongodb` 0.1.2 declares hosting and is published in the Store.
+- **What runs.** Two containers. The primary is RESTHeart Community (`softinstigate/restheart`) on port 8080, behind the load balancer. The sidecar is MongoDB Community (`mongo`), started with `--bind_ip 127.0.0.1`, no exposed port and no authentication of its own. Both are pinned by digest.
+- **Authentication.** RESTHeart's default `admin` account is disabled. The platform renders a configuration value (`RHO`) in which one user, `gw`, has the generated key as its password, and injects it from the secret store. The connection carries `extras.auth = basic` and `extras.user = gw` with the bare key as the credential. This needs the `auth.template` field, described in [the declaration reference](/extensions/infrastructure-resources/#authtemplate-render-the-key-into-a-configuration-value).
 - **Data.** `/data/db` on EFS, mounted in the MongoDB container.
 - **Health check.** RESTHeart answers `/ping`. It reports liveness only. The MongoDB container is checked with `mongosh`.
 - **Collections.** The extension creates a collection on the first insert into it (`PUT`, then a retry), because RESTHeart answers 404 for a `POST` into a missing one.
 - **Licences.** RESTHeart is AGPL-3.0 and MongoDB Server is SSPL-1.0. Review them before you admit these images.
 
-### PostgreSQL and MySQL (`database/postgres`, `database/mysql`) — gateway merged, hosting not published
+### PostgreSQL and MySQL (`database/postgres`, `database/mysql`)
 
-- **What is merged.** The read-only SQL gateway (`greentic-sql-gateway`) is merged in the `greentic.sql` repository. It implements `GET /schema` and `POST /query`, which are exactly what the extension calls. The Store lists `greentic.sql` 1.4.1, which has no hosting declaration, and the hosting declaration in the repository is a draft, not part of the extension's `describe.json`.
-- **What it would run.** The gateway on port 8080 behind the load balancer, with PostgreSQL 17 or MySQL 8.4 as a sidecar on the loopback address of the task.
+- **Extension.** `greentic.sql` 1.5.0 declares hosting and is published in the Store. The read-only SQL gateway (`greentic-sql-gateway`) implements `GET /schema` and `POST /query`, which are exactly what the extension calls.
+- **What runs.** The gateway on port 8080 behind the load balancer, with PostgreSQL 17 or MySQL 8.4 as a sidecar on the loopback address of the task.
 - **Authentication.** The generated key is the gateway's bearer token. The gateway creates a read-only database role at start and queries only as that role.
 - **Safety.** Only one `SELECT` or `WITH ... SELECT` statement is accepted. Each query runs in a read-only transaction with a time limit, a row cap (1000 by default) and a response size cap. The gateway is a read path: the extension cannot write to a hosted database.
 - **Data.** The database data directory on EFS. Running PostgreSQL or MySQL on EFS has been checked on local disk only, not on EFS. Expect slower writes. MySQL needs at least 1 GiB of memory.
@@ -101,7 +101,7 @@ smaller sizes. A custom size on the resource replaces both.
 
 | | Qdrant | Redis | RabbitMQ | MongoDB | PostgreSQL / MySQL |
 |---|---|---|---|---|---|
-| Declares images, ports, env, data path, sizes | `greentic.rag-qdrant` | `greentic.redis` | `greentic.rabbitmq` | `greentic.mongodb` | `greentic.sql` (draft) |
+| Declares images, ports, env, data path, sizes | `greentic.rag-qdrant` | `greentic.redis` | `greentic.rabbitmq` | `greentic.mongodb` | `greentic.sql` |
 | Builds and maintains the gateway image | Not needed | Upstream open-source image | Not needed | Upstream open-source image | The `greentic.sql` repository |
 | Generates and injects the key | Admin | Admin | Admin | Admin | Admin |
 | Runs the instance, the load balancer rule, EFS and cleanup | Admin | Admin | Admin | Admin | Admin |
@@ -116,11 +116,13 @@ Before the first hosted resource of any kind:
 
 1. **Add a hosting target** of kind `aws_ecs` and press **Check**. Every step must pass. See [Hosting Targets](/admin/hosting-targets/).
 2. **Grant the admin's role the hosting permissions**, including `ecs:DescribeClusters`, which is part of the read permissions. Give the task execution role access to the per-resource secrets (`greentic/infra/*`), EFS and the log group. Set `GREENTIC_INFRA_ADMIN_PRINCIPAL_ARN` so Check can simulate the permissions.
-3. **Open one security group rule per kind port.** The platform writes no EC2 rules. For each kind you intend to host, the shared task security group must allow that kind's port from the load balancer's security group only: 6333 for Qdrant, 8079 for Redis, 15672 for RabbitMQ, and 8080 for MongoDB, PostgreSQL and MySQL once they are available. A missing rule shows as failed health checks. This will be automated later.
+3. **Let the platform open the kind ports, or open them yourself.** Since admin 1.2.81-dev the ECS adapter admits each host's TCP port on the hosts' security group from the load balancer's security group on every create (one port, one source group, never a CIDR). This needs the port rule IAM statements in [Hosting Targets](/admin/hosting-targets/#security-group-rule-per-hosted-kind). If the load balancer's security group cannot be determined, or the role lacks them, the rule stays manual: the shared task security group must allow that kind's port from the load balancer's security group only: 6333 for Qdrant, 8079 for Redis, 15672 for RabbitMQ, and 8080 for MongoDB, PostgreSQL and MySQL. A missing rule shows as failed health checks. The rule is not removed when a resource is deleted.
 4. **Set up wildcard DNS and a certificate.** `*.<dns domain>` must point at the load balancer, and the https listener needs a publicly trusted certificate. The admin has no Route 53 permissions.
 5. **Check the image policy.** The default `any` admits every valid repository that a platform-published extension declares. Switch to `allowlist` if you want to name the repositories yourself, and add the repositories of the kinds you intend to host.
 6. **Set the size ceiling** (`maxCpu`, `maxMemoryMib`) on the target if the default of 4096 CPU units and 16384 MiB is not what you want.
-7. **Install the extension version that declares hosting**: `greentic.redis` 0.1.3 or later, `greentic.rabbitmq` 0.1.2 or later, `greentic.rag-qdrant` 0.6.5 or later.
+7. **Install the extension version that declares hosting**: `greentic.redis` 0.1.3 or later, `greentic.rabbitmq` 0.1.2 or later, `greentic.rag-qdrant` 0.6.5 or later, `greentic.mongodb` 0.1.2 or later, `greentic.sql` 1.5.0 or later.
+
+**Tip.** `https://h-<id>.<domain>/healthz` answers 200 for any host name because of the load balancer's default rule, so it does not prove an instance exists. Call an endpoint that needs the key and expect 401 without it.
 
 ## See also
 
