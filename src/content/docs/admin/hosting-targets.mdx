@@ -13,7 +13,7 @@ What to run, and with which sizes and environment, comes from the extension's `h
 declaration. The admin only deploys and connects. See
 [Hosted Infrastructure](/concepts/hosted-infrastructure/).
 
-<Aside type="note" title="Status and roadmap (12 November 2026)">
+<Aside type="note" title="Status and roadmap (13 November 2026)">
 **Live today**
 - Hosting targets as a platform setting: add, edit, enable, set a default, **Check**, and import from the current deployment.
 - The image policy `any` (the default) and `allowlist`.
@@ -21,15 +21,14 @@ declaration. The admin only deploys and connects. See
 - Custom CPU and memory per resource, with a per-target ceiling (`maxCpu`, `maxMemoryMib`).
 - Deleting a hosted resource removes the service, task definitions, target group, load balancer rule, EFS access point and secret.
 
-**Merged, but not published and not available**
-- Hosting for **MongoDB**. Its extension declaration needs `auth.template`, which no released admin supports yet.
-- Hosting for **PostgreSQL and MySQL** through the SQL gateway. The Store has no `greentic.sql` version that declares hosting.
+- Hosting for **MongoDB** (`greentic.mongodb` 0.1.2) and for **PostgreSQL and MySQL** through the SQL gateway (`greentic.sql` 1.5.0). Both are published in the Store.
+- Since admin 1.2.81-dev, the ECS adapter opens each host port on the security group itself (see below).
 
 **In development, not available**
+- Provider logic running inside extensions (the `extension` engine). It is merged but off by default, and it has been proven only with an IAM user, not yet with the platform role.
 - Applying the Kubernetes `storageClass`, `publicHostDomain` and `ingressClass` settings. They are stored and validated, but the Kubernetes adapter still creates a private ClusterIP service on the default storage class.
 - Kubernetes hosting beyond that, proven only on a local kind cluster. A real Kubernetes cluster target has not been run.
 - Other target kinds (GCP, VM), and provisioning logic running inside extensions.
-- Automatic security group rules for the port of each hosted kind. Today you open them yourself.
 </Aside>
 
 Only a platform admin can manage hosting targets. Every change is audited.
@@ -55,6 +54,7 @@ identity; no credential is stored in the target.
 | `certificateArn` | Optional certificate. |
 | `dnsDomain` | Optional domain for instance hostnames (`*.<dns domain>`). |
 | `installationId` | Identifies this admin installation. Every object created is tagged with it. |
+| `albSecurityGroup` | Optional. The load balancer's security group, from which host ports are admitted. When empty, the platform reads it from the load balancer behind the listener. |
 | `logGroup` | Optional log group. Default `/ecs/greentic-infra-hosts`. |
 | `maxCpu` | Optional. The largest custom CPU size (in CPU units, 1024 is one vCPU) a resource on this target may ask for. Default 4096. |
 | `maxMemoryMib` | Optional. The largest custom memory size in MiB. Default 16384. |
@@ -66,12 +66,76 @@ The admin's AWS permissions are given to its role out of band, as an IAM policy 
 - **Changes and deletes**, allowed only on objects that already carry both tags.
 - **Secrets Manager tagging** is allowed on `greentic/infra/*` by name, without tag conditions, because that service does not honour the request-tag conditions.
 - **`iam:PassRole`** for the execution role (and the task role when set), only to `ecs-tasks.amazonaws.com`.
-- **No Route 53 and no EC2 write permissions.** The adapter writes no security group rules and no DNS records.
+- **`ecs:DeregisterTaskDefinition` in its own statement.** It cannot be limited by resource tag, so it has its own statement with Resource `*` and is not part of the tag-conditioned one. All it can do is retire a task definition revision.
+- **The port rule statements** (see [Security group rule per hosted kind](#security-group-rule-per-hosted-kind)).
+- **No Route 53.** The adapter writes no DNS records. Its only EC2 write is the single port rule below.
 
 Every object the adapter creates is tagged with both tags. It changes or deletes only objects that
-carry both. `ecs:RegisterTaskDefinition` and `ecs:DeregisterTaskDefinition` do not evaluate
-resource tags in every region. If IAM refuses them under the condition, the Check lists them as
-missing and you widen only those two actions.
+carry both. `ecs:RegisterTaskDefinition` does not evaluate request tags in every region. If IAM
+refuses it under the condition, the Check lists it as missing and you widen only that action.
+
+#### Security group rule per hosted kind
+
+Since admin 1.2.81-dev (13 November 2026) the adapter opens each host port itself. On every create
+it makes sure the hosts' security group admits the host's TCP port from the load balancer's
+security group: one port, one source security group, never a CIDR, and the rule is tagged
+`greentic:infra` and `greentic:managed`. If a rule already admits that port from that group, nothing
+is written. The manual step of one rule per kind port is no longer needed when the platform role
+has these statements:
+
+```json
+{
+  "Sid": "InfraHostDeregisterTaskDef",
+  "Effect": "Allow",
+  "Action": "ecs:DeregisterTaskDefinition",
+  "Resource": "*"
+},
+{
+  "Sid": "InfraHostPortRuleRead",
+  "Effect": "Allow",
+  "Action": [
+    "elasticloadbalancing:DescribeListeners",
+    "elasticloadbalancing:DescribeLoadBalancers"
+  ],
+  "Resource": "*"
+},
+{
+  "Sid": "InfraHostPortRule",
+  "Effect": "Allow",
+  "Action": "ec2:AuthorizeSecurityGroupIngress",
+  "Resource": [
+    "arn:aws:ec2:REGION:ACCOUNT:security-group/HOSTS_SECURITY_GROUP",
+    "arn:aws:ec2:REGION:ACCOUNT:security-group-rule/*"
+  ]
+},
+{
+  "Sid": "InfraHostPortRuleTag",
+  "Effect": "Allow",
+  "Action": "ec2:CreateTags",
+  "Resource": "arn:aws:ec2:REGION:ACCOUNT:security-group-rule/*",
+  "Condition": {
+    "StringEquals": {
+      "ec2:CreateAction": "AuthorizeSecurityGroupIngress",
+      "aws:RequestTag/greentic:managed": "true",
+      "aws:RequestTag/greentic:infra": "INSTALLATION_ID"
+    }
+  }
+}
+```
+
+- **EC2 has no condition key for the source of an ingress rule.** "Only from the load balancer
+  group" is guaranteed by the adapter, which only ever sends that group, not by IAM. The verb is
+  limited to the hosts' security group, so the role cannot touch any other group.
+- **The platform role must not be allowed to revoke rules.**
+- If the load balancer's security group cannot be determined, the step is skipped and the rule stays
+  manual. You can name it with the optional target field `albSecurityGroup`, or grant the two
+  listener reads.
+- **The rule is not removed when a resource is deleted.** Other hosts of the same kind may share the
+  port, and an idle rule is harmless. To tidy it, remove the rule tagged with your installation id
+  by hand.
+- The target **Check** shows a non-blocking `port_rule` note saying whether the platform can manage
+  the rule. It never fails the Check.
+- The Check also needs `ecs:DescribeClusters`, which is part of the read permissions.
 
 ### Kubernetes
 
@@ -181,7 +245,7 @@ and nothing is created or changed. How to set a custom size is in
 
 The platform does not create these. You maintain them:
 
-- **One security group rule per hosted kind.** The shared task security group must allow the port that kind's load-balanced container listens on, from the load balancer's security group only. A port that is not open fails health checks. The platform does not write EC2 rules yet.
+- **One security group rule per hosted kind, only when the platform role cannot write it.** With the statements above the platform opens the port itself. Without them, or when the load balancer's security group cannot be determined, the shared task security group must allow the port that kind's load-balanced container listens on, from the load balancer's security group only. A port that is not open fails health checks.
 
   | Kind | Port |
   |---|---|
@@ -201,13 +265,19 @@ is not metered yet.
 ### Checklist before you host a new kind
 
 1. The hosting target shows **ready** after **Check**, and the IAM simulation step was evaluated, not skipped.
-2. The security group allows the kind's port from the load balancer group (table above).
+2. The platform role has the port rule statements, or the security group allows the kind's port from the load balancer group (table above).
 3. `*.<dns domain>` resolves to the load balancer and the listener has a trusted certificate.
 4. The image policy admits the repositories the kind uses: automatic with `any`, or add them to the allow-list.
 5. The extension version that declares hosting is installed from the Store.
 6. The size ceiling suits the sizes the kind and your tenants will use.
 
 See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/) for the port, size and storage of each kind.
+
+## Operator tip: checking that an instance exists
+
+`https://h-<id>.<domain>/healthz` answers 200 for any host name, because of the load balancer's
+default rule, so it proves nothing. To check that an instance really exists, call an endpoint that
+needs the key and expect 401 without it.
 
 ## See also
 

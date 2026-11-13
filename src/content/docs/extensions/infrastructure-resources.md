@@ -20,19 +20,17 @@ for any resource.
 </Aside>
 
 
-<Aside type="note" title="Status and roadmap (12 November 2026)">
+<Aside type="note" title="Status and roadmap (13 November 2026)">
 **Live today**
 - Declaring a need with `x-requires` (`kind`, `label`, `hint`, `schemes`), the Resources page, the deploy gate, and staging the connection into Cloud Run and Kubernetes environments.
 - Hosting declarations, including `sidecars`, `extras`, sidecar `args`, per-provider `targets` sections, and the size options, applied by the admin.
 - Managed hosting of **Qdrant**, **Redis** (REST gateway plus Redis) and **RabbitMQ** on AWS ECS Fargate with EFS storage, with https through the shared load balancer, a per-resource key, deletion that removes everything, admin log lines and CloudWatch container logs. `greentic.redis` 0.1.3 and `greentic.rabbitmq` 0.1.2 are published and declare hosting.
 - Hosting targets as a platform setting with a Check button, the image policy `any`, and custom CPU and memory per resource within per-target ceilings (see [Hosting Targets](/admin/hosting-targets/)).
 
-**Merged, but not published and not available**
-- **MongoDB** (RESTHeart plus MongoDB Community). The declaration is merged in the `greentic.mongodb` repository (0.1.2), but the Store lists 0.1.1 only, and the declaration needs `auth.template`, which no released admin supports yet.
-- **PostgreSQL and MySQL** through the SQL gateway. The gateway is merged in the `greentic.sql` repository, but the Store lists `greentic.sql` 1.4.1 without a hosting declaration.
+- Managed hosting of **MongoDB** (`greentic.mongodb` 0.1.2) and **PostgreSQL and MySQL** (`greentic.sql` 1.5.0), both published in the Store and live.
 
 **In development, not available**
-- Provisioning logic that runs inside extensions. Today the extension only declares, and the admin acts.
+- Provisioning logic that runs inside extensions. Today the extension only declares, and the admin acts. The engine is merged but off by default, and it has been proven only with an IAM user, not yet with the platform role.
 - Kubernetes hosting beyond a private ClusterIP service, proven only on a local kind cluster. A real Kubernetes cluster target has not been run.
 
 See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/) for what runs in each kind, and [Hosted Infrastructure](/concepts/hosted-infrastructure/) for the model.
@@ -140,7 +138,7 @@ Only `image`, `tag` and `port` are required. Unknown fields are refused at every
 | `env` | Fixed extra environment: literal configuration only. | none |
 | `run_as.uid` | User id, 1 to 65534. Root is refused. | `1000` |
 | `sizes.<name>` | Named sizes `small`, `medium`, `large`, each with `cpu` and `memory_mib`. | platform defaults |
-| `auth.template` | A configuration value with a `{{token}}` placeholder that the platform renders and injects as `auth.env`. See [below](#authtemplate-render-the-key-into-a-configuration-value). Not supported by a released admin yet. | none |
+| `auth.template` | A configuration value with a `{{token}}` placeholder that the platform renders and injects as `auth.env`. See [below](#authtemplate-render-the-key-into-a-configuration-value). | none |
 | `extras` | Literal, non-secret connection facts published in the staged connection. See [below](#extras-facts-for-the-connection). | none |
 | `sidecars` | Extra containers that run in the same task or pod. See [below](#sidecars-more-than-one-container). | none |
 | `targets` | Per-provider sections that override the common fields. | none |
@@ -252,10 +250,8 @@ key into RESTHeart's configuration.
 }
 ```
 
-The template itself contains no secret, only the placeholder. **No released admin supports
-`auth.template` yet.** An admin that does not know the field refuses the whole declaration, so the
-kind cannot be hosted until the admin is released. The declaration is merged in `greentic.mongodb`
-0.1.2 and is not published.
+The template itself contains no secret, only the placeholder. An admin that does not know the field
+refuses the whole declaration. `greentic.mongodb` 0.1.2 uses it and is published.
 
 ### The secret-name guard
 
@@ -338,8 +334,7 @@ extensions declare the same kind, the first by extension id with a valid declara
    gateway, and the instance must contain both the service and that gateway. Declare the gateway
    as the primary container and the service as a `sidecar`, bound to `127.0.0.1` with `args`.
    **The gateway image belongs to your extension's repository, never to the admin.** Redis,
-   RabbitMQ and Qdrant are hosted this way today. MongoDB, PostgreSQL and MySQL are merged but
-   not published. See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/).
+   RabbitMQ and Qdrant are hosted this way today. MongoDB, PostgreSQL and MySQL are hosted this way too. See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/).
 9. Remember what your extension reads at run time is still the staged connection (section 3
    below), whether the service is hosted or one you connect.
 
