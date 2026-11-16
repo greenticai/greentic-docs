@@ -357,9 +357,6 @@ Redis (`greentic.redis` 0.1.4, the `options` of the `cache/redis` hosting block)
 
 ```json
 "options": [
-  { "key": "port", "label": "Gateway port", "type": "port", "target": "port",
-    "default": 8079,
-    "hint": "Port the REST gateway listens on." },
   { "key": "max_connections", "label": "Max Redis connections", "type": "number",
     "env": "SRH_MAX_CONNECTIONS", "default": 3, "min": 1, "max": 100,
     "hint": "Connection pool size from the REST gateway to Redis." },
@@ -382,8 +379,6 @@ Qdrant (`greentic.rag-qdrant` 0.6.6):
 
 ```json
 "options": [
-  { "key": "port", "label": "HTTP port", "type": "port", "target": "port",
-    "default": 6333 },
   { "key": "log_level", "label": "Log level", "type": "enum",
     "env": "QDRANT__LOG_LEVEL", "default": "INFO",
     "choices": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
@@ -458,6 +453,13 @@ Rules:
 - **Env names follow the same restrictions as `env`**: `[A-Z_][A-Z0-9_]*`, and the reserved
   prefixes and names (`AWS_`, `ECS_`, `KUBERNETES_`, `LD_`, `DYLD_`, `GREENTIC_`, `PATH`, `HOME`)
   are refused. An option's `env` cannot collide with `auth.env` or with a name in the literal `env` map, and env names are unique across options.
+- **Do not offer a `port` option (`target: "port"`) unless the service reads its listen port
+  from a setting you also declare.** The platform moves the container port, the health check
+  and the load balancer to the chosen port; it does not tell the program inside to listen
+  there. Measured on a live managed Qdrant created with port 7000: the task started, Qdrant
+  kept listening on 6333, the health check on 7000 failed, and the instance never became
+  ready. `greentic.rag-qdrant` 0.6.8 and `greentic.redis` 0.1.6 dropped the option for this
+  reason.
 - **No literal secret defaults.** A `default` that looks like a secret, or any `default` on a
   `secret` option, is refused. Use `generate: true` and let the platform create the value.
 - **Secret options** are stored as secrets and injected from the secret store, never written into
