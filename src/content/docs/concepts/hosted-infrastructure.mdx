@@ -57,6 +57,7 @@ the target it was created on for life. See [Hosting Targets](/admin/hosting-targ
 - **Policy checks.** The image must have a pinned tag or digest, and must pass the platform's
   image policy: any valid repository (the default), or an allow-list of repository prefixes. Every
   field is validated, secrets in `env` are refused, and the container runs as a non-root user.
+- **Options are declared, not free-form.** An extension may declare `hosting.options` for values an operator picks at create time. They are validated like `env`, cannot carry literal secrets and are applied only at create.
 - **A per-resource credential.** The platform generates a key for each instance and injects it
   through the variable the extension named. The extension author never sets or sees it.
 - **Internal and public endpoints.** The platform targets reach the instance through an address

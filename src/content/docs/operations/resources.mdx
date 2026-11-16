@@ -80,6 +80,11 @@ limited than it sounds:
   the [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/) and
   [Hosted Infrastructure](/concepts/hosted-infrastructure/).
 - Managed requests need a workspace admin.
+- **Options.** If the extension declares `hosting.options`, the request form shows them (a log
+  level, a size limit, a generated password, and so on) as a dynamic form with defaults. Options
+  are set when the resource is created and cannot be edited afterwards; request a new resource to
+  change one. This is available once the admin release carrying it ships. Extension authors: see
+  [Hosting options](/extensions/infrastructure-resources/#hosting-options-operator-settings-at-create-time).
 - A managed resource shows **Being set up** while the admin works on it, then **Ready**, or
   **Failed**.
 
