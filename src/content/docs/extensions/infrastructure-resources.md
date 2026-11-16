@@ -358,7 +358,7 @@ Redis (`greentic.redis` 0.1.4, the `options` of the `cache/redis` hosting block)
 ```json
 "options": [
   { "key": "port", "label": "Gateway port", "type": "port", "target": "port",
-    "default": 8079, "min": 1024, "max": 65535,
+    "default": 8079,
     "hint": "Port the REST gateway listens on." },
   { "key": "max_connections", "label": "Max Redis connections", "type": "number",
     "env": "SRH_MAX_CONNECTIONS", "default": 3, "min": 1, "max": 100,
@@ -383,7 +383,7 @@ Qdrant (`greentic.rag-qdrant` 0.6.6):
 ```json
 "options": [
   { "key": "port", "label": "HTTP port", "type": "port", "target": "port",
-    "default": 6333, "min": 1024, "max": 65535 },
+    "default": 6333 },
   { "key": "log_level", "label": "Log level", "type": "enum",
     "env": "QDRANT__LOG_LEVEL", "default": "INFO",
     "choices": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
@@ -451,7 +451,7 @@ Fields of one option:
 | `hint` | Helper text under the field. |
 | `required` | The operator must supply a value (or the option must have a default or `generate`). |
 | `generate` | For a `secret`: the platform generates a value when none is given. |
-| `min`, `max` | Bounds for a `number` or `port`. |
+| `min`, `max` | Bounds for a `number` option only. A `port` is always 1024 to 65535, so do not put `min` or `max` on it. |
 
 Rules:
 
@@ -462,6 +462,10 @@ Rules:
   `secret` option, is refused. Use `generate: true` and let the platform create the value.
 - **Secret options** are stored as secrets and injected from the secret store, never written into
   the task definition as plain environment. They are never shown again after create.
+- **`min` and `max` belong to `number` options.** On any other type, a `port` included, they make
+  the option invalid, and one invalid option drops the whole options list: the managed form
+  then shows no settings at all, with no error shown. Test a new declaration against a real
+  admin before publishing it.
 - **At most 16 options** per declaration, and at most 16 choices per `enum`. A declaration with more is refused whole.
 - The declaration is validated by the same parser as the rest of `hosting`: unknown fields are
   refused and one invalid option refuses the whole declaration. Nothing is applied partially.
