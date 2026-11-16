@@ -353,20 +353,65 @@ cache size, a password for the service's own admin user. `options` is an array i
 block that describes those values. The admin shows them as a dynamic form when someone requests a
 managed resource, and applies the answers to the instance.
 
+Redis (`greentic.redis`, the `options` of the `cache/redis` hosting block on its
+`feat/hosting-options` branch):
+
 ```json
-"hosting": {
-  "image": "qdrant/qdrant", "tag": "v1.12.5", "port": 6333,
-  "options": [
-    { "key": "log_level", "label": "Log level", "type": "enum",
-      "env": "QDRANT__LOG_LEVEL", "default": "info",
-      "choices": ["debug", "info", "warn"], "hint": "Verbosity of the service log." },
-    { "key": "max_request_mb", "label": "Largest request (MB)", "type": "number",
-      "env": "QDRANT__SERVICE__MAX_REQUEST_SIZE_MB", "default": 32, "min": 1, "max": 256 },
-    { "key": "admin_password", "label": "Admin password", "type": "secret",
-      "env": "ADMIN_PASSWORD", "generate": true, "required": true }
-  ]
-}
+"options": [
+  { "key": "port", "label": "Gateway port", "type": "port", "target": "port",
+    "default": 8079, "min": 1024, "max": 65535,
+    "hint": "Port the REST gateway listens on." },
+  { "key": "max_connections", "label": "Max Redis connections", "type": "number",
+    "env": "SRH_MAX_CONNECTIONS", "default": 3, "min": 1, "max": 100,
+    "hint": "Connection pool size from the REST gateway to Redis." }
+]
 ```
+
+The Redis password is intentionally **not** an option. The REST gateway is the only thing
+exposed, and it is protected by the per-resource key the platform injects (`auth`, the SRH
+token); the Redis server behind it listens on `127.0.0.1` only.
+
+Qdrant (`greentic.rag-qdrant`, `feat/hosting-options` branch):
+
+```json
+"options": [
+  { "key": "port", "label": "HTTP port", "type": "port", "target": "port",
+    "default": 6333, "min": 1024, "max": 65535 },
+  { "key": "log_level", "label": "Log level", "type": "enum",
+    "env": "QDRANT__LOG_LEVEL", "default": "INFO",
+    "choices": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
+  { "key": "max_request_size_mb", "label": "Max request size (MB)", "type": "number",
+    "env": "QDRANT__SERVICE__MAX_REQUEST_SIZE_MB", "default": 32, "min": 1, "max": 256 },
+  { "key": "enable_cors", "label": "Allow browser (CORS) calls", "type": "bool",
+    "env": "QDRANT__SERVICE__ENABLE_CORS", "default": true },
+  { "key": "telemetry_disabled", "label": "Disable usage telemetry", "type": "bool",
+    "env": "QDRANT__TELEMETRY_DISABLED", "default": false }
+]
+```
+
+(`hint` is also set on each in the real file and omitted here for length.)
+
+### Options that become command-line arguments: `target: "arg"`
+
+Some services are configured by flags, not environment variables (Redis `--maxmemory`). A
+`number` or `enum` option can target an argument of a container instead of an env variable:
+
+```json
+{ "key": "maxmemory", "label": "Memory limit (MB)", "type": "number",
+  "target": "arg", "arg": "--maxmemory", "container": "redis-server",
+  "default": 256, "min": 16, "max": 4096 }
+```
+
+- `target: "arg"` needs `arg`, the flag name. `container` is optional and names a sidecar; left
+  out, the argument goes to the primary container.
+- **Only `number` and `enum` are allowed.** `string` and `secret` are refused, so an operator can
+  never inject free text into a command line. An `enum` value must be one of its `choices`.
+- How the flag and value are placed on the command line is up to the admin's rendering. Do not
+  assume an exact form; test it on a hosted instance.
+- This example follows the declaration shape only. The `greentic.redis` describe on its
+  `feat/hosting-options` branch does not declare `maxmemory` yet, and the admin support for
+  `target: "arg"` had not landed when this was written. Treat it as available once the admin
+  release carrying it ships.
 
 Fields of one option:
 
@@ -376,7 +421,7 @@ Fields of one option:
 | `label` | Name shown in the form. |
 | `type` | `string`, `number`, `bool`, `enum`, `port` or `secret`. |
 | `env` | The environment variable the value is injected as. Use `env` **or** `target`, not both. |
-| `target` | `"port"` instead of `env`: the value sets the service port (for a `port` option). |
+| `target` | `"port"` (the value sets the service port, for a `port` option) or `"arg"` (the value becomes a command-line argument, for `number` and `enum`; needs `arg`, optional `container`). Used instead of `env`. |
 | `default` | Value used when the operator leaves the field alone. |
 | `choices` | The allowed values of an `enum`. |
 | `hint` | Helper text under the field. |
@@ -388,12 +433,12 @@ Rules:
 
 - **Env names follow the same restrictions as `env`**: `[A-Z_][A-Z0-9_]*`, and the reserved
   prefixes and names (`AWS_`, `ECS_`, `KUBERNETES_`, `LD_`, `DYLD_`, `GREENTIC_`, `PATH`, `HOME`)
-  are refused. An option cannot reuse a name that `env` or `auth.env` already sets.
+  are refused. An option's `env` cannot collide with `auth.env` or with a name in the literal `env` map, and env names are unique across options.
 - **No literal secret defaults.** A `default` that looks like a secret, or any `default` on a
   `secret` option, is refused. Use `generate: true` and let the platform create the value.
 - **Secret options** are stored as secrets and injected from the secret store, never written into
   the task definition as plain environment. They are never shown again after create.
-- **A fixed maximum number of options** is enforced. Declarations with more are refused whole.
+- **At most 16 options** per declaration, and at most 16 choices per `enum`. A declaration with more is refused whole.
 - The declaration is validated by the same parser as the rest of `hosting`: unknown fields are
   refused and one invalid option refuses the whole declaration. Nothing is applied partially.
 - **Options are set at create time only.** Changing one later means requesting a new resource.
