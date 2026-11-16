@@ -143,7 +143,7 @@ flag.
 
 If your extension needs a vector store, a cache or a database, declare it with `x-requires`
 instead of hard-coding an address, and optionally add a `hosting` object so the platform can run
-it. See [Infrastructure Resources for Extensions](/extensions/infrastructure-resources/).
+it. The step-by-step guide is [How to build an infrastructure extension](/extensions/infrastructure-resources/#how-to-build-an-infrastructure-extension).
 
 ## What Belongs in an Extension
 

@@ -36,6 +36,83 @@ for any resource.
 See [Hosted Kinds Catalog](/extensions/hosted-kinds-catalog/) for what runs in each kind, and [Hosted Infrastructure](/concepts/hosted-infrastructure/) for the model.
 </Aside>
 
+## How to build an infrastructure extension
+
+This is the canonical walkthrough. Each step links to the reference section that holds the full
+rules. The example is `greentic.redis` 0.1.3, copied from its `describe.json`.
+
+1. **Pick the kind.** A kind is `<family>/<name>`, for example `cache/redis`. There is no list to
+   register it in: the kind exists once an installed extension declares it
+   ([section 2](#2-there-is-no-list-of-kinds)).
+2. **Check that your guest can reach the service.** An extension has no TCP. Plan an HTTPS REST
+   gateway in front of anything that is not HTTP ([section 4](#4-an-extension-guest-has-no-tcp)).
+   Redis uses an Upstash-style REST gateway, so the extension never sees a `redis://` URL.
+3. **Declare the need.** Add `x-requires` to the `input_schema` of each tool (or the
+   `config_schema` of a node type), with `kind`, `label`, `hint` and `schemes`
+   ([section 1](#1-declare-the-need-with-x-requires)):
+
+   ```json
+   { "kind": "cache/redis", "label": "Redis",
+     "hint": "Point this at an HTTPS REST endpoint for Redis (Upstash, or a REST proxy in front of your own Redis), not at a redis:// server.",
+     "schemes": ["https"] }
+   ```
+4. **Optionally declare `hosting`** so the platform can run a dedicated instance
+   ([Declare how the service can be hosted](#declare-how-the-service-can-be-hosted-hosting)).
+   Redis hosts a REST gateway as the primary container and stock Redis as a sidecar:
+
+   ```json
+   "hosting": {
+     "image": "hiett/serverless-redis-http",
+     "tag": "sha256:65128347949bca511e448fd7238780d624573d74c22b79155a7563db19e9b678",
+     "port": 8079, "protocol": "http",
+     "auth": { "env": "SRH_TOKEN", "header": "Authorization" },
+     "health": { "path": "/" },
+     "env": { "SRH_MODE": "env", "SRH_PORT": "8079", "SRH_CONNECTION_STRING": "redis://127.0.0.1:6379" },
+     "run_as": { "uid": 999 },
+     "extras": { "isolation": "dedicated" },
+     "sidecars": [{
+       "name": "redis-server", "image": "redis",
+       "tag": "sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe",
+       "data": { "path": "/data" }, "run_as": { "uid": 999 },
+       "health": { "cmd": ["redis-cli", "ping"] },
+       "essential": true, "start": "healthy"
+     }]
+   }
+   ```
+
+   Pin the image, put no secret in `env`, and let the platform inject the key through `auth`.
+5. **Let operators tune the instance with `hosting.options`** when a value must differ per
+   resource ([Hosting options](#hosting-options-operator-settings-at-create-time)).
+6. **Grant the secret read and the network.** In `runtime.permissions`, list
+   `secret://infra/cache_redis` under `secrets` and `infra://cache/redis` under `network`
+   ([sections 3 and 5](#3-what-your-extension-reads-at-run-time)). Redis also lists
+   `https://*.upstash.io/*` for the connect case.
+7. **Read the connection at run time** from `secret://infra/<kind>` and namespace every key with
+   the `extras` prefix ([section 3](#3-what-your-extension-reads-at-run-time)). Fail closed when
+   it is missing.
+8. **Validate.** Run `gtdx validate` and `gtdx lint`. A bad `hosting` block is not caught there:
+   the admin checks it when it ingests the extension and logs a fixed code such as
+   `hosting_tag_not_pinned` ([validation](#when-the-platform-refuses-a-declaration)).
+9. **Test locally.** Install the extension into a Designer and open **Resources**: your kind
+   should appear in the Add dialog with your `label`, `hint` and scheme rule. Connect a service
+   you run and deploy a unit that uses a tool. Run Demo and in-process Test chat do not serve
+   `secret://infra/...`, so test on a deployed unit. Managed hosting needs an admin with an
+   enabled hosting target.
+10. **Publish.** `gtdx publish` (1.2.26 or later if you use `infra://`). The platform admin
+    decides whether your image repository is admitted
+    ([Hosting Targets](/admin/hosting-targets/)).
+
+### How it appears to the operator
+
+- **Resources page and Add dialog.** The kind is listed with your `label`. Under the picker is
+  your `hint`, and the scheme choices are limited to your `schemes`.
+- **Connect.** The operator enters host, port, scheme and credential for a service they run.
+- **Let the platform run it.** Offered only when your declaration has `hosting` and the image is
+  admitted. The resource shows **Being set up**, then **Ready**. If you declared `hosting.options`,
+  the request form shows them as a dynamic form.
+- **A unit that needs the kind** is refused at deploy until a resource exists, then the
+  connection is staged for it.
+
 ## 1. Declare the need with `x-requires`
 
 Put a root-level `x-requires` array in the `config_schema` of a node type, or in the
@@ -123,7 +200,7 @@ This is the declaration `greentic.rag-qdrant` 0.6.5 carries on each tool. As wit
 
 ### Fields
 
-Only `image`, `tag` and `port` are required. Unknown fields are refused at every level.
+Only `image`, `tag` and `port` are required. This table is the full field list. Unknown fields are refused at every level.
 
 | Field | Meaning | Default |
 |---|---|---|
@@ -142,6 +219,7 @@ Only `image`, `tag` and `port` are required. Unknown fields are refused at every
 | `extras` | Literal, non-secret connection facts published in the staged connection. See [below](#extras-facts-for-the-connection). | none |
 | `sidecars` | Extra containers that run in the same task or pod. See [below](#sidecars-more-than-one-container). | none |
 | `targets` | Per-provider sections that override the common fields. | none |
+| `options` | Settings the operator chooses when requesting a managed resource. See [below](#hosting-options-operator-settings-at-create-time). | none |
 
 The size, shape and secret rules the admin applies:
 
@@ -262,6 +340,65 @@ could carry a secret. The check is a table, not a ban on words.
 - A secret-looking name is still refused, with two exceptions that databases need. The exact names `POSTGRES_HOST_AUTH_METHOD`, `MYSQL_ALLOW_EMPTY_PASSWORD`, `MYSQL_RANDOM_ROOT_PASSWORD`, `MARIADB_ALLOW_EMPTY_ROOT_PASSWORD` and `MARIADB_RANDOM_ROOT_PASSWORD` are allowed, and so are flag-style names (ending in `_AUTH_METHOD`, or with an `ALLOW` segment). In both cases the value must be a short token of at most 24 characters from `[A-Za-z0-9_-]`, such as `trust`, `scram-sha-256`, `yes` or `1`.
 - A secret-looking **value** is refused under every name: an `sk-`, `ghp_` or `AKIA` prefix, `Bearer `, a PEM block, a URL with a user name, or any unbroken token of 32 characters or more.
 
+### Hosting options: operator settings at create time
+
+<Aside type="note" title="Availability">
+`hosting.options` is available once the admin release that carries it ships. An admin that does
+not know the field refuses the whole declaration, so publish a declaration with `options` only
+after the admins you target have that release.
+</Aside>
+
+A hosted service often needs a value the operator should choose per resource: a log level, a
+cache size, a password for the service's own admin user. `options` is an array in the `hosting`
+block that describes those values. The admin shows them as a dynamic form when someone requests a
+managed resource, and applies the answers to the instance.
+
+```json
+"hosting": {
+  "image": "qdrant/qdrant", "tag": "v1.12.5", "port": 6333,
+  "options": [
+    { "key": "log_level", "label": "Log level", "type": "enum",
+      "env": "QDRANT__LOG_LEVEL", "default": "info",
+      "choices": ["debug", "info", "warn"], "hint": "Verbosity of the service log." },
+    { "key": "max_request_mb", "label": "Largest request (MB)", "type": "number",
+      "env": "QDRANT__SERVICE__MAX_REQUEST_SIZE_MB", "default": 32, "min": 1, "max": 256 },
+    { "key": "admin_password", "label": "Admin password", "type": "secret",
+      "env": "ADMIN_PASSWORD", "generate": true, "required": true }
+  ]
+}
+```
+
+Fields of one option:
+
+| Field | Meaning |
+|---|---|
+| `key` | Stable identifier of the option, unique within the declaration. |
+| `label` | Name shown in the form. |
+| `type` | `string`, `number`, `bool`, `enum`, `port` or `secret`. |
+| `env` | The environment variable the value is injected as. Use `env` **or** `target`, not both. |
+| `target` | `"port"` instead of `env`: the value sets the service port (for a `port` option). |
+| `default` | Value used when the operator leaves the field alone. |
+| `choices` | The allowed values of an `enum`. |
+| `hint` | Helper text under the field. |
+| `required` | The operator must supply a value (or the option must have a default or `generate`). |
+| `generate` | For a `secret`: the platform generates a value when none is given. |
+| `min`, `max` | Bounds for a `number` or `port`. |
+
+Rules:
+
+- **Env names follow the same restrictions as `env`**: `[A-Z_][A-Z0-9_]*`, and the reserved
+  prefixes and names (`AWS_`, `ECS_`, `KUBERNETES_`, `LD_`, `DYLD_`, `GREENTIC_`, `PATH`, `HOME`)
+  are refused. An option cannot reuse a name that `env` or `auth.env` already sets.
+- **No literal secret defaults.** A `default` that looks like a secret, or any `default` on a
+  `secret` option, is refused. Use `generate: true` and let the platform create the value.
+- **Secret options** are stored as secrets and injected from the secret store, never written into
+  the task definition as plain environment. They are never shown again after create.
+- **A fixed maximum number of options** is enforced. Declarations with more are refused whole.
+- The declaration is validated by the same parser as the rest of `hosting`: unknown fields are
+  refused and one invalid option refuses the whole declaration. Nothing is applied partially.
+- **Options are set at create time only.** Changing one later means requesting a new resource.
+  Size is the exception and has its own control (see [Custom CPU and memory](#custom-cpu-and-memory-per-resource)).
+
 ### Custom CPU and memory per resource
 
 A hosted resource has a size class (`small`, `medium` or `large`; default `small`). A platform
@@ -328,7 +465,7 @@ extensions declare the same kind, the first by extension id with a valid declara
 3. Put no secrets in `env`. Declare `auth.env` and `auth.header` and let the platform inject the key.
 4. Use a port of 1024 or higher and a non-root `run_as.uid`.
 5. Give a `health.path` and a `data.path`, so the instance is checked and keeps its data.
-6. Choose `sizes` that are valid cpu and memory pairs.
+6. Choose `sizes` that are valid cpu and memory pairs. Add `options` for anything the operator should choose per resource.
 7. Republish the extension. The platform admin decides whether the image repository is admitted.
 8. If the service does not speak HTTP (a database or a broker), your extension talks to an HTTP
    gateway, and the instance must contain both the service and that gateway. Declare the gateway
