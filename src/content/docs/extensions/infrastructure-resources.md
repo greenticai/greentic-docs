@@ -343,9 +343,9 @@ could carry a secret. The check is a table, not a ban on words.
 ### Hosting options: operator settings at create time
 
 <Aside type="note" title="Availability">
-`hosting.options` is available once the admin release that carries it ships. An admin that does
-not know the field refuses the whole declaration, so publish a declaration with `options` only
-after the admins you target have that release.
+`hosting.options` is live on admin 1.2.84-dev and later. An admin that does not know the field
+refuses the whole declaration, so publish a declaration with `options` only after the admins you
+target have that release.
 </Aside>
 
 A hosted service often needs a value the operator should choose per resource: a log level, a
@@ -353,8 +353,7 @@ cache size, a password for the service's own admin user. `options` is an array i
 block that describes those values. The admin shows them as a dynamic form when someone requests a
 managed resource, and applies the answers to the instance.
 
-Redis (`greentic.redis`, the `options` of the `cache/redis` hosting block on its
-`feat/hosting-options` branch):
+Redis (`greentic.redis` 0.1.4, the `options` of the `cache/redis` hosting block):
 
 ```json
 "options": [
@@ -363,7 +362,15 @@ Redis (`greentic.redis`, the `options` of the `cache/redis` hosting block on its
     "hint": "Port the REST gateway listens on." },
   { "key": "max_connections", "label": "Max Redis connections", "type": "number",
     "env": "SRH_MAX_CONNECTIONS", "default": 3, "min": 1, "max": 100,
-    "hint": "Connection pool size from the REST gateway to Redis." }
+    "hint": "Connection pool size from the REST gateway to Redis." },
+  { "key": "maxmemory", "label": "Memory limit", "type": "enum",
+    "target": "arg", "arg": "--maxmemory", "container": "redis-server",
+    "default": "256mb", "choices": ["64mb", "128mb", "256mb", "512mb", "1gb"],
+    "hint": "Redis memory limit. Keep it below the instance memory size." },
+  { "key": "maxmemory_policy", "label": "Eviction policy", "type": "enum",
+    "target": "arg", "arg": "--maxmemory-policy", "container": "redis-server",
+    "default": "allkeys-lru",
+    "choices": ["noeviction", "allkeys-lru", "allkeys-lfu", "volatile-lru", "volatile-ttl"] }
 ]
 ```
 
@@ -371,7 +378,7 @@ The Redis password is intentionally **not** an option. The REST gateway is the o
 exposed, and it is protected by the per-resource key the platform injects (`auth`, the SRH
 token); the Redis server behind it listens on `127.0.0.1` only.
 
-Qdrant (`greentic.rag-qdrant`, `feat/hosting-options` branch):
+Qdrant (`greentic.rag-qdrant` 0.6.6):
 
 ```json
 "options": [
@@ -394,24 +401,37 @@ Qdrant (`greentic.rag-qdrant`, `feat/hosting-options` branch):
 ### Options that become command-line arguments: `target: "arg"`
 
 Some services are configured by flags, not environment variables (Redis `--maxmemory`). A
-`number` or `enum` option can target an argument of a container instead of an env variable:
+`number`, `enum` or `bool` option can target an argument of a container instead of an env
+variable:
 
 ```json
-{ "key": "maxmemory", "label": "Memory limit (MB)", "type": "number",
+{ "key": "maxmemory", "label": "Memory limit", "type": "enum",
   "target": "arg", "arg": "--maxmemory", "container": "redis-server",
-  "default": 256, "min": 16, "max": 4096 }
+  "default": "256mb", "choices": ["64mb", "128mb", "256mb", "512mb", "1gb"] }
 ```
 
-- `target: "arg"` needs `arg`, the flag name. `container` is optional and names a sidecar; left
-  out, the argument goes to the primary container.
-- **Only `number` and `enum` are allowed.** `string` and `secret` are refused, so an operator can
-  never inject free text into a command line. An `enum` value must be one of its `choices`.
-- How the flag and value are placed on the command line is up to the admin's rendering. Do not
-  assume an exact form; test it on a hosted instance.
-- This example follows the declaration shape only. The `greentic.redis` describe on its
-  `feat/hosting-options` branch does not declare `maxmemory` yet, and the admin support for
-  `target: "arg"` had not landed when this was written. Treat it as available once the admin
-  release carrying it ships.
+- `target: "arg"` needs `arg`, the long flag name (`--[a-z0-9][a-z0-9-]*`). `container` is
+  optional and names a sidecar; left out, the argument goes to the primary container.
+- **Only `number`, `enum` and `bool` are allowed.** `string` and `secret` are refused, so an
+  operator can never inject free text into a command line. An `enum` value must be one of its
+  `choices`, and for an argument each choice must be a plain token (`[A-Za-z0-9._-]+`).
+- **`style` decides how the flag and value are placed.** `"split"` (the default) writes two
+  entries, `--maxmemory` then `256mb`, which is what `redis-server` expects. `"equals"` writes
+  one entry, `--maxmemory=256mb`, for programs that want that form. Check which one your
+  service parses; a wrong style makes the container refuse to start.
+- **A `bool` argument needs `values`**, a pair `[trueLiteral, falseLiteral]`. Redis takes
+  `yes`/`no`, not `true`/`false`:
+
+```json
+{ "key": "appendonly", "label": "Persist writes", "type": "bool",
+  "target": "arg", "arg": "--appendonly", "container": "redis-server",
+  "values": ["yes", "no"], "default": true }
+```
+
+- The `hosting` block can also carry a fixed `args` list for the primary container, for flags
+  that are not operator choices. An invalid list is refused with `hosting_args_invalid`.
+- The `greentic.redis` 0.1.4 describe declares `maxmemory` and `maxmemory_policy` this way, both
+  on the `redis-server` sidecar with the default `split` style.
 
 Fields of one option:
 
@@ -424,6 +444,10 @@ Fields of one option:
 | `target` | `"port"` (the value sets the service port, for a `port` option) or `"arg"` (the value becomes a command-line argument, for `number` and `enum`; needs `arg`, optional `container`). Used instead of `env`. |
 | `default` | Value used when the operator leaves the field alone. |
 | `choices` | The allowed values of an `enum`. |
+| `arg` | With `target: "arg"`: the long flag the value is passed as. |
+| `container` | With `target: "arg"`: the sidecar that receives the flag. Default is the primary container. |
+| `style` | With `target: "arg"`: `"split"` (default, `--flag value`) or `"equals"` (`--flag=value`). |
+| `values` | For a `bool` with `target: "arg"`: `[trueLiteral, falseLiteral]`, for example `["yes", "no"]`. |
 | `hint` | Helper text under the field. |
 | `required` | The operator must supply a value (or the option must have a default or `generate`). |
 | `generate` | For a `secret`: the platform generates a value when none is given. |
